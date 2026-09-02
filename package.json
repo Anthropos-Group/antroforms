@@ -1,0 +1,22 @@
+{
+  "name": "sistema-encuestas",
+  "private": true,
+  "version": "0.1.0",
+  "scripts": {
+    "dev": "next dev",
+    "build": "next build",
+    "start": "next start",
+    "db:migrate": "node scripts/migrate.js",
+    "sync:twenty": "node scripts/sync-twenty.js"
+  },
+  "dependencies": {
+    "exceljs": "^4.4.0",
+    "next": "^16.3.4",
+    "pg": "^8.13.1",
+    "react": "^19.2.0",
+    "react-dom": "^19.2.0"
+  },
+  "devDependencies": {
+    "dotenv": "^16.4.5"
+  }
+}
