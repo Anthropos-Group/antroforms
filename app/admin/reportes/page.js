@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
+import ImportModal from "../../../components/ImportModal";
 
 function hoyISO() {
   return new Date().toISOString().slice(0, 10);
@@ -24,6 +25,7 @@ export default function ReportesPage() {
   const [mesGestion, setMesGestion] = useState("");
   const [pdv, setPdv] = useState("");
 
+  const [modalImportOpen, setModalImportOpen] = useState(false);
   const [resumen, setResumen] = useState(null);
   const [cargando, setCargando] = useState(false);
 
@@ -134,16 +136,31 @@ export default function ReportesPage() {
             </select>
           </div>
 
-          <div style={{ display: "flex", gap: 10, marginTop: 8 }}>
+          <div style={{ display: "flex", gap: 10, marginTop: 8, flexWrap: "wrap" }}>
             <button className="btn" onClick={verResumen} disabled={cargando}>
               {cargando ? "Consultando…" : "Ver resumen"}
             </button>
             <button className="btn btn-primary" onClick={descargarExcel}>
               Descargar Excel
             </button>
+            <button
+              className="btn"
+              style={{ borderColor: "#818cf8", color: "#4f46e5", background: "#eef2ff", fontWeight: 600 }}
+              onClick={() => setModalImportOpen(true)}
+            >
+              📥 Importar desde Excel
+            </button>
           </div>
         </div>
       </div>
+
+      <ImportModal
+        isOpen={modalImportOpen}
+        onClose={() => setModalImportOpen(false)}
+        onSuccess={() => {
+          verResumen();
+        }}
+      />
 
       {resumen && (
         <div className="card" style={{ marginTop: 20 }}>
