@@ -103,3 +103,7 @@ supabase/       Migraciones SQL versionadas
 docs/           Documentación de diseño (PRD, arquitectura, base de datos, API)
 proxy.js        Protección de rutas por rol (admin / encuestador)
 ```
+
+## Despliegue
+
+Para producción, la forma más simple hoy es en un servidor propio con Docker — ver [docs/DEPLOY.md](docs/DEPLOY.md) (incluye `Dockerfile`, `docker-compose.yml` y `Caddyfile` ya listos en la raíz del repo).
