@@ -5,7 +5,7 @@ import { useState, useEffect } from "react";
 function autoInferTarget(header = "", preguntas = []) {
   const h = header.toLowerCase().trim();
 
-  if (h.includes("submission id") || h === "submissionid" || h === "id") return "submission_id";
+  if (h.includes("submission id") || h === "submissionid" || h === "id" || h === "formid") return "submission_id";
   if (h.includes("submitted on") || h.includes("fecha")) return "fecha";
   if (h.includes("encuestador") || h === "submitted by") return "encuestador";
   if (h.includes("código") || h.includes("codigo")) return "codigo_cliente";
@@ -72,18 +72,19 @@ function autoInferTarget(header = "", preguntas = []) {
 
 export default function ImportModal({ isOpen, onClose, onSuccess }) {
   const [file, setFile] = useState(null);
-  const [step, setStep] = useState(1); // 1: Select file, 2: Map columns, 3: Success
+  const [step, setStep] = useState(1);
   const [cargando, setCargando] = useState(false);
+  const [progresoVal, setProgresoVal] = useState(0);
   const [error, setError] = useState("");
 
   const [headers, setHeaders] = useState([]);
   const [samples, setSamples] = useState([]);
+  const [totalRows, setTotalRows] = useState(0);
   const [preguntas, setPreguntas] = useState([]);
   const [mapping, setMapping] = useState({});
 
   const [resultado, setResultado] = useState(null);
 
-  // Cargar preguntas activas del sistema
   useEffect(() => {
     if (isOpen) {
       fetch("/api/encuestas")
@@ -91,6 +92,23 @@ export default function ImportModal({ isOpen, onClose, onSuccess }) {
         .then((d) => setPreguntas(d.preguntas || []));
     }
   }, [isOpen]);
+
+  // Animación del progreso durante la carga
+  useEffect(() => {
+    let interval;
+    if (cargando && step === 2) {
+      setProgresoVal(10);
+      interval = setInterval(() => {
+        setProgresoVal((prev) => {
+          if (prev >= 92) return 92;
+          return prev + 8;
+        });
+      }, 250);
+    } else if (!cargando) {
+      setProgresoVal(100);
+    }
+    return () => clearInterval(interval);
+  }, [cargando, step]);
 
   if (!isOpen) return null;
 
@@ -121,8 +139,8 @@ export default function ImportModal({ isOpen, onClose, onSuccess }) {
 
       setHeaders(d.headers || []);
       setSamples(d.samples || []);
+      setTotalRows(d.totalRows || 0);
 
-      // Auto-mapeo inteligente de cabeceras
       const autoMap = {};
       (d.headers || []).forEach((h) => {
         autoMap[h] = autoInferTarget(h, preguntas);
@@ -172,14 +190,16 @@ export default function ImportModal({ isOpen, onClose, onSuccess }) {
     setError("");
     setHeaders([]);
     setSamples([]);
+    setTotalRows(0);
     setMapping({});
     setResultado(null);
+    setProgresoVal(0);
     onClose();
   }
 
   const targetOptions = [
     { key: "ignore", label: "-- Omitir / No importar --" },
-    { key: "submission_id", label: "ID de Encuesta (Submission Id)" },
+    { key: "submission_id", label: "ID de Encuesta (Submission Id / FormId)" },
     { key: "fecha", label: "Fecha de Envío (Submitted On)" },
     { key: "encuestador", label: "Encuestador / Entrevistador" },
     { key: "nombre_cliente", label: "Nombre del Cliente" },
@@ -200,7 +220,7 @@ export default function ImportModal({ isOpen, onClose, onSuccess }) {
 
   return (
     <div className="modal-backdrop">
-      <div className="modal-card" style={{ maxWidth: step === 2 ? 880 : 540 }}>
+      <div className="modal-card" style={{ maxWidth: step === 2 ? 880 : 580 }}>
         <div className="modal-header">
           <h2 style={{ margin: 0, fontSize: 18 }}>📥 Importar Encuestas desde Excel</h2>
           <button className="btn-close" onClick={handleReset}>✕</button>
@@ -215,7 +235,7 @@ export default function ImportModal({ isOpen, onClose, onSuccess }) {
         {step === 1 && (
           <div className="pad" style={{ padding: "20px 0 0" }}>
             <p style={{ fontSize: 14, color: "#6b7280", margin: "0 0 16px" }}>
-              Selecciona el archivo Excel (.xlsx) o CSV exportado de FastField u otro sistema para subir las respuestas masivas.
+              Selecciona el archivo Excel (.xlsx) o CSV exportado para subir las encuestas masivas.
             </p>
 
             <div className="file-drop-zone">
@@ -239,10 +259,22 @@ export default function ImportModal({ isOpen, onClose, onSuccess }) {
         {step === 2 && (
           <div className="pad" style={{ padding: "16px 0 0" }}>
             <p style={{ fontSize: 13.5, color: "#4b5563", margin: "0 0 14px" }}>
-              Se detectaron <strong>{headers.length} columnas</strong>. Parametriza qué campo de Supabase corresponde a cada columna del archivo Excel:
+              Se detectaron <strong>{headers.length} columnas</strong> y <strong>{totalRows} registros</strong> en el archivo. Verifica el mapeo a Supabase:
             </p>
 
-            <div style={{ maxHeight: 380, overflowY: "auto", border: "1px solid #e5e7eb", borderRadius: 8 }}>
+            {cargando && (
+              <div style={{ marginBottom: 16 }}>
+                <div style={{ display: "flex", justifyContent: "space-between", fontSize: 12.5, marginBottom: 6, fontWeight: 600, color: "#4f46e5" }}>
+                  <span>Procesando e insertando {totalRows} encuestas...</span>
+                  <span>{progresoVal}%</span>
+                </div>
+                <div className="progress-track" style={{ height: 8 }}>
+                  <div className="progress-fill" style={{ width: `${progresoVal}%`, background: "#4f46e5" }} />
+                </div>
+              </div>
+            )}
+
+            <div style={{ maxHeight: 360, overflowY: "auto", border: "1px solid #e5e7eb", borderRadius: 8 }}>
               <table style={{ fontSize: 13 }}>
                 <thead>
                   <tr>
@@ -279,9 +311,9 @@ export default function ImportModal({ isOpen, onClose, onSuccess }) {
             </div>
 
             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginTop: 20 }}>
-              <button className="btn" onClick={() => setStep(1)}>◀ Cambiar archivo</button>
+              <button className="btn" onClick={() => setStep(1)} disabled={cargando}>◀ Cambiar archivo</button>
               <button className="btn btn-primary" onClick={handleImportar} disabled={cargando}>
-                {cargando ? "Procesando e insertando…" : "Procesar e Importar Encuestas ✓"}
+                {cargando ? "Importando encuestas…" : `Procesar e Importar ${totalRows} Encuestas ✓`}
               </button>
             </div>
           </div>
@@ -290,10 +322,28 @@ export default function ImportModal({ isOpen, onClose, onSuccess }) {
         {step === 3 && (
           <div className="pad" style={{ padding: "24px 0 0", textAlign: "center" }}>
             <div className="result-icon-circle success">✓</div>
-            <h3 style={{ margin: "0 0 8px" }}>¡Importación completada con éxito!</h3>
-            <p style={{ fontSize: 14, color: "#4b5563", margin: "0 0 20px" }}>
-              Se procesaron e insertaron <strong>{resultado?.importadas || 0} encuestas</strong> correctamente en la base de datos de Supabase.
+            <h3 style={{ margin: "0 0 16px" }}>Resumen del Proceso de Importación</h3>
+
+            {/* Tarjetas de Resumen KPI */}
+            <div className="import-kpi-grid">
+              <div className="import-kpi-card success">
+                <div className="import-kpi-value">{resultado?.importadas || 0}</div>
+                <div className="import-kpi-label">Importadas con éxito</div>
+              </div>
+              <div className="import-kpi-card warning">
+                <div className="import-kpi-value">{resultado?.duplicados || 0}</div>
+                <div className="import-kpi-label">Omitidas (Duplicadas)</div>
+              </div>
+              <div className="import-kpi-card danger">
+                <div className="import-kpi-value">{resultado?.errores?.length || 0}</div>
+                <div className="import-kpi-label">Errores / Fallidos</div>
+              </div>
+            </div>
+
+            <p style={{ fontSize: 13, color: "#6b7280", margin: "18px 0 20px" }}>
+              Las encuestas duplicadas (existentes previamente por FormId o cliente) fueron omitidas automáticamente para evitar duplicaciones.
             </p>
+
             <button className="btn btn-primary" onClick={handleReset}>Finalizar</button>
           </div>
         )}

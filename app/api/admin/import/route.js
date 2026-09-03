@@ -8,6 +8,8 @@ import {
 
 export const dynamic = "force-dynamic";
 
+const UUID_REGEX = /^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$/;
+
 function parseBooleanValue(val) {
   if (val === null || val === undefined) return null;
   if (typeof val === "boolean") return val;
@@ -61,7 +63,7 @@ export async function POST(request) {
   const rows = [];
 
   worksheet.eachRow((row, rowNumber) => {
-    const rowValues = row.values.slice(1); // ExcelJS indexes from 1
+    const rowValues = row.values.slice(1);
     if (rowNumber === 1) {
       rowValues.forEach((cellVal, colIdx) => {
         headers.push(cellVal ? String(cellVal).trim() : `Columna ${colIdx + 1}`);
@@ -81,7 +83,7 @@ export async function POST(request) {
     }
   });
 
-  // Si solo es previsualización, devolver las cabeceras y 3 filas de muestra
+  // Previsualización de muestra
   if (isPreview) {
     const samples = rows.slice(0, 3);
     return NextResponse.json({
@@ -101,7 +103,6 @@ export async function POST(request) {
 
   const pool = getPool();
 
-  // Obtener cuestionario activo y sus preguntas
   const { rows: cuestionarios } = await pool.query(
     `select id from cuestionarios where activo = true order by created_at desc limit 1`
   );
@@ -119,6 +120,7 @@ export async function POST(request) {
 
   const client = await pool.connect();
   let importadas = 0;
+  let duplicados = 0;
   const errores = [];
 
   try {
@@ -128,7 +130,6 @@ export async function POST(request) {
       const row = rows[rIdx];
       const numFila = rIdx + 2;
 
-      // Extraer campos mapeados
       let submissionId = null;
       let fecha = new Date().toISOString();
       let nombreEncuestador = "Encuestador Importado";
@@ -167,6 +168,27 @@ export async function POST(request) {
         }
       });
 
+      // DEDUPLICACIÓN basándonos en FormId / Submission Id o cliente + fecha
+      let esDuplicado = false;
+      if (submissionId && UUID_REGEX.test(submissionId)) {
+        const { rows: dups } = await client.query(
+          `select id from encuestas where id = $1 limit 1`,
+          [submissionId]
+        );
+        if (dups.length > 0) esDuplicado = true;
+      } else if (codigoCliente) {
+        const { rows: dups } = await client.query(
+          `select id from encuestas where codigo_cliente = $1 and created_at = $2 limit 1`,
+          [codigoCliente, fecha]
+        );
+        if (dups.length > 0) esDuplicado = true;
+      }
+
+      if (esDuplicado) {
+        duplicados++;
+        continue;
+      }
+
       // 1. Obtener o crear encuestador
       let encuestadorId;
       const { rows: encRows } = await client.query(
@@ -203,19 +225,29 @@ export async function POST(request) {
         }
       }
 
-      // 3. Determinar si fue completada
       let completada = true;
 
-      // 4. Crear registro en encuestas
-      const { rows: encuestInsert } = await client.query(
-        `insert into encuestas (cuestionario_id, cliente_twenty_id, codigo_cliente, encuestador_id, completada, created_at)
-         values ($1, $2, $3, $4, $5, $6)
-         returning id`,
-        [cuestionarioId, clienteTwentyId, codigoCliente, encuestadorId, completada, fecha]
-      );
-      const encuestaId = encuestInsert[0].id;
+      // 3. Crear registro en encuestas con ID especificado o autogenerado
+      let encuestaId;
+      if (submissionId && UUID_REGEX.test(submissionId)) {
+        const { rows: encuestInsert } = await client.query(
+          `insert into encuestas (id, cuestionario_id, cliente_twenty_id, codigo_cliente, encuestador_id, completada, created_at)
+           values ($1, $2, $3, $4, $5, $6, $7)
+           returning id`,
+          [submissionId, cuestionarioId, clienteTwentyId, codigoCliente, encuestadorId, completada, fecha]
+        );
+        encuestaId = encuestInsert[0].id;
+      } else {
+        const { rows: encuestInsert } = await client.query(
+          `insert into encuestas (cuestionario_id, cliente_twenty_id, codigo_cliente, encuestador_id, completada, created_at)
+           values ($1, $2, $3, $4, $5, $6)
+           returning id`,
+          [cuestionarioId, clienteTwentyId, codigoCliente, encuestadorId, completada, fecha]
+        );
+        encuestaId = encuestInsert[0].id;
+      }
 
-      // 5. Inserción de respuestas
+      // 4. Inserción de respuestas
       for (const p of preguntas) {
         const rawVal = respuestasDict[p.id];
         const rawJust = justificativoDict[p.id] || "";
@@ -252,7 +284,6 @@ export async function POST(request) {
         }
       }
 
-      // Actualizar estado completada si hubo corte
       if (!completada) {
         await client.query(`update encuestas set completada = false where id = $1`, [encuestaId]);
       }
@@ -261,10 +292,10 @@ export async function POST(request) {
     }
 
     await client.query("commit");
-    return NextResponse.json({ ok: true, importadas, errores });
+    return NextResponse.json({ ok: true, importadas, duplicados, errores });
   } catch (err) {
     await client.query("rollback");
-    console.error("Error importando encuestas:", err);
+    console.error("Error en importación masiva:", err);
     return NextResponse.json({ error: `Error en importación: ${err.message}` }, { status: 500 });
   } finally {
     client.release();

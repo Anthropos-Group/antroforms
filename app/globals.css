@@ -559,6 +559,37 @@ textarea {
 }
 .file-drop-zone:hover { border-color: var(--color-primary); background: #eef2ff; }
 
+/* Tarjetas KPI del resumen de importación */
+.import-kpi-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 12px;
+  margin-top: 14px;
+}
+.import-kpi-card {
+  padding: 16px;
+  border-radius: var(--radius-md);
+  border: 1px solid var(--color-border);
+  background: var(--color-surface);
+  text-align: center;
+}
+.import-kpi-card.success { border-color: #a7f3d0; background: #ecfdf5; color: #065f46; }
+.import-kpi-card.warning { border-color: #fde68a; background: #fefce8; color: #92400e; }
+.import-kpi-card.danger { border-color: #fca5a5; background: #fef2f2; color: #991b1b; }
+
+.import-kpi-value {
+  font-size: 26px;
+  font-weight: 700;
+  line-height: 1.1;
+  margin-bottom: 4px;
+}
+.import-kpi-label {
+  font-size: 11.5px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+}
+
 .client-summary {
   display: flex;
   flex-wrap: wrap;
