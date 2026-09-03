@@ -4,8 +4,16 @@ services:
     pull_policy: build
     container_name: antroforms-web-strattos
     restart: always
-    env_file:
-      - .env
+    environment:
+      NEXT_PUBLIC_SUPABASE_URL: ${NEXT_PUBLIC_SUPABASE_URL}
+      NEXT_PUBLIC_SUPABASE_ANON_KEY: ${NEXT_PUBLIC_SUPABASE_ANON_KEY}
+      SUPABASE_SERVICE_ROLE_KEY: ${SUPABASE_SERVICE_ROLE_KEY}
+      SUPABASE_DB_URL: ${SUPABASE_DB_URL}
+      TWENTY_API_URL: ${TWENTY_API_URL}
+      TWENTY_API_KEY: ${TWENTY_API_KEY}
+      CRON_SECRET: ${CRON_SECRET}
+      ADMIN_SESSION_SECRET: ${ADMIN_SESSION_SECRET}
+      ENCUESTADOR_ACCESS_PASSWORD: ${ENCUESTADOR_ACCESS_PASSWORD}
     expose:
       - "3000"
     networks:
