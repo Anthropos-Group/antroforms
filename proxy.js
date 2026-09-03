@@ -49,6 +49,9 @@ export function proxy(request) {
   const { pathname } = request.nextUrl;
 
   if (pathname === "/login") {
+    const sesion = sesionActual(request);
+    if (sesion === "encuestador") return NextResponse.redirect(new URL("/encuesta", request.url));
+    if (sesion === "admin") return NextResponse.redirect(new URL("/admin/preguntas", request.url));
     return NextResponse.next();
   }
 

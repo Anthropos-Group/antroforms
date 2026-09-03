@@ -25,6 +25,123 @@ function estadoPdv(completadas, meta) {
   return { label: "Sin avance", clase: "badge-fallido" };
 }
 
+const PALETA_COLORES = [
+  "#3b82f6", // azul
+  "#22c55e", // verde
+  "#ef4444", // rojo
+  "#f59e0b", // amarillo / ambar
+  "#8b5cf6", // morado
+  "#ec4899", // rosa
+  "#14b8a6", // turquesa
+  "#6366f1", // indigo
+  "#f97316", // naranja
+  "#84cc16", // lima
+];
+
+function ReporteEntrevistadoresChart({ entrevistadores = [] }) {
+  if (!entrevistadores || entrevistadores.length === 0) {
+    return <div className="empty-state">No hay encuestas registradas en este mes.</div>;
+  }
+
+  const cx = 200;
+  const cy = 130;
+  const radius = 85;
+
+  let currentAngle = 0;
+  const slices = entrevistadores.map((item, index) => {
+    const angle = (item.porcentaje / 100) * 2 * Math.PI;
+    const startAngle = currentAngle;
+    const endAngle = currentAngle + angle;
+    const midAngle = startAngle + angle / 2;
+    currentAngle = endAngle;
+
+    const color = PALETA_COLORES[index % PALETA_COLORES.length];
+
+    // Puntos de la rebanada
+    const x1 = cx + radius * Math.cos(startAngle - Math.PI / 2);
+    const y1 = cy + radius * Math.sin(startAngle - Math.PI / 2);
+    const x2 = cx + radius * Math.cos(endAngle - Math.PI / 2);
+    const y2 = cy + radius * Math.sin(endAngle - Math.PI / 2);
+    const largeArcFlag = angle > Math.PI ? 1 : 0;
+
+    const isFullCircle = angle >= 2 * Math.PI - 0.001;
+    const pathD = isFullCircle
+      ? ""
+      : `M ${cx} ${cy} L ${x1.toFixed(2)} ${y1.toFixed(2)} A ${radius} ${radius} 0 ${largeArcFlag} 1 ${x2.toFixed(2)} ${y2.toFixed(2)} Z`;
+
+    // Pauta y etiqueta externa
+    const lx1 = cx + (radius + 4) * Math.cos(midAngle - Math.PI / 2);
+    const ly1 = cy + (radius + 4) * Math.sin(midAngle - Math.PI / 2);
+    const lx2 = cx + (radius + 26) * Math.cos(midAngle - Math.PI / 2);
+    const ly2 = cy + (radius + 26) * Math.sin(midAngle - Math.PI / 2);
+    const alignRight = lx2 >= cx;
+
+    return {
+      ...item,
+      color,
+      isFullCircle,
+      pathD,
+      lx1,
+      ly1,
+      lx2,
+      ly2,
+      alignRight,
+    };
+  });
+
+  return (
+    <div>
+      <div style={{ width: "100%", maxWidth: 520, margin: "0 auto" }}>
+        <svg viewBox="0 0 400 260" style={{ width: "100%", height: "auto", overflow: "visible" }}>
+          {slices.map((slice) =>
+            slice.isFullCircle ? (
+              <circle key={slice.nombre} cx={cx} cy={cy} r={radius} fill={slice.color} />
+            ) : (
+              <path key={slice.nombre} d={slice.pathD} fill={slice.color} stroke="#ffffff" strokeWidth="2" />
+            )
+          )}
+
+          {slices.map((slice) => (
+            <g key={`label-${slice.nombre}`}>
+              <line
+                x1={slice.lx1}
+                y1={slice.ly1}
+                x2={slice.lx2}
+                y2={slice.ly2}
+                stroke="#94a3b8"
+                strokeWidth="1.2"
+                strokeDasharray="2 2"
+              />
+              <text
+                x={slice.alignRight ? slice.lx2 + 6 : slice.lx2 - 6}
+                y={slice.ly2 + 4}
+                textAnchor={slice.alignRight ? "start" : "end"}
+                fontSize="11.5"
+                fontWeight="600"
+                fill="#1e293b"
+              >
+                {slice.nombre}: {slice.completadas} ({slice.porcentaje}%)
+              </text>
+            </g>
+          ))}
+        </svg>
+      </div>
+
+      {/* Leyenda inferior */}
+      <div className="pie-legend-grid">
+        {slices.map((slice) => (
+          <div key={`legend-${slice.nombre}`} className="pie-legend-item">
+            <span className="pie-legend-dot" style={{ backgroundColor: slice.color }} />
+            <span className="pie-legend-text">
+              <strong>{slice.nombre}</strong>: {slice.completadas} ({slice.porcentaje}%)
+            </span>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
 export default function MonitoreoPage() {
   const [mes, setMes] = useState(mesActualISO());
   const [data, setData] = useState(null);
@@ -43,13 +160,12 @@ export default function MonitoreoPage() {
     }
   }
 
-  // Una sola carga automática al entrar a la pestaña — el resto es manual con
-  // el botón "Actualizar", para no pegarle a Supabase todo el tiempo.
   useEffect(() => {
     cargar();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  const esAdmin = data?.rol === "admin";
   const pdvs = data?.pdvs || [];
   const meta = data?.meta_por_pdv || 25;
   const totalSucursales = pdvs.length;
@@ -81,37 +197,41 @@ export default function MonitoreoPage() {
         )}
       </div>
 
-      <div className="kpi-grid">
-        <div className="kpi-card">
-          <div className="kpi-label">Sucursales monitoreadas</div>
-          <div className="kpi-value">{totalSucursales}</div>
-        </div>
-        <div className="kpi-card accent">
-          <div className="kpi-label">Completadas este mes</div>
-          <div className="kpi-value kpi-accent">
-            {totalCompletadas} <span className="kpi-sub">/ {totalMeta} meta</span>
+      {/* KPI Cards solo visibles para Administrador */}
+      {esAdmin && (
+        <div className="kpi-grid">
+          <div className="kpi-card">
+            <div className="kpi-label">Sucursales activas con datos</div>
+            <div className="kpi-value">{totalSucursales}</div>
+          </div>
+          <div className="kpi-card accent">
+            <div className="kpi-label">Completadas este mes</div>
+            <div className="kpi-value kpi-accent">
+              {totalCompletadas} <span className="kpi-sub">/ {totalMeta} meta</span>
+            </div>
+          </div>
+          <div className={`kpi-card ${avancePct >= 100 ? "good" : "accent"}`}>
+            <div className="kpi-label">Avance del mes</div>
+            <div className={`kpi-value ${avancePct >= 100 ? "kpi-good" : "kpi-accent"}`}>{avancePct}%</div>
+          </div>
+          <div className="kpi-card good">
+            <div className="kpi-label">Sucursales con meta cumplida</div>
+            <div className="kpi-value kpi-good">
+              {sucursalesCumplidas} <span className="kpi-sub">/ {totalSucursales}</span>
+            </div>
           </div>
         </div>
-        <div className={`kpi-card ${avancePct >= 100 ? "good" : "accent"}`}>
-          <div className="kpi-label">Avance del mes</div>
-          <div className={`kpi-value ${avancePct >= 100 ? "kpi-good" : "kpi-accent"}`}>{avancePct}%</div>
-        </div>
-        <div className="kpi-card good">
-          <div className="kpi-label">Sucursales con meta cumplida</div>
-          <div className="kpi-value kpi-good">
-            {sucursalesCumplidas} <span className="kpi-sub">/ {totalSucursales}</span>
-          </div>
-        </div>
-      </div>
+      )}
 
+      {/* Avance por Sucursal (Visible tanto para Encuestador como Administrador, filtrando las sucursales sin datos) */}
       <div className="card" style={{ marginBottom: 20 }}>
         <div className="pad" style={{ paddingBottom: 0 }}>
           <h2 className="section-title">Avance por sucursal</h2>
-          <p className="section-subtitle">Ordenadas de mayor a menor avance.</p>
+          <p className="section-subtitle">Mostrando únicamente sucursales con registros en el mes.</p>
         </div>
 
         {pdvs.length === 0 ? (
-          <div className="empty-state">Sin datos todavía.</div>
+          <div className="empty-state">No existen encuestas registradas para las sucursales en este mes.</div>
         ) : (
           <>
             <div className="pdv-table-head">
@@ -139,23 +259,34 @@ export default function MonitoreoPage() {
         )}
       </div>
 
-      <div className="card pad">
-        <h2 className="section-title">Histórico de encuestas completadas</h2>
-        <p className="section-subtitle">Total por mes, todas las sucursales.</p>
-        {!data || data.historico.length === 0 ? (
-          <div className="empty-state">Sin histórico todavía.</div>
-        ) : (
-          <div className="chart-bars">
-            {data.historico.map((h) => (
-              <div key={h.mes} className="chart-bar-col">
-                <div className="chart-bar-value">{h.completadas}</div>
-                <div className="chart-bar" style={{ height: `${Math.max(4, (h.completadas / maxHistorico) * 100)}%` }} />
-                <div className="chart-bar-label">{nombreMesCorto(h.mes)}</div>
-              </div>
-            ))}
+      {/* Secciones adicionales para Administrador: Reporte por Entrevistador e Histórico */}
+      {esAdmin && (
+        <>
+          <div className="card pad" style={{ marginBottom: 20 }}>
+            <h2 className="section-title">Reporte por entrevistador</h2>
+            <p className="section-subtitle">Distribución del total de encuestas completadas por el equipo de encuestadores.</p>
+            <ReporteEntrevistadoresChart entrevistadores={data?.entrevistadores || []} />
           </div>
-        )}
-      </div>
+
+          <div className="card pad">
+            <h2 className="section-title">Histórico de encuestas completadas</h2>
+            <p className="section-subtitle">Total por mes, todas las sucursales.</p>
+            {!data || !data.historico || data.historico.length === 0 ? (
+              <div className="empty-state">Sin histórico todavía.</div>
+            ) : (
+              <div className="chart-bars">
+                {data.historico.map((h) => (
+                  <div key={h.mes} className="chart-bar-col">
+                    <div className="chart-bar-value">{h.completadas}</div>
+                    <div className="chart-bar" style={{ height: `${Math.max(4, (h.completadas / maxHistorico) * 100)}%` }} />
+                    <div className="chart-bar-label">{nombreMesCorto(h.mes)}</div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        </>
+      )}
     </div>
   );
 }

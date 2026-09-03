@@ -43,7 +43,7 @@ function LoginContent() {
         return;
       }
       const next = searchParams.get("next");
-      router.push(next && next.startsWith("/encuesta") ? next : "/encuesta");
+      router.replace(next && next.startsWith("/encuesta") ? next : "/encuesta");
       router.refresh();
     } finally {
       setCargando(false);
@@ -66,7 +66,7 @@ function LoginContent() {
         return;
       }
       const next = searchParams.get("next");
-      router.push(next && next.startsWith("/admin") ? next : "/admin/preguntas");
+      router.replace(next && next.startsWith("/admin") ? next : "/admin/preguntas");
       router.refresh();
     } finally {
       setCargando(false);
