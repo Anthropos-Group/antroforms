@@ -5,13 +5,38 @@ import { useState, useEffect } from "react";
 function autoInferTarget(header = "", preguntas = []) {
   const h = header.toLowerCase().trim();
 
-  if (h.includes("submission id") || h === "submissionid" || h === "id" || h === "formid") return "submission_id";
+  // Submission Id / FormId
+  if (h.includes("submission id") || h === "submissionid" || h === "id" || h.includes("formid") || h === "form id") {
+    return "submission_id";
+  }
+
+  // Fecha / Submitted On
   if (h.includes("submitted on") || h.includes("fecha")) return "fecha";
-  if (h.includes("encuestador") || h === "submitted by") return "encuestador";
-  if (h.includes("código") || h.includes("codigo")) return "codigo_cliente";
-  if (h.includes("nombre cliente") || h.includes("nombre_cliente")) return "nombre_cliente";
+
+  // Encuestador
+  if (h.includes("encuestador") || h === "submitted by" || h.startsWith("encuestador")) return "encuestador";
+
+  // Código de Cliente (debe evaluarse antes de cliente)
+  if (h.includes("código") || h.includes("codigo") || h === "código" || h === "codigo") {
+    return "codigo_cliente";
+  }
+
+  // Nombre del Cliente: "Cliente", "3. Nombre Cliente:", "Nombre Cliente", etc.
+  if (
+    h === "cliente" ||
+    h === "nombre" ||
+    h.includes("nombre cliente") ||
+    h.includes("nombre_cliente") ||
+    (h.includes("cliente") && !h.includes("código") && !h.includes("codigo"))
+  ) {
+    return "nombre_cliente";
+  }
+
+  // PDV / Sucursal
   if (h.includes("pdv") || h.includes("sucursal")) return "pdv";
-  if (h.includes("mes de gestión") || h.includes("mes_gestion")) return "mes_gestion";
+
+  // Mes de Gestión
+  if (h.includes("mes de gestión") || h.includes("mes_gestion") || h === "mes") return "mes_gestion";
 
   // Detección de justificativos (.1 o porqué)
   if (h.includes(".1") || h.includes("porqué") || h.includes("porque")) {
@@ -93,22 +118,22 @@ export default function ImportModal({ isOpen, onClose, onSuccess }) {
     }
   }, [isOpen]);
 
-  // Animación del progreso durante la carga
+  // Simulación de barra de progreso durante la carga o procesamiento
   useEffect(() => {
     let interval;
-    if (cargando && step === 2) {
-      setProgresoVal(10);
+    if (cargando) {
+      setProgresoVal(15);
       interval = setInterval(() => {
         setProgresoVal((prev) => {
           if (prev >= 92) return 92;
-          return prev + 8;
+          return prev + 9;
         });
-      }, 250);
-    } else if (!cargando) {
+      }, 200);
+    } else {
       setProgresoVal(100);
     }
     return () => clearInterval(interval);
-  }, [cargando, step]);
+  }, [cargando]);
 
   if (!isOpen) return null;
 
@@ -141,6 +166,7 @@ export default function ImportModal({ isOpen, onClose, onSuccess }) {
       setSamples(d.samples || []);
       setTotalRows(d.totalRows || 0);
 
+      // Auto-mapeo inteligente incluyendo 'Cliente' -> 'Nombre del Cliente'
       const autoMap = {};
       (d.headers || []).forEach((h) => {
         autoMap[h] = autoInferTarget(h, preguntas);
@@ -245,10 +271,28 @@ export default function ImportModal({ isOpen, onClose, onSuccess }) {
                 onChange={(e) => setFile(e.target.files?.[0] || null)}
                 style={{ fontSize: 14 }}
               />
+              {file && (
+                <div style={{ marginTop: 12, fontSize: 13, color: "#4f46e5", fontWeight: 600 }}>
+                  📄 {file.name} ({(file.size / 1024).toFixed(1)} KB)
+                </div>
+              )}
             </div>
 
+            {/* Barra de progreso de lectura del archivo */}
+            {cargando && (
+              <div style={{ marginTop: 18 }}>
+                <div style={{ display: "flex", justifyContent: "space-between", fontSize: 12.5, marginBottom: 6, fontWeight: 600, color: "#4f46e5" }}>
+                  <span>Leyendo y analizando archivo Excel...</span>
+                  <span>{progresoVal}%</span>
+                </div>
+                <div className="progress-track" style={{ height: 8 }}>
+                  <div className="progress-fill" style={{ width: `${progresoVal}%`, background: "#4f46e5" }} />
+                </div>
+              </div>
+            )}
+
             <div style={{ display: "flex", justifyContent: "flex-end", gap: 10, marginTop: 24 }}>
-              <button className="btn" onClick={handleReset}>Cancelar</button>
+              <button className="btn" onClick={handleReset} disabled={cargando}>Cancelar</button>
               <button className="btn btn-primary" onClick={handlePrevisualizar} disabled={!file || cargando}>
                 {cargando ? "Leyendo archivo…" : "Siguiente: Parametrizar Mapeo ▶"}
               </button>
@@ -258,64 +302,73 @@ export default function ImportModal({ isOpen, onClose, onSuccess }) {
 
         {step === 2 && (
           <div className="pad" style={{ padding: "16px 0 0" }}>
-            <p style={{ fontSize: 13.5, color: "#4b5563", margin: "0 0 14px" }}>
-              Se detectaron <strong>{headers.length} columnas</strong> y <strong>{totalRows} registros</strong> en el archivo. Verifica el mapeo a Supabase:
-            </p>
-
-            {cargando && (
-              <div style={{ marginBottom: 16 }}>
-                <div style={{ display: "flex", justifyContent: "space-between", fontSize: 12.5, marginBottom: 6, fontWeight: 600, color: "#4f46e5" }}>
-                  <span>Procesando e insertando {totalRows} encuestas...</span>
-                  <span>{progresoVal}%</span>
-                </div>
-                <div className="progress-track" style={{ height: 8 }}>
-                  <div className="progress-fill" style={{ width: `${progresoVal}%`, background: "#4f46e5" }} />
+            {cargando ? (
+              <div style={{ textAlign: "center", padding: "40px 20px" }}>
+                <div className="result-icon-circle" style={{ background: "#4f46e5", margin: "0 auto 16px" }}>⏳</div>
+                <h3 style={{ margin: "0 0 8px", fontSize: 18 }}>Importando {totalRows} encuestas a Supabase...</h3>
+                <p style={{ color: "#6b7280", fontSize: 13.5, marginBottom: 24, maxWidth: 460, margin: "0 auto 24px" }}>
+                  Validando duplicados por FormId / Submission Id, vinculando encuestadores y guardando respuestas...
+                </p>
+                <div style={{ maxWidth: 440, margin: "0 auto" }}>
+                  <div style={{ display: "flex", justifyContent: "space-between", fontSize: 13, marginBottom: 8, fontWeight: 600, color: "#4f46e5" }}>
+                    <span>Progreso de importación</span>
+                    <span>{progresoVal}%</span>
+                  </div>
+                  <div className="progress-track" style={{ height: 10 }}>
+                    <div className="progress-fill" style={{ width: `${progresoVal}%`, background: "#4f46e5" }} />
+                  </div>
                 </div>
               </div>
+            ) : (
+              <>
+                <p style={{ fontSize: 13.5, color: "#4b5563", margin: "0 0 14px" }}>
+                  Se detectaron <strong>{headers.length} columnas</strong> y <strong>{totalRows} registros</strong> en el archivo. Verifica el mapeo a Supabase:
+                </p>
+
+                <div style={{ maxHeight: 360, overflowY: "auto", border: "1px solid #e5e7eb", borderRadius: 8 }}>
+                  <table style={{ fontSize: 13 }}>
+                    <thead>
+                      <tr>
+                        <th style={{ width: "35%" }}>Columna en Excel</th>
+                        <th style={{ width: "30%" }}>Valor Muestra</th>
+                        <th style={{ width: "35%" }}>Campo Destino en Supabase</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {headers.map((h, i) => (
+                        <tr key={i}>
+                          <td style={{ fontWeight: 600, fontSize: 12.5 }}>{h}</td>
+                          <td style={{ fontSize: 12, color: "#6b7280", maxWidth: 180, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                            {samples[0]?.[h] || "—"}
+                          </td>
+                          <td>
+                            <select
+                              className="text-input"
+                              style={{ padding: "4px 8px", fontSize: 12.5 }}
+                              value={mapping[h] || "ignore"}
+                              onChange={(e) => setMapping({ ...mapping, [h]: e.target.value })}
+                            >
+                              {targetOptions.map((opt) => (
+                                <option key={opt.key} value={opt.key}>
+                                  {opt.label}
+                                </option>
+                              ))}
+                            </select>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginTop: 20 }}>
+                  <button className="btn" onClick={() => setStep(1)} disabled={cargando}>◀ Cambiar archivo</button>
+                  <button className="btn btn-primary" onClick={handleImportar} disabled={cargando}>
+                    Procesar e Importar {totalRows} Encuestas ✓
+                  </button>
+                </div>
+              </>
             )}
-
-            <div style={{ maxHeight: 360, overflowY: "auto", border: "1px solid #e5e7eb", borderRadius: 8 }}>
-              <table style={{ fontSize: 13 }}>
-                <thead>
-                  <tr>
-                    <th style={{ width: "35%" }}>Columna en Excel</th>
-                    <th style={{ width: "30%" }}>Valor Muestra</th>
-                    <th style={{ width: "35%" }}>Campo Destino en Supabase</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {headers.map((h, i) => (
-                    <tr key={i}>
-                      <td style={{ fontWeight: 600, fontSize: 12.5 }}>{h}</td>
-                      <td style={{ fontSize: 12, color: "#6b7280", maxWidth: 180, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-                        {samples[0]?.[h] || "—"}
-                      </td>
-                      <td>
-                        <select
-                          className="text-input"
-                          style={{ padding: "4px 8px", fontSize: 12.5 }}
-                          value={mapping[h] || "ignore"}
-                          onChange={(e) => setMapping({ ...mapping, [h]: e.target.value })}
-                        >
-                          {targetOptions.map((opt) => (
-                            <option key={opt.key} value={opt.key}>
-                              {opt.label}
-                            </option>
-                          ))}
-                        </select>
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-
-            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginTop: 20 }}>
-              <button className="btn" onClick={() => setStep(1)} disabled={cargando}>◀ Cambiar archivo</button>
-              <button className="btn btn-primary" onClick={handleImportar} disabled={cargando}>
-                {cargando ? "Importando encuestas…" : `Procesar e Importar ${totalRows} Encuestas ✓`}
-              </button>
-            </div>
           </div>
         )}
 
@@ -341,7 +394,7 @@ export default function ImportModal({ isOpen, onClose, onSuccess }) {
             </div>
 
             <p style={{ fontSize: 13, color: "#6b7280", margin: "18px 0 20px" }}>
-              Las encuestas duplicadas (existentes previamente por FormId o cliente) fueron omitidas automáticamente para evitar duplicaciones.
+              Las encuestas duplicadas (existentes previamente por FormId, Submission Id o cliente) fueron omitidas automáticamente para evitar duplicaciones.
             </p>
 
             <button className="btn btn-primary" onClick={handleReset}>Finalizar</button>
