@@ -34,6 +34,8 @@ export async function GET(request) {
       codigo_cliente: e.codigo_cliente,
       encuestador_nombre: e.encuestador_nombre,
       cliente_nombre: e.cliente_nombre,
+      pdv: e.pdv,
+      mes_gestion: e.mes_gestion,
       respuestas: e.respuestas,
     })),
   });
