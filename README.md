@@ -33,7 +33,7 @@ cp .env.example .env
 | `NEXT_PUBLIC_SUPABASE_URL` | Supabase → Project Settings → API → "Project URL" |
 | `NEXT_PUBLIC_SUPABASE_ANON_KEY` | Supabase → Project Settings → API → clave "anon public" |
 | `SUPABASE_SERVICE_ROLE_KEY` | Supabase → Project Settings → API → clave "service_role" (secreta) |
-| `SUPABASE_DB_URL` | Supabase → Project Settings → Database → Connection string → modo **URI** (conexión directa, puerto 5432, con el password de la base) |
+| `SUPABASE_DB_URL` | Supabase → Project Settings → Database → Connection string → usa **"Session pooler"** (no "Direct connection" — esa resuelve por IPv6 y falla con `ENETUNREACH` en muchos servidores/contenedores sin salida IPv6). El pooler usa usuario `postgres.<project-ref>` en vez de `postgres`. |
 | `TWENTY_API_URL` | URL de tu instancia de Twenty + `/rest`, ej. `https://tu-dominio/rest` |
 | `TWENTY_API_KEY` | Twenty → Settings → APIs & Webhooks → Crear clave API |
 | `CRON_SECRET` | Cualquier string aleatorio largo (protege el endpoint del cron) — genera uno con `openssl rand -hex 32` |

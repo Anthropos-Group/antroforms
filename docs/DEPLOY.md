@@ -79,3 +79,13 @@ Con un push a `main` en GitHub, en Portainer: **Stacks → antroforms → Pull a
 ## Dar de baja
 
 **Stacks → antroforms → Stop this stack** (pausa sin borrar) o **Delete this stack** (elimina el contenedor; la base de datos en Supabase no se toca).
+
+## Troubleshooting
+
+### `Error: connect ENETUNREACH ...:5432` en los logs del contenedor
+
+La conexión **directa** de Supabase (`db.<project-ref>.supabase.co`) resuelve por IPv6 en muchas regiones. Si el servidor/contenedor no tiene salida IPv6, falla con este error. Solución: usar el connection string de **"Session pooler"** en `SUPABASE_DB_URL` (Supabase → Settings → Database → Connection string → Session pooler) — usa usuario `postgres.<project-ref>` y funciona por IPv4.
+
+### `env file .../.env not found` al desplegar desde un repositorio en Portainer
+
+Portainer no crea un `.env` físico en el directorio del stack cuando se despliega desde Git. El `docker-compose.yml` de este repo ya usa `environment: VAR: ${VAR}` (no `env_file:`) para evitar este problema — si ves este error, confirma que estás en la versión más reciente del compose (haz "Pull and redeploy" o refresca el repositorio).
