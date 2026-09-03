@@ -17,6 +17,58 @@ function formatFecha(valor) {
   return fecha.toLocaleDateString("es-EC", { day: "2-digit", month: "2-digit", year: "numeric" });
 }
 
+function obtenerEtiquetasEscala(textoPregunta = "") {
+  const lower = textoPregunta.toLowerCase();
+  if (lower.includes("recomendaría") || lower.includes("recomendar")) {
+    return { min: "1 - Menos recomendado", max: "10 - Más recomendado" };
+  }
+  if (lower.includes("satisfecho") || lower.includes("satisfacción")) {
+    return { min: "1 - Nada satisfecho", max: "10 - Muy satisfecho" };
+  }
+  return { min: "1 - Mínimo (Menos recomendado)", max: "10 - Máximo (Más recomendado)" };
+}
+
+const DRAFTS_KEY = "antroforms_borradores";
+
+function getBorradoresFromStorage() {
+  if (typeof window === "undefined") return [];
+  try {
+    const raw = localStorage.getItem(DRAFTS_KEY);
+    return raw ? JSON.parse(raw) : [];
+  } catch (err) {
+    console.error("Error leyendo borradores de localStorage:", err);
+    return [];
+  }
+}
+
+function saveBorradorToStorage(borrador) {
+  if (typeof window === "undefined" || !borrador || !borrador.id) return;
+  try {
+    const list = getBorradoresFromStorage();
+    const existingIndex = list.findIndex((b) => b.id === borrador.id);
+    const updatedBorrador = { ...borrador, updatedAt: new Date().toISOString() };
+    if (existingIndex >= 0) {
+      list[existingIndex] = updatedBorrador;
+    } else {
+      list.unshift(updatedBorrador);
+    }
+    localStorage.setItem(DRAFTS_KEY, JSON.stringify(list));
+  } catch (err) {
+    console.error("Error guardando borrador en localStorage:", err);
+  }
+}
+
+function deleteBorradorFromStorage(id) {
+  if (typeof window === "undefined" || !id) return;
+  try {
+    const list = getBorradoresFromStorage();
+    const filtered = list.filter((b) => b.id !== id);
+    localStorage.setItem(DRAFTS_KEY, JSON.stringify(filtered));
+  } catch (err) {
+    console.error("Error eliminando borrador de localStorage:", err);
+  }
+}
+
 const PASOS = [
   { key: "encuestador", label: "Encuestador" },
   { key: "cliente", label: "Cliente" },
@@ -45,42 +97,86 @@ function tieneDatoCliente(cliente, campo) {
   if (valor === null || valor === undefined) return false;
   const texto = String(valor).trim();
   if (texto === "") return false;
-  // Algunos registros de Twenty traen el string literal "NULL"/"N/A" en vez de
-  // estar vacíos de verdad — el cron los limpia, pero esto cubre lo que aún no.
   const upper = texto.toUpperCase();
   return upper !== "NULL" && upper !== "N/A" && upper !== "NA";
 }
 
-// Avanza el cursor saltando automáticamente las preguntas cuya condición es un
-// dato del cliente (ej. "TOTAL") que no está presente — esas quedan como N/A
-// sin mostrarse. Si una condición depende de una respuesta previa y no se
-// cumple, corta la encuesta ahí (comportamiento existente).
-function siguienteIndice(preguntas, respuestas, desde, cliente) {
-  let i = desde;
-  const autoRespuestas = {};
-  while (i < preguntas.length) {
+function evaluarAutoRespuestas(preguntas, cliente) {
+  const auto = {};
+  preguntas?.forEach((p) => {
+    if (p.condicion?.fuente === "cliente" && !tieneDatoCliente(cliente, p.condicion.campo)) {
+      auto[p.id] = "N/A";
+    }
+  });
+  return auto;
+}
+
+function evaluarCortePrematuro(preguntas, respuestas) {
+  for (let i = 0; i < preguntas.length; i++) {
     const p = preguntas[i];
     const cond = p.condicion;
-
-    if (cond?.fuente === "cliente") {
-      if (!tieneDatoCliente(cliente, cond.campo)) {
-        autoRespuestas[p.id] = "N/A";
-        i++;
-        continue;
-      }
-      return { cortada: false, indice: i, autoRespuestas };
-    }
-
     if (cond?.pregunta_id) {
       const previa = respuestas[cond.pregunta_id];
-      if (previa !== cond.valor_esperado) {
-        return { cortada: true, indice: i, autoRespuestas };
+      if (previa !== undefined && previa !== null && previa !== "N/A" && previa !== cond.valor_esperado) {
+        return { cortada: true, indiceCorte: i, preguntaCausaId: cond.pregunta_id };
       }
     }
-
-    return { cortada: false, indice: i, autoRespuestas };
   }
-  return { cortada: false, indice: preguntas.length, autoRespuestas };
+  return { cortada: false, indiceCorte: preguntas.length };
+}
+
+function validarCuestionarioCompleto(preguntas, respuestas, cliente) {
+  const errores = [];
+  const autoRespuestas = evaluarAutoRespuestas(preguntas, cliente);
+  const corteInfo = evaluarCortePrematuro(preguntas, respuestas);
+
+  const limite = corteInfo.cortada ? corteInfo.indiceCorte : preguntas.length;
+
+  for (let i = 0; i < limite; i++) {
+    const p = preguntas[i];
+    if (autoRespuestas[p.id] === "N/A") continue;
+
+    const val = respuestas[p.id];
+    const numPregunta = i + 1;
+
+    if (p.tipo === "aceptacion_si_no") {
+      if (typeof val !== "boolean") {
+        errores.push({
+          preguntaId: p.id,
+          indice: i,
+          mensaje: `Pregunta ${numPregunta}: Debe seleccionar Sí o No.`,
+        });
+      }
+    } else if (p.tipo === "escala_1_10") {
+      const cal = typeof val === "object" ? val?.calificacion : val;
+      const just = typeof val === "object" ? val?.justificacion : "";
+
+      if (cal === undefined || cal === null || Number.isNaN(cal)) {
+        errores.push({
+          preguntaId: p.id,
+          indice: i,
+          mensaje: `Pregunta ${numPregunta}: Debe seleccionar una calificación del 1 al 10.`,
+        });
+      } else if (p.requiere_justificacion && (!just || String(just).trim().length === 0)) {
+        errores.push({
+          preguntaId: p.id,
+          indice: i,
+          mensaje: `Pregunta ${numPregunta}: Debe escribir el motivo / por qué de su calificación.`,
+        });
+      }
+    } else if (p.tipo === "texto_abierto") {
+      const texto = typeof val === "string" ? val.trim() : "";
+      if (!texto) {
+        errores.push({
+          preguntaId: p.id,
+          indice: i,
+          mensaje: `Pregunta ${numPregunta}: Debe ingresar la respuesta.`,
+        });
+      }
+    }
+  }
+
+  return { valido: errores.length === 0, errores, cortada: corteInfo.cortada, hasta: limite };
 }
 
 export default function EncuestaPage() {
@@ -88,6 +184,7 @@ export default function EncuestaPage() {
 
   const [encuestadores, setEncuestadores] = useState([]);
   const [encuestadorId, setEncuestadorId] = useState("");
+  const [borradores, setBorradores] = useState([]);
 
   const [cuestionario, setCuestionario] = useState(null);
   const [cargandoCuestionario, setCargandoCuestionario] = useState(true);
@@ -101,8 +198,8 @@ export default function EncuestaPage() {
 
   const [respuestas, setRespuestas] = useState({});
   const [indice, setIndice] = useState(0);
-  const [calTemp, setCalTemp] = useState(null);
-  const [justTemp, setJustTemp] = useState("");
+  const [activeDraftId, setActiveDraftId] = useState(null);
+  const [erroresValidacion, setErroresValidacion] = useState([]);
 
   const [enviando, setEnviando] = useState(false);
   const [resultadoFinal, setResultadoFinal] = useState(null);
@@ -141,38 +238,94 @@ export default function EncuestaPage() {
     return () => clearTimeout(t);
   }, [query, mesSeleccionado]);
 
+  // Cargar borradores cuando cambia el encuestador
+  useEffect(() => {
+    if (encuestadorId) {
+      const list = getBorradoresFromStorage();
+      setBorradores(list.filter((b) => b.encuestadorId === encuestadorId));
+    } else {
+      setBorradores([]);
+    }
+  }, [encuestadorId, step]);
+
+  // Auto-guardar borrador al cambiar respuestas o índice
+  useEffect(() => {
+    if (step === "cuestionario" && activeDraftId && cliente && cuestionario) {
+      saveBorradorToStorage({
+        id: activeDraftId,
+        encuestadorId,
+        cuestionarioId: cuestionario.id,
+        cliente,
+        respuestas,
+        indice,
+      });
+    }
+  }, [respuestas, indice, step, activeDraftId, cliente, cuestionario, encuestadorId]);
+
   const preguntaActual = cuestionario?.preguntas?.[indice];
 
   function elegirEncuestador(id) {
     setEncuestadorId(id);
+    const list = getBorradoresFromStorage();
+    setBorradores(list.filter((b) => b.encuestadorId === id));
     setStep("cliente");
   }
 
   function elegirCliente(c) {
     setCliente(c);
-    const next = siguienteIndice(cuestionario.preguntas, {}, 0, c);
-    setRespuestas(next.autoRespuestas);
-    setIndice(next.indice);
+    const auto = evaluarAutoRespuestas(cuestionario?.preguntas, c);
+    const iniciales = { ...auto };
+    setRespuestas(iniciales);
+    setIndice(0);
+    const newDraftId = `draft_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`;
+    setActiveDraftId(newDraftId);
+    setErroresValidacion([]);
+    setStep("cuestionario");
+
+    saveBorradorToStorage({
+      id: newDraftId,
+      encuestadorId,
+      cuestionarioId: cuestionario?.id,
+      cliente: c,
+      respuestas: iniciales,
+      indice: 0,
+    });
+  }
+
+  function continuarBorrador(b) {
+    setCliente(b.cliente);
+    setRespuestas(b.respuestas || {});
+    setIndice(b.indice || 0);
+    setActiveDraftId(b.id);
+    setErroresValidacion([]);
     setStep("cuestionario");
   }
 
-  function responder(pregunta, valor) {
-    const conRespuesta = { ...respuestas, [pregunta.id]: valor };
-    const preguntas = cuestionario.preguntas;
-    const next = siguienteIndice(preguntas, conRespuesta, indice + 1, cliente);
-    const nuevas = { ...conRespuesta, ...next.autoRespuestas };
+  function eliminarBorradorHandler(e, bId) {
+    e.stopPropagation();
+    deleteBorradorFromStorage(bId);
+    setBorradores((prev) => prev.filter((b) => b.id !== bId));
+  }
 
-    setRespuestas(nuevas);
-    setCalTemp(null);
-    setJustTemp("");
+  function actualizarRespuesta(preguntaId, nuevoValor) {
+    setRespuestas((prev) => ({
+      ...prev,
+      [preguntaId]: nuevoValor,
+    }));
+    setErroresValidacion((prev) => prev.filter((e) => e.preguntaId !== preguntaId));
+  }
 
-    if (next.indice >= preguntas.length && !next.cortada) {
-      enviar(nuevas, true, preguntas.length);
-    } else if (next.cortada) {
-      enviar(nuevas, false, next.indice);
-    } else {
-      setIndice(next.indice);
+  function manejarSubmit() {
+    if (!cuestionario || !cliente) return;
+    const resultadoVal = validarCuestionarioCompleto(cuestionario.preguntas, respuestas, cliente);
+
+    if (!resultadoVal.valido) {
+      setErroresValidacion(resultadoVal.errores);
+      return;
     }
+
+    setErroresValidacion([]);
+    enviar(respuestas, !resultadoVal.cortada, resultadoVal.hasta);
   }
 
   async function enviar(respuestasFinales, completada, hasta) {
@@ -198,6 +351,12 @@ export default function EncuestaPage() {
       });
       const data = await res.json();
       setResultadoFinal({ completada, id: data.id, twentyError: data.twentyError });
+
+      // Al enviar con éxito, eliminar el borrador local
+      if (activeDraftId) {
+        deleteBorradorFromStorage(activeDraftId);
+        setActiveDraftId(null);
+      }
     } catch (err) {
       setResultadoFinal({ completada, error: err.message });
     } finally {
@@ -213,6 +372,8 @@ export default function EncuestaPage() {
     setResultados([]);
     setRespuestas({});
     setIndice(0);
+    setActiveDraftId(null);
+    setErroresValidacion([]);
     setResultadoFinal(null);
     setCopiado(false);
   }
@@ -235,8 +396,24 @@ export default function EncuestaPage() {
 
   const progreso = useMemo(() => {
     if (!cuestionario) return 0;
-    return Math.round((indice / cuestionario.preguntas.length) * 100);
-  }, [indice, cuestionario]);
+    const auto = evaluarAutoRespuestas(cuestionario.preguntas, cliente);
+    let respondidas = 0;
+    cuestionario.preguntas.forEach((p) => {
+      if (auto[p.id] === "N/A") return;
+      const v = respuestas[p.id];
+      if (p.tipo === "aceptacion_si_no" && typeof v === "boolean") respondidas++;
+      else if (p.tipo === "escala_1_10") {
+        const cal = typeof v === "object" ? v?.calificacion : v;
+        if (cal !== undefined && cal !== null) respondidas++;
+      } else if (p.tipo === "texto_abierto" && typeof v === "string" && v.trim()) respondidas++;
+    });
+    return Math.round((respondidas / cuestionario.preguntas.length) * 100);
+  }, [respuestas, cuestionario, cliente]);
+
+  const corteInfoActual = useMemo(() => {
+    if (!cuestionario) return { cortada: false };
+    return evaluarCortePrematuro(cuestionario.preguntas, respuestas);
+  }, [cuestionario, respuestas]);
 
   const nombreEncuestador = encuestadores.find((e) => e.id === encuestadorId)?.nombre || "";
   const guionApertura = cuestionario
@@ -273,49 +450,88 @@ export default function EncuestaPage() {
       )}
 
       {step === "cliente" && (
-        <div className="card pad">
-          <div style={{ display: "flex", gap: 16, flexWrap: "wrap", marginBottom: 14 }}>
-            <div style={{ minWidth: 200 }}>
-              <label className="field-label">Mes de gestión</label>
-              <select
-                className="text-input"
-                value={mesSeleccionado}
-                onChange={(e) => setMesSeleccionado(e.target.value)}
-              >
-                <option value="TODOS">Todos los meses</option>
-                {mesesDisponibles.map((m) => (
-                  <option key={m} value={m}>{m}</option>
-                ))}
-              </select>
-            </div>
-          </div>
-
-          <label className="field-label">Buscar cliente por nombre</label>
-          <input
-            className="search-input"
-            placeholder="Escribe al menos 3 letras del nombre…"
-            value={query}
-            onChange={(e) => setQuery(e.target.value)}
-            autoFocus
-          />
-          {buscando && <div style={{ fontSize: 13, color: "#9ca3af", marginTop: 8 }}>Buscando…</div>}
-          {resultados.length > 0 && (
-            <div className="option-list" style={{ marginTop: 12 }}>
-              {resultados.map((r) => (
-                <div key={r.id_twenty} className="option-item" onClick={() => elegirCliente(r)}>
-                  <div className="nombre">{r.nombre}</div>
-                  <div className="detalle">
-                    Código {r.codigo_cliente} · {r.pdv} · {r.mes_gestion}
+        <div>
+          {borradores.length > 0 && (
+            <div className="card pad" style={{ marginBottom: 20, borderColor: "#c7d2fe", background: "#f5f7ff" }}>
+              <h3 style={{ margin: "0 0 4px", fontSize: 16, color: "#3730a3" }}>
+                📋 Borradores pendientes de {nombreEncuestador}
+              </h3>
+              <p style={{ margin: "0 0 14px", fontSize: 13, color: "#4f46e5" }}>
+                Tienes encuestas iniciadas que no se han finalizado. Puedes reanudarlas o iniciar una nueva.
+              </p>
+              <div className="drafts-list">
+                {borradores.map((b) => (
+                  <div key={b.id} className="draft-item" onClick={() => continuarBorrador(b)}>
+                    <div className="draft-info">
+                      <div className="draft-title">{b.cliente?.nombre || "Cliente sin nombre"}</div>
+                      <div className="draft-meta">
+                        Código {b.cliente?.codigo_cliente || "—"} · {b.cliente?.pdv || "—"} ·{" "}
+                        {b.updatedAt ? new Date(b.updatedAt).toLocaleString("es-EC") : "Reciente"}
+                      </div>
+                    </div>
+                    <div className="draft-actions">
+                      <button className="btn btn-primary" style={{ padding: "6px 12px", fontSize: 13 }}>
+                        Continuar
+                      </button>
+                      <button
+                        className="btn"
+                        style={{ padding: "6px 10px", fontSize: 13, color: "#dc2626", borderColor: "#fca5a5" }}
+                        onClick={(e) => eliminarBorradorHandler(e, b.id)}
+                      >
+                        Descartar
+                      </button>
+                    </div>
                   </div>
-                </div>
-              ))}
+                ))}
+              </div>
             </div>
           )}
-          {!buscando && query.trim().length >= 3 && resultados.length === 0 && (
-            <div className="empty-state">
-              Sin coincidencias {mesSeleccionado !== "TODOS" ? `en ${mesSeleccionado}` : ""} — prueba cambiando el mes de gestión arriba.
+
+          <div className="card pad">
+            <h3 style={{ margin: "0 0 16px", fontSize: 16 }}>Iniciar nueva encuesta</h3>
+            <div style={{ display: "flex", gap: 16, flexWrap: "wrap", marginBottom: 14 }}>
+              <div style={{ minWidth: 200 }}>
+                <label className="field-label">Mes de gestión</label>
+                <select
+                  className="text-input"
+                  value={mesSeleccionado}
+                  onChange={(e) => setMesSeleccionado(e.target.value)}
+                >
+                  <option value="TODOS">Todos los meses</option>
+                  {mesesDisponibles.map((m) => (
+                    <option key={m} value={m}>{m}</option>
+                  ))}
+                </select>
+              </div>
             </div>
-          )}
+
+            <label className="field-label">Buscar cliente por nombre</label>
+            <input
+              className="search-input"
+              placeholder="Escribe al menos 3 letras del nombre…"
+              value={query}
+              onChange={(e) => setQuery(e.target.value)}
+              autoFocus
+            />
+            {buscando && <div style={{ fontSize: 13, color: "#9ca3af", marginTop: 8 }}>Buscando…</div>}
+            {resultados.length > 0 && (
+              <div className="option-list" style={{ marginTop: 12 }}>
+                {resultados.map((r) => (
+                  <div key={r.id_twenty} className="option-item" onClick={() => elegirCliente(r)}>
+                    <div className="nombre">{r.nombre}</div>
+                    <div className="detalle">
+                      Código {r.codigo_cliente} · {r.pdv} · {r.mes_gestion}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+            {!buscando && query.trim().length >= 3 && resultados.length === 0 && (
+              <div className="empty-state">
+                Sin coincidencias {mesSeleccionado !== "TODOS" ? `en ${mesSeleccionado}` : ""} — prueba cambiando el mes de gestión arriba.
+              </div>
+            )}
+          </div>
         </div>
       )}
 
@@ -326,6 +542,15 @@ export default function EncuestaPage() {
             <div><span>Código</span>{cliente.codigo_cliente}</div>
             <div><span>PDV</span>{cliente.pdv}</div>
             <div><span>Mes de gestión</span>{cliente.mes_gestion}</div>
+            <div style={{ marginLeft: "auto" }}>
+              <button
+                className="btn"
+                style={{ fontSize: 12, padding: "4px 10px" }}
+                onClick={() => setStep("cliente")}
+              >
+                Cambiar cliente
+              </button>
+            </div>
           </div>
 
           <div className="pad">
@@ -333,93 +558,202 @@ export default function EncuestaPage() {
               <div className="progress-fill" style={{ width: `${progreso}%` }} />
             </div>
 
-            {enviando && <div className="empty-state">Guardando…</div>}
+            {/* Selector directo de preguntas */}
+            <div className="question-nav-bar">
+              {cuestionario.preguntas.map((p, i) => {
+                const val = respuestas[p.id];
+                const auto = evaluarAutoRespuestas(cuestionario.preguntas, cliente)[p.id];
+                const cal = typeof val === "object" ? val?.calificacion : val;
+                const esCompleta =
+                  auto === "N/A" ||
+                  (p.tipo === "aceptacion_si_no" && typeof val === "boolean") ||
+                  (p.tipo === "escala_1_10" &&
+                    cal !== undefined &&
+                    cal !== null &&
+                    (!p.requiere_justificacion || (val?.justificacion && val.justificacion.trim().length > 0))) ||
+                  (p.tipo === "texto_abierto" && typeof val === "string" && val.trim().length > 0);
+
+                return (
+                  <button
+                    key={p.id}
+                    className={`question-pill${i === indice ? " active" : ""}${esCompleta ? " done" : ""}`}
+                    onClick={() => {
+                      setIndice(i);
+                      setErroresValidacion([]);
+                    }}
+                  >
+                    P{i + 1}
+                  </button>
+                );
+              })}
+            </div>
+
+            {enviando && <div className="empty-state">Guardando respuesta…</div>}
 
             {!enviando && indice === 0 && guionApertura && (
               <div className="script-box">
-                <span className="script-label">Guion (léelo al cliente)</span>
+                <span className="script-label">Guion de apertura (léelo al cliente)</span>
                 {guionApertura}
               </div>
             )}
 
+            {/* Banner si la encuesta se cortó por respuesta Negativa en filtro inicial */}
+            {corteInfoActual.cortada && (
+              <div className="script-box" style={{ background: "#fee2e2", borderColor: "#fca5a5", color: "#991b1b" }}>
+                <span className="script-label" style={{ color: "#7f1d1d" }}>Aviso de finalización anticipada</span>
+                El cliente respondió "No" en una de las preguntas de filtro. Al finalizar, la encuesta se guardará como <strong>CORTADA</strong>.
+              </div>
+            )}
+
+            {/* Alerta de validación si al intentar finalizar faltan respuestas */}
+            {erroresValidacion.length > 0 && (
+              <div className="validation-box">
+                <h4 style={{ margin: "0 0 6px", fontSize: 15, color: "#991b1b" }}>
+                  ⚠️ No se puede finalizar la encuesta
+                </h4>
+                <p style={{ margin: "0 0 8px", fontSize: 13, color: "#7f1d1d" }}>
+                  Por favor completa las siguientes preguntas obligatorias antes de enviar:
+                </p>
+                <ul style={{ margin: 0, paddingLeft: 20, fontSize: 13, color: "#991b1b" }}>
+                  {erroresValidacion.map((err) => (
+                    <li
+                      key={err.preguntaId}
+                      style={{ cursor: "pointer", textDecoration: "underline", marginBottom: 4 }}
+                      onClick={() => {
+                        setIndice(err.indice);
+                        setErroresValidacion([]);
+                      }}
+                    >
+                      {err.mensaje}
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            )}
+
             {!enviando && preguntaActual && (
-              <div>
-                <p style={{ fontSize: 17, fontWeight: 500, marginBottom: 4 }}>
+              <div style={{ marginTop: 16 }}>
+                <div style={{ fontSize: 12, textTransform: "uppercase", color: "#6b7280", fontWeight: 600, marginBottom: 4 }}>
+                  Pregunta {indice + 1} de {cuestionario.preguntas.length}
+                </div>
+                <p style={{ fontSize: 17, fontWeight: 500, marginBottom: 12 }}>
                   {preguntaActual.texto}
                 </p>
 
                 {preguntaActual.tipo === "aceptacion_si_no" && (
                   <div className="choice-row">
-                    <button className="btn-choice btn-choice-yes" onClick={() => responder(preguntaActual, true)}>
+                    <button
+                      className={`btn-choice btn-choice-yes${respuestas[preguntaActual.id] === true ? " selected" : ""}`}
+                      onClick={() => actualizarRespuesta(preguntaActual.id, true)}
+                    >
                       Sí
                     </button>
-                    <button className="btn-choice btn-choice-no" onClick={() => responder(preguntaActual, false)}>
+                    <button
+                      className={`btn-choice btn-choice-no${respuestas[preguntaActual.id] === false ? " selected" : ""}`}
+                      onClick={() => actualizarRespuesta(preguntaActual.id, false)}
+                    >
                       No
                     </button>
                   </div>
                 )}
 
-                {preguntaActual.tipo === "escala_1_10" && (
-                  <div>
-                    <div className="scale-grid">
-                      {Array.from({ length: 10 }, (_, i) => i + 1).map((n) => (
-                        <button
-                          key={n}
-                          className={`scale-btn${calTemp === n ? " selected" : ""}`}
-                          onClick={() => setCalTemp(n)}
-                        >
-                          {n}
-                        </button>
-                      ))}
-                    </div>
+                {preguntaActual.tipo === "escala_1_10" && (() => {
+                  const valObj = respuestas[preguntaActual.id];
+                  const cal = typeof valObj === "object" ? valObj?.calificacion : valObj;
+                  const just = typeof valObj === "object" ? (valObj?.justificacion ?? "") : "";
+                  const etiquetas = obtenerEtiquetasEscala(preguntaActual.texto);
 
-                    {preguntaActual.requiere_justificacion && (
-                      <div style={{ marginTop: 16 }}>
-                        <label className="field-label">¿Por qué? (motivo de su calificación)</label>
-                        <textarea
-                          value={justTemp}
-                          onChange={(e) => setJustTemp(e.target.value)}
-                          placeholder="Escribe el motivo…"
-                        />
+                  return (
+                    <div>
+                      <div className="scale-grid">
+                        {Array.from({ length: 10 }, (_, i) => i + 1).map((n) => (
+                          <button
+                            key={n}
+                            className={`scale-btn${cal === n ? " selected" : ""}`}
+                            onClick={() =>
+                              actualizarRespuesta(
+                                preguntaActual.id,
+                                preguntaActual.requiere_justificacion
+                                  ? { calificacion: n, justificacion: just }
+                                  : { calificacion: n }
+                              )
+                            }
+                          >
+                            {n}
+                          </button>
+                        ))}
                       </div>
-                    )}
 
-                    <div style={{ marginTop: 16 }}>
-                      <button
-                        className="btn btn-primary"
-                        disabled={
-                          calTemp === null ||
-                          (preguntaActual.requiere_justificacion && justTemp.trim().length === 0)
-                        }
-                        onClick={() =>
-                          responder(
-                            preguntaActual,
-                            preguntaActual.requiere_justificacion
-                              ? { calificacion: calTemp, justificacion: justTemp.trim() }
-                              : { calificacion: calTemp }
-                          )
-                        }
-                      >
-                        Continuar
-                      </button>
+                      {/* Leyendas explicativas para 1 y 10 */}
+                      <div className="scale-labels">
+                        <span className="scale-label-min">{etiquetas.min}</span>
+                        <span className="scale-label-max">{etiquetas.max}</span>
+                      </div>
+
+                      {preguntaActual.requiere_justificacion && (
+                        <div style={{ marginTop: 16 }}>
+                          <label className="field-label">¿Por qué? (motivo de su calificación)</label>
+                          <textarea
+                            value={just}
+                            onChange={(e) =>
+                              actualizarRespuesta(preguntaActual.id, {
+                                calificacion: cal ?? null,
+                                justificacion: e.target.value,
+                              })
+                            }
+                            placeholder="Escribe el motivo de la calificación…"
+                          />
+                        </div>
+                      )}
                     </div>
-                  </div>
-                )}
+                  );
+                })()}
 
                 {preguntaActual.tipo === "texto_abierto" && (
                   <div>
-                    <textarea value={justTemp} onChange={(e) => setJustTemp(e.target.value)} />
-                    <div style={{ marginTop: 16 }}>
-                      <button
-                        className="btn btn-primary"
-                        disabled={justTemp.trim().length === 0}
-                        onClick={() => responder(preguntaActual, justTemp.trim())}
-                      >
-                        Continuar
-                      </button>
-                    </div>
+                    <textarea
+                      value={typeof respuestas[preguntaActual.id] === "string" ? respuestas[preguntaActual.id] : ""}
+                      onChange={(e) => actualizarRespuesta(preguntaActual.id, e.target.value)}
+                      placeholder="Escribe la respuesta…"
+                    />
                   </div>
                 )}
+
+                {/* Botones de Navegación Flexible */}
+                <div className="nav-buttons-row">
+                  <button
+                    className="btn btn-secondary"
+                    disabled={indice === 0}
+                    onClick={() => {
+                      setIndice((prev) => Math.max(0, prev - 1));
+                      setErroresValidacion([]);
+                    }}
+                  >
+                    ◀ Anterior
+                  </button>
+
+                  {indice < cuestionario.preguntas.length - 1 ? (
+                    <button
+                      className="btn btn-secondary"
+                      onClick={() => {
+                        setIndice((prev) => Math.min(cuestionario.preguntas.length - 1, prev + 1));
+                        setErroresValidacion([]);
+                      }}
+                    >
+                      Siguiente ▶
+                    </button>
+                  ) : (
+                    <div />
+                  )}
+
+                  <button
+                    className="btn btn-primary"
+                    style={{ marginLeft: "auto" }}
+                    onClick={manejarSubmit}
+                  >
+                    Finalizar y Enviar Encuesta ✓
+                  </button>
+                </div>
               </div>
             )}
           </div>
