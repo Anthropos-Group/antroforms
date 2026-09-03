@@ -477,6 +477,31 @@ textarea {
   }
 }
 
+.pie-legend-grid {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px 20px;
+  justify-content: center;
+  margin-top: 20px;
+  padding-top: 16px;
+  border-top: 1px solid var(--color-border-light);
+}
+
+.pie-legend-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+  color: var(--color-text);
+}
+
+.pie-legend-dot {
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
 .client-summary {
   display: flex;
   flex-wrap: wrap;

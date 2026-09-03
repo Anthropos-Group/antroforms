@@ -9,9 +9,11 @@ export async function GET(request) {
   const desde = searchParams.get("desde");
   const hasta = searchParams.get("hasta");
   const encuestadorId = searchParams.get("encuestador_id");
+  const mesGestion = searchParams.get("mes_gestion");
+  const pdv = searchParams.get("pdv");
 
   const pool = getPool();
-  const reporte = await obtenerReporte(pool, { desde, hasta, encuestadorId });
+  const reporte = await obtenerReporte(pool, { desde, hasta, encuestadorId, mesGestion, pdv });
   if (!reporte) {
     return Response.json({ error: "No hay cuestionario activo" }, { status: 404 });
   }

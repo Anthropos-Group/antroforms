@@ -489,22 +489,6 @@ export default function EncuestaPage() {
 
           <div className="card pad">
             <h3 style={{ margin: "0 0 16px", fontSize: 16 }}>Iniciar nueva encuesta</h3>
-            <div style={{ display: "flex", gap: 16, flexWrap: "wrap", marginBottom: 14 }}>
-              <div style={{ minWidth: 200 }}>
-                <label className="field-label">Mes de gestión</label>
-                <select
-                  className="text-input"
-                  value={mesSeleccionado}
-                  onChange={(e) => setMesSeleccionado(e.target.value)}
-                >
-                  <option value="TODOS">Todos los meses</option>
-                  {mesesDisponibles.map((m) => (
-                    <option key={m} value={m}>{m}</option>
-                  ))}
-                </select>
-              </div>
-            </div>
-
             <label className="field-label">Buscar cliente por nombre</label>
             <input
               className="search-input"

@@ -49,6 +49,9 @@ export function proxy(request) {
   const { pathname } = request.nextUrl;
 
   if (pathname === "/login") {
+    const sesion = sesionActual(request);
+    if (sesion === "encuestador") return NextResponse.redirect(new URL("/encuesta", request.url));
+    if (sesion === "admin") return NextResponse.redirect(new URL("/admin/preguntas", request.url));
     return NextResponse.next();
   }
 
@@ -62,6 +65,14 @@ export function proxy(request) {
   }
 
   const sesion = sesionActual(request);
+
+  // Si un administrador intenta acceder a páginas de encuestador (/encuesta), redirigirlo a /admin
+  if (esPaginaEncuesta && sesion === "admin") {
+    if (pathname.startsWith("/encuesta/monitoreo")) {
+      return NextResponse.redirect(new URL("/admin/monitoreo", request.url));
+    }
+    return NextResponse.redirect(new URL("/admin/preguntas", request.url));
+  }
 
   // El login es lo primero que ve cualquiera sin sesión, sea cual sea la ruta.
   if (esHome) {

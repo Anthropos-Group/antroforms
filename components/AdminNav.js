@@ -8,6 +8,7 @@ const LINKS = [
   { href: "/admin/encuestadores", label: "Encuestadores", icon: "🧑‍💼" },
   { href: "/admin/administradores", label: "Administradores", icon: "🔐" },
   { href: "/admin/reportes", label: "Reportes", icon: "📊" },
+  { href: "/admin/monitoreo", label: "Monitoreo por PDV", icon: "📈" },
   { href: "/admin/sync", label: "Historial Twenty", icon: "🔄" },
 ];
 
