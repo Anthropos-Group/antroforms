@@ -6,7 +6,7 @@ export const dynamic = "force-dynamic";
 export async function GET() {
   const pool = getPool();
   const { rows } = await pool.query(
-    `select id, nombre, activo from encuestadores order by nombre`
+    `select id, nombre, activo from encuestadores order by activo desc, nombre asc`
   );
   return NextResponse.json({ encuestadores: rows });
 }

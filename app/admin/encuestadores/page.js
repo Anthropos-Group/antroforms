@@ -8,6 +8,11 @@ export default function EncuestadoresPage() {
   const [nombreNuevo, setNombreNuevo] = useState("");
   const [guardando, setGuardando] = useState(false);
 
+  // Estados para edición inline
+  const [editandoId, setEditandoId] = useState(null);
+  const [nombreEditado, setNombreEditado] = useState("");
+  const [guardandoEdicion, setGuardandoEdicion] = useState(false);
+
   function cargar() {
     setCargando(true);
     fetch("/api/encuestadores")
@@ -42,6 +47,33 @@ export default function EncuestadoresPage() {
     cargar();
   }
 
+  function iniciarEdicion(e) {
+    setEditandoId(e.id);
+    setNombreEditado(e.nombre);
+  }
+
+  function cancelarEdicion() {
+    setEditandoId(null);
+    setNombreEditado("");
+  }
+
+  async function guardarEdicion(id) {
+    if (!nombreEditado.trim()) return;
+    setGuardandoEdicion(true);
+    try {
+      await fetch(`/api/encuestadores/${id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ nombre: nombreEditado.trim() }),
+      });
+      setEditandoId(null);
+      setNombreEditado("");
+      cargar();
+    } finally {
+      setGuardandoEdicion(false);
+    }
+  }
+
   return (
     <div className="container">
       <h1 className="page-title">Encuestadores</h1>
@@ -73,25 +105,66 @@ export default function EncuestadoresPage() {
               <tr>
                 <th>Nombre</th>
                 <th>Estado</th>
-                <th></th>
+                <th style={{ textAlign: "right" }}>Acciones</th>
               </tr>
             </thead>
             <tbody>
-              {encuestadores.map((e) => (
-                <tr key={e.id}>
-                  <td>{e.nombre}</td>
-                  <td>
-                    <span className={`badge ${e.activo ? "badge-completado" : "badge-fallido"}`}>
-                      {e.activo ? "Activo" : "Inactivo"}
-                    </span>
-                  </td>
-                  <td>
-                    <button className="btn" onClick={() => toggleActivo(e)}>
-                      {e.activo ? "Desactivar" : "Activar"}
-                    </button>
-                  </td>
-                </tr>
-              ))}
+              {encuestadores.map((e) => {
+                const esEditando = editandoId === e.id;
+                return (
+                  <tr key={e.id}>
+                    <td>
+                      {esEditando ? (
+                        <div style={{ display: "flex", gap: 8, maxWidth: 300 }}>
+                          <input
+                            type="text"
+                            className="text-input"
+                            style={{ padding: "4px 8px", fontSize: 13 }}
+                            value={nombreEditado}
+                            onChange={(ev) => setNombreEditado(ev.target.value)}
+                            onKeyDown={(ev) => ev.key === "Enter" && guardarEdicion(e.id)}
+                            autoFocus
+                          />
+                          <button
+                            className="btn btn-primary"
+                            style={{ padding: "4px 10px", fontSize: 12 }}
+                            onClick={() => guardarEdicion(e.id)}
+                            disabled={guardandoEdicion}
+                          >
+                            ✓
+                          </button>
+                          <button
+                            className="btn"
+                            style={{ padding: "4px 10px", fontSize: 12 }}
+                            onClick={cancelarEdicion}
+                          >
+                            ✕
+                          </button>
+                        </div>
+                      ) : (
+                        <span>{e.nombre}</span>
+                      )}
+                    </td>
+                    <td>
+                      <span className={`badge ${e.activo ? "badge-completado" : "badge-fallido"}`}>
+                        {e.activo ? "Activo" : "Inactivo"}
+                      </span>
+                    </td>
+                    <td style={{ textAlign: "right" }}>
+                      <div style={{ display: "flex", gap: 8, justifyContent: "flex-end" }}>
+                        {!esEditando && (
+                          <button className="btn" style={{ fontSize: 12, padding: "4px 10px" }} onClick={() => iniciarEdicion(e)}>
+                            ✏️ Editar
+                          </button>
+                        )}
+                        <button className="btn" style={{ fontSize: 12, padding: "4px 10px" }} onClick={() => toggleActivo(e)}>
+                          {e.activo ? "Desactivar" : "Activar"}
+                        </button>
+                      </div>
+                    </td>
+                  </tr>
+                );
+              })}
             </tbody>
           </table>
         )}
