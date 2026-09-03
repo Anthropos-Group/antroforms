@@ -1,3 +1,0 @@
-encuestas.tudominio.com {
-	reverse_proxy app:3000
-}

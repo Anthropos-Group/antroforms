@@ -1,91 +1,81 @@
-# Despliegue en tu propio servidor (Docker)
+# Despliegue en tu servidor (Portainer + Cloudflare Tunnel)
 
-Alternativa a Firebase Hosting/Vercel: corre en cualquier servidor Linux con
-Docker instalado — el mismo patrón que probablemente ya usas para Twenty CRM.
+Se despliega como un stack más de Portainer, igual que `core-strattos` —
+misma red Docker (`strattos-net`), sin abrir puertos nuevos en el servidor.
+El ruteo público y el HTTPS los resuelve tu Cloudflare Tunnel existente, no
+hace falta un proxy adicional (Caddy/Nginx) para esta app.
 
-## Requisitos en el servidor
-
-- Docker y Docker Compose (`docker compose version` debe funcionar)
-- Un dominio o subdominio apuntando a la IP del servidor (registro DNS tipo A) — necesario para que Caddy emita el certificado HTTPS automáticamente
-- Puertos **80** y **443** abiertos en el firewall
-
-## 1. Clonar el proyecto en el servidor
-
-```bash
-git clone https://github.com/Anthropos-Group/antroforms.git
-cd antroforms
-```
-
-## 2. Configurar variables de entorno
-
-```bash
-cp .env.example .env
-nano .env   # completa con tus valores reales (ver README.md principal)
-```
-
-## 3. Configurar el dominio en Caddy
-
-Edita [`Caddyfile`](../Caddyfile) y reemplaza `encuestas.tudominio.com` por tu dominio real:
+## Cómo funciona
 
 ```
-encuestas.tudominio.com {
-	reverse_proxy app:3000
-}
+Cloudflare Tunnel  →  http://antroforms-web-strattos:3000  →  contenedor de la app
+                        (mismo patrón que crm.aiagentrevenue.online → twenty-web-stratos:3000)
 ```
 
-## 4. Levantar todo
+La app no necesita su propia base de datos en el servidor — usa Supabase
+(externo). Por eso no toca nada del stack `core-strattos`; solo se conecta a
+la misma red Docker para que el Tunnel la pueda alcanzar por nombre.
 
-```bash
-docker compose up -d --build
-```
+## 1. Crear el stack en Portainer
 
-Esto construye la imagen de la app y levanta dos contenedores: `app` (Next.js) y `caddy` (proxy reverso + HTTPS automático vía Let's Encrypt). La primera vez puede tardar unos minutos en emitir el certificado.
+En Portainer: **Stacks → Add stack**.
 
-Verifica que ambos estén corriendo:
+- **Name:** `antroforms`
+- **Build method:** `Repository`
+  - **Repository URL:** `https://github.com/Anthropos-Group/antroforms.git`
+  - **Repository reference:** `refs/heads/main`
+  - **Compose path:** `docker-compose.yml`
+  - Si el repositorio es privado, activa **Authentication** y pon un usuario + Personal Access Token de GitHub con permiso de lectura sobre el repo.
 
-```bash
-docker compose ps
-docker compose logs -f app
-```
+## 2. Variables de entorno
+
+En la sección **Environment variables** del formulario del stack, pega el contenido de `.env` (mismas variables que en el [README](../README.md) principal — Supabase, Twenty, `CRON_SECRET`, `ADMIN_SESSION_SECRET`, `ENCUESTADOR_ACCESS_PASSWORD`). Portainer genera el archivo `.env` que usa `env_file: .env` en el `docker-compose.yml`.
+
+## 3. Desplegar
+
+**Deploy the stack**. Portainer clona el repo, construye la imagen con el `Dockerfile` y levanta el contenedor `antroforms-web-strattos` en la red `strattos-net` — se ve junto a `core-strattos` en la lista de stacks.
+
+## 4. Conectar el dominio en Cloudflare Tunnel
+
+En Cloudflare Zero Trust → tu túnel → **Published application routes → Add a route**, igual que las demás:
+
+| Subdomain | Service |
+|---|---|
+| `encuestas.aiagentrevenue.online` (o el que prefieras) | `http://antroforms-web-strattos:3000` |
 
 ## 5. Aplicar el esquema de base de datos (una sola vez)
 
-Las migraciones solo necesitan `SUPABASE_DB_URL` — puedes correrlas desde el servidor o desde cualquier máquina con acceso a internet, no tiene que ser el mismo contenedor:
+Las migraciones solo necesitan `SUPABASE_DB_URL` — se pueden correr desde cualquier máquina con acceso a internet, no hace falta que sea el servidor:
 
 ```bash
-docker compose exec app node scripts/migrate.js
+npm run db:migrate
 ```
 
-Y crear el primer administrador si no existe:
+O, si prefieres correrlo dentro del contenedor ya desplegado, desde la consola de Portainer del contenedor `antroforms-web-strattos`:
 
 ```bash
-docker compose exec app node scripts/create-admin.js --nombre="Tu Nombre" --email=tu@correo.com --password=unaClaveSegura
+node scripts/migrate.js
+node scripts/create-admin.js --nombre="Tu Nombre" --email=tu@correo.com --password=unaClaveSegura
 ```
 
 ## 6. Programar el cron diario de limpieza de Twenty
 
-Este endpoint hace el `PATCH` real a Twenty y refresca la caché — se dispara con una petición HTTP protegida por `CRON_SECRET`. En el servidor, agrégalo al crontab del sistema (no dentro del contenedor):
+Desde cualquier máquina con acceso al dominio público (no tiene que ser el servidor — puede ser tu propia PC, un servicio de cron externo, o un cronjob en el mismo servidor):
 
 ```bash
 crontab -e
 ```
 
-Agrega (11:00 hora Ecuador = 16:00 UTC):
-
 ```
-0 16 * * * curl -s -X POST https://encuestas.tudominio.com/api/cron/sync-twenty -H "Authorization: Bearer TU_CRON_SECRET" >> /var/log/sync-twenty.log 2>&1
+0 16 * * * curl -s -X POST https://encuestas.aiagentrevenue.online/api/cron/sync-twenty -H "Authorization: Bearer TU_CRON_SECRET" >> /var/log/sync-twenty.log 2>&1
 ```
 
-## 7. Actualizar la app cuando haya cambios nuevos
+(11:00 hora Ecuador = 16:00 UTC)
 
-```bash
-cd antroforms
-git pull
-docker compose up -d --build
-```
+## Actualizar la app
 
-Docker reconstruye solo lo que cambió; los contenedores se reinician con la versión nueva sin perder datos (la base vive en Supabase, no en el servidor).
+Con un push a `main` en GitHub, en Portainer: **Stacks → antroforms → Pull and redeploy** (o configura un webhook de Portainer para que se redepliegue solo con cada push).
 
-## Si prefieres no usar Caddy
+## Dar de baja
 
-Si el servidor ya tiene Nginx u otro proxy con su propio manejo de TLS, comenta el servicio `caddy` en `docker-compose.yml`, descomenta el bloque `ports: ["3000:3000"]` del servicio `app`, y apunta tu proxy existente a `http://localhost:3000`.
+**Stacks → antroforms → Stop this stack** (pausa sin borrar) o **Delete this stack** (elimina el contenedor; la base de datos en Supabase no se toca).

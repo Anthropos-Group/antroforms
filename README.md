@@ -106,4 +106,4 @@ proxy.js        Protección de rutas por rol (admin / encuestador)
 
 ## Despliegue
 
-Para producción, la forma más simple hoy es en un servidor propio con Docker — ver [docs/DEPLOY.md](docs/DEPLOY.md) (incluye `Dockerfile`, `docker-compose.yml` y `Caddyfile` ya listos en la raíz del repo).
+Para producción, se despliega como un stack de Portainer sobre tu servidor (Cloudflare Tunnel resuelve el dominio/HTTPS, sin proxy adicional) — ver [docs/DEPLOY.md](docs/DEPLOY.md). `Dockerfile` y `docker-compose.yml` ya están listos en la raíz del repo.
