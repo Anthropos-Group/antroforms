@@ -182,20 +182,23 @@ export default function MonitoreoPage() {
         {data ? nombreMesLargo(mes) : "Cargando…"} · meta de {meta} encuestas completadas por sucursal.
       </p>
 
-      <div className="card pad" style={{ display: "flex", gap: 12, alignItems: "flex-end", flexWrap: "wrap", marginBottom: 20 }}>
-        <div>
-          <label className="field-label">Mes</label>
-          <input type="month" className="text-input" value={mes} onChange={(e) => setMes(e.target.value)} />
+      {/* Controles de filtro de mes solo visibles para Administrador */}
+      {esAdmin && (
+        <div className="card pad" style={{ display: "flex", gap: 12, alignItems: "flex-end", flexWrap: "wrap", marginBottom: 20 }}>
+          <div>
+            <label className="field-label">Mes</label>
+            <input type="month" className="text-input" value={mes} onChange={(e) => setMes(e.target.value)} />
+          </div>
+          <button className="btn btn-primary" onClick={cargar} disabled={cargando}>
+            {cargando ? "Actualizando…" : "Actualizar"}
+          </button>
+          {ultimaActualizacion && (
+            <span style={{ fontSize: 12.5, color: "#9ca3af" }}>
+              Última actualización: {ultimaActualizacion.toLocaleTimeString("es-EC")} — usa el botón para refrescar datos.
+            </span>
+          )}
         </div>
-        <button className="btn btn-primary" onClick={cargar} disabled={cargando}>
-          {cargando ? "Actualizando…" : "Actualizar"}
-        </button>
-        {ultimaActualizacion && (
-          <span style={{ fontSize: 12.5, color: "#9ca3af" }}>
-            Última actualización: {ultimaActualizacion.toLocaleTimeString("es-EC")} — no se refresca solo, usa el botón cuando quieras ver el estado actual.
-          </span>
-        )}
-      </div>
+      )}
 
       {/* KPI Cards solo visibles para Administrador */}
       {esAdmin && (
