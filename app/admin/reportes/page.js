@@ -30,7 +30,7 @@ export default function ReportesPage() {
   useEffect(() => {
     fetch("/api/encuestadores")
       .then((r) => r.json())
-      .then((d) => setEncuestadores(d.encuestadores || []));
+      .then((d) => setEncuestadores((d.encuestadores || []).filter((e) => e.activo)));
 
     fetch("/api/clientes/meses")
       .then((r) => r.json())
