@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, useMemo } from "react";
 
 function mesActualISO() {
   return new Date().toISOString().slice(0, 7); // YYYY-MM
@@ -26,16 +26,8 @@ function estadoPdv(completadas, meta) {
 }
 
 const PALETA_COLORES = [
-  "#3b82f6", // azul
-  "#22c55e", // verde
-  "#ef4444", // rojo
-  "#f59e0b", // amarillo / ambar
-  "#8b5cf6", // morado
-  "#ec4899", // rosa
-  "#14b8a6", // turquesa
-  "#6366f1", // indigo
-  "#f97316", // naranja
-  "#84cc16", // lima
+  "#3b82f6", "#22c55e", "#ef4444", "#f59e0b", "#8b5cf6",
+  "#ec4899", "#14b8a6", "#6366f1", "#f97316", "#84cc16",
 ];
 
 function ReporteEntrevistadoresChart({ entrevistadores = [] }) {
@@ -98,15 +90,12 @@ function ReporteEntrevistadoresChart({ entrevistadores = [] }) {
               <path key={slice.nombre} d={slice.pathD} fill={slice.color} stroke="#ffffff" strokeWidth="2" />
             )
           )}
-
           {slices.map((slice) => (
             <g key={`label-${slice.nombre}`}>
-              <line
-                x1={slice.lx1}
-                y1={slice.ly1}
-                x2={slice.lx2}
-                y2={slice.ly2}
-                stroke="#94a3b8"
+              <polyline
+                points={`${slice.lx1.toFixed(2)},${slice.ly1.toFixed(2)} ${slice.lx2.toFixed(2)},${slice.ly2.toFixed(2)}`}
+                fill="none"
+                stroke="#cbd5e1"
                 strokeWidth="1.2"
                 strokeDasharray="2 2"
               />
@@ -145,6 +134,10 @@ export default function AdminMonitoreoPage() {
   const [cargando, setCargando] = useState(false);
   const [ultimaActualizacion, setUltimaActualizacion] = useState(null);
 
+  // Opciones de orden y filtro de sucursales
+  const [criterioOrden, setCriterioOrden] = useState("mayor_avance");
+  const [filtroEstado, setFiltroEstado] = useState("todos");
+
   async function cargar() {
     setCargando(true);
     try {
@@ -169,7 +162,33 @@ export default function AdminMonitoreoPage() {
   const totalMeta = totalSucursales * meta;
   const avancePct = totalMeta > 0 ? Math.round((totalCompletadas / totalMeta) * 100) : 0;
   const sucursalesCumplidas = pdvs.filter((p) => p.completadas >= meta).length;
+  const sucursalesSinAvance = pdvs.filter((p) => p.completadas === 0).length;
   const maxHistorico = Math.max(1, ...(data?.historico?.map((h) => h.completadas) || [1]));
+
+  // Filtrado y ordenamiento de sucursales
+  const pdvsProcesados = useMemo(() => {
+    let list = [...pdvs];
+
+    // Filtro por estado
+    if (filtroEstado === "sin_avance") {
+      list = list.filter((p) => p.completadas === 0);
+    } else if (filtroEstado === "en_progreso") {
+      list = list.filter((p) => p.completadas > 0 && p.completadas < meta);
+    } else if (filtroEstado === "cumplidas") {
+      list = list.filter((p) => p.completadas >= meta);
+    }
+
+    // Orden
+    if (criterioOrden === "mayor_avance") {
+      list.sort((a, b) => b.completadas - a.completadas || a.pdv.localeCompare(b.pdv));
+    } else if (criterioOrden === "menor_avance") {
+      list.sort((a, b) => a.completadas - b.completadas || a.pdv.localeCompare(b.pdv));
+    } else if (criterioOrden === "alfabetico") {
+      list.sort((a, b) => a.pdv.localeCompare(b.pdv));
+    }
+
+    return list;
+  }, [pdvs, meta, filtroEstado, criterioOrden]);
 
   return (
     <div className="container">
@@ -180,22 +199,22 @@ export default function AdminMonitoreoPage() {
 
       <div className="card pad" style={{ display: "flex", gap: 12, alignItems: "flex-end", flexWrap: "wrap", marginBottom: 20 }}>
         <div>
-          <label className="field-label">Mes</label>
+          <label className="field-label">Mes a consultar</label>
           <input type="month" className="text-input" value={mes} onChange={(e) => setMes(e.target.value)} />
         </div>
         <button className="btn btn-primary" onClick={cargar} disabled={cargando}>
-          {cargando ? "Actualizando…" : "Actualizar"}
+          {cargando ? "Actualizando…" : "Consultar"}
         </button>
         {ultimaActualizacion && (
           <span style={{ fontSize: 12.5, color: "#9ca3af" }}>
-            Última actualización: {ultimaActualizacion.toLocaleTimeString("es-EC")} — usa el botón para refrescar datos.
+            Última actualización: {ultimaActualizacion.toLocaleTimeString("es-EC")}
           </span>
         )}
       </div>
 
       <div className="kpi-grid">
         <div className="kpi-card">
-          <div className="kpi-label">Sucursales activas con datos</div>
+          <div className="kpi-label">Total Sucursales (PDVs)</div>
           <div className="kpi-value">{totalSucursales}</div>
         </div>
         <div className="kpi-card accent">
@@ -205,25 +224,61 @@ export default function AdminMonitoreoPage() {
           </div>
         </div>
         <div className={`kpi-card ${avancePct >= 100 ? "good" : "accent"}`}>
-          <div className="kpi-label">Avance del mes</div>
+          <div className="kpi-label">Avance global del mes</div>
           <div className={`kpi-value ${avancePct >= 100 ? "kpi-good" : "kpi-accent"}`}>{avancePct}%</div>
         </div>
         <div className="kpi-card good">
-          <div className="kpi-label">Sucursales con meta cumplida</div>
+          <div className="kpi-label">Metas cumplidas</div>
           <div className="kpi-value kpi-good">
             {sucursalesCumplidas} <span className="kpi-sub">/ {totalSucursales}</span>
           </div>
         </div>
+        {sucursalesSinAvance > 0 && (
+          <div className="kpi-card" style={{ borderLeft: "4px solid #dc2626" }}>
+            <div className="kpi-label" style={{ color: "#991b1b" }}>Sucursales sin avance (0)</div>
+            <div className="kpi-value" style={{ color: "#dc2626" }}>{sucursalesSinAvance}</div>
+          </div>
+        )}
       </div>
 
       <div className="card" style={{ marginBottom: 20 }}>
-        <div className="pad" style={{ paddingBottom: 0 }}>
-          <h2 className="section-title">Avance por sucursal</h2>
-          <p className="section-subtitle">Mostrando únicamente sucursales con registros en el mes.</p>
+        <div className="pad" style={{ display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: 12, borderBottom: "1px solid #f0f1f3" }}>
+          <div>
+            <h2 className="section-title" style={{ margin: 0 }}>Avance por sucursal</h2>
+            <p className="section-subtitle" style={{ margin: "4px 0 0" }}>
+              Mostrando {pdvsProcesados.length} de {totalSucursales} sucursales.
+            </p>
+          </div>
+
+          {/* Filtros y ordenamiento */}
+          <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
+            <select
+              className="text-input"
+              value={criterioOrden}
+              onChange={(e) => setCriterioOrden(e.target.value)}
+              style={{ fontSize: 13, padding: "4px 10px" }}
+            >
+              <option value="mayor_avance">Ordenar: Mayor avance</option>
+              <option value="menor_avance">Ordenar: Menor avance (Atención)</option>
+              <option value="alfabetico">Ordenar: Alfabético</option>
+            </select>
+
+            <select
+              className="text-input"
+              value={filtroEstado}
+              onChange={(e) => setFiltroEstado(e.target.value)}
+              style={{ fontSize: 13, padding: "4px 10px" }}
+            >
+              <option value="todos">Ver: Todas las sucursales</option>
+              <option value="sin_avance">Solo: Sin avance (0)</option>
+              <option value="en_progreso">Solo: En progreso</option>
+              <option value="cumplidas">Solo: Meta cumplida</option>
+            </select>
+          </div>
         </div>
 
-        {pdvs.length === 0 ? (
-          <div className="empty-state">No existen encuestas registradas para las sucursales en este mes.</div>
+        {pdvsProcesados.length === 0 ? (
+          <div className="empty-state">No existen sucursales con el filtro seleccionado.</div>
         ) : (
           <>
             <div className="pdv-table-head">
@@ -232,7 +287,7 @@ export default function AdminMonitoreoPage() {
               <div>Completadas</div>
               <div>Estado</div>
             </div>
-            {pdvs.map((p) => {
+            {pdvsProcesados.map((p) => {
               const pct = Math.min(100, Math.round((p.completadas / meta) * 100));
               const completo = p.completadas >= meta;
               const estado = estadoPdv(p.completadas, meta);
@@ -253,13 +308,13 @@ export default function AdminMonitoreoPage() {
 
       <div className="card pad" style={{ marginBottom: 20 }}>
         <h2 className="section-title">Reporte por entrevistador</h2>
-        <p className="section-subtitle">Distribución del total de encuestas completadas por el equipo de encuestadores.</p>
+        <p className="section-subtitle">Distribución del total de encuestas completadas por el equipo de encuestadores en {nombreMesLargo(mes)}.</p>
         <ReporteEntrevistadoresChart entrevistadores={data?.entrevistadores || []} />
       </div>
 
       <div className="card pad">
         <h2 className="section-title">Histórico de encuestas completadas</h2>
-        <p className="section-subtitle">Total por mes, todas las sucursales.</p>
+        <p className="section-subtitle">Total mensual acumulado de encuestas efectivas.</p>
         {!data || !data.historico || data.historico.length === 0 ? (
           <div className="empty-state">Sin histórico todavía.</div>
         ) : (

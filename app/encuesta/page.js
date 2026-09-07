@@ -204,6 +204,7 @@ export default function EncuestaPage() {
   const [enviando, setEnviando] = useState(false);
   const [resultadoFinal, setResultadoFinal] = useState(null);
   const [copiado, setCopiado] = useState(false);
+  const [mostrarGuion, setMostrarGuion] = useState(true);
 
   useEffect(() => {
     fetch("/api/encuestadores")
@@ -489,10 +490,10 @@ export default function EncuestaPage() {
 
           <div className="card pad">
             <h3 style={{ margin: "0 0 16px", fontSize: 16 }}>Iniciar nueva encuesta</h3>
-            <label className="field-label">Buscar cliente por nombre</label>
+            <label className="field-label">Buscar cliente por nombre, código o teléfono</label>
             <input
               className="search-input"
-              placeholder="Escribe al menos 3 letras del nombre…"
+              placeholder="Escribe al menos 3 caracteres (nombre, código cliente o teléfono)…"
               value={query}
               onChange={(e) => setQuery(e.target.value)}
               autoFocus
@@ -502,9 +503,26 @@ export default function EncuestaPage() {
               <div className="option-list" style={{ marginTop: 12 }}>
                 {resultados.map((r) => (
                   <div key={r.id_twenty} className="option-item" onClick={() => elegirCliente(r)}>
-                    <div className="nombre">{r.nombre}</div>
-                    <div className="detalle">
-                      Código {r.codigo_cliente} · {r.pdv} · {r.mes_gestion}
+                    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                      <div className="nombre">{r.nombre}</div>
+                      {r.status === "EFECTIVA" ? (
+                        <span className="badge badge-completado" style={{ fontSize: 11, padding: "2px 8px" }}>✓ Ya encuestado</span>
+                      ) : r.status ? (
+                        <span className="badge badge-mode-incremental" style={{ fontSize: 11, padding: "2px 8px" }}>{r.status}</span>
+                      ) : null}
+                    </div>
+                    <div className="detalle" style={{ marginTop: 4, display: "flex", gap: "10px", flexWrap: "wrap", alignItems: "center" }}>
+                      <span>Código: <strong>{r.codigo_cliente || "—"}</strong></span>
+                      <span>·</span>
+                      <span>PDV: {r.pdv || "—"}</span>
+                      <span>·</span>
+                      <span>Mes: {r.mes_gestion || "—"}</span>
+                      {r.telefono1 && (
+                        <>
+                          <span>·</span>
+                          <span style={{ color: "#4f46e5", fontWeight: 600 }}>📞 {r.telefono1}</span>
+                        </>
+                      )}
                     </div>
                   </div>
                 ))}
@@ -524,8 +542,9 @@ export default function EncuestaPage() {
           <div className="client-summary">
             <div><span>Cliente</span>{cliente.nombre}</div>
             <div><span>Código</span>{cliente.codigo_cliente}</div>
+            {cliente.telefono1 && <div><span>Teléfono</span>📞 {cliente.telefono1}</div>}
             <div><span>PDV</span>{cliente.pdv}</div>
-            <div><span>Mes de gestión</span>{cliente.mes_gestion}</div>
+            <div><span>Mes</span>{cliente.mes_gestion}</div>
             <div style={{ marginLeft: "auto" }}>
               <button
                 className="btn"
@@ -538,6 +557,17 @@ export default function EncuestaPage() {
           </div>
 
           <div className="pad">
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8 }}>
+              <div style={{ fontSize: 12, color: "#6b7280", fontWeight: 600 }}>
+                Progreso general ({progreso}%)
+              </div>
+              {activeDraftId && (
+                <span style={{ fontSize: 11.5, color: "#16a34a", fontWeight: 600, display: "flex", alignItems: "center", gap: 4 }}>
+                  <span>💾</span> Borrador guardado localmente
+                </span>
+              )}
+            </div>
+
             <div className="progress-track">
               <div className="progress-fill" style={{ width: `${progreso}%` }} />
             </div>
@@ -574,10 +604,25 @@ export default function EncuestaPage() {
 
             {enviando && <div className="empty-state">Guardando respuesta…</div>}
 
-            {!enviando && indice === 0 && guionApertura && (
-              <div className="script-box">
-                <span className="script-label">Guion de apertura (léelo al cliente)</span>
-                {guionApertura}
+            {/* Guión de llamada (disponible en cualquier pregunta con botón para ver/ocultar) */}
+            {!enviando && guionApertura && (
+              <div style={{ marginBottom: 16 }}>
+                <div style={{ display: "flex", justifyContent: "flex-end", marginBottom: 4 }}>
+                  <button
+                    type="button"
+                    className="btn"
+                    style={{ fontSize: 12, padding: "3px 10px", background: "#f8fafc", borderColor: "#e2e8f0" }}
+                    onClick={() => setMostrarGuion(!mostrarGuion)}
+                  >
+                    📖 {mostrarGuion ? "Ocultar guión de llamada" : "Ver guión de llamada (speech)"}
+                  </button>
+                </div>
+                {mostrarGuion && (
+                  <div className="script-box" style={{ margin: 0 }}>
+                    <span className="script-label">Guion de apertura (léelo al cliente)</span>
+                    {guionApertura}
+                  </div>
+                )}
               </div>
             )}
 
@@ -650,22 +695,25 @@ export default function EncuestaPage() {
                   return (
                     <div>
                       <div className="scale-grid">
-                        {Array.from({ length: 10 }, (_, i) => i + 1).map((n) => (
-                          <button
-                            key={n}
-                            className={`scale-btn${cal === n ? " selected" : ""}`}
-                            onClick={() =>
-                              actualizarRespuesta(
-                                preguntaActual.id,
-                                preguntaActual.requiere_justificacion
-                                  ? { calificacion: n, justificacion: just }
-                                  : { calificacion: n }
-                              )
-                            }
-                          >
-                            {n}
-                          </button>
-                        ))}
+                        {Array.from({ length: 10 }, (_, i) => i + 1).map((n) => {
+                          const nps = n <= 6 ? "detractor" : n <= 8 ? "passive" : "promoter";
+                          return (
+                            <button
+                              key={n}
+                              className={`scale-btn ${nps}${cal === n ? " selected" : ""}`}
+                              onClick={() =>
+                                actualizarRespuesta(
+                                  preguntaActual.id,
+                                  preguntaActual.requiere_justificacion
+                                    ? { calificacion: n, justificacion: just }
+                                    : { calificacion: n }
+                                )
+                              }
+                            >
+                              {n}
+                            </button>
+                          );
+                        })}
                       </div>
 
                       {/* Leyendas explicativas para 1 y 10 */}

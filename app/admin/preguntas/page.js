@@ -94,7 +94,7 @@ export default function PreguntasPage() {
       cargar();
     } else {
       const d = await res.json().catch(() => ({}));
-      alert(d.error || "No se pudo guardar");
+      setError(d.error || "No se pudo guardar la modificación");
     }
   }
 

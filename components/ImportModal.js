@@ -5,23 +5,29 @@ import { useState, useEffect } from "react";
 function autoInferTarget(header = "", preguntas = []) {
   const h = header.toLowerCase().trim();
 
-  // Submission Id / FormId
-  if (h.includes("submission id") || h === "submissionid" || h === "id" || h.includes("formid") || h === "form id") {
+  // Submission Id real (UUID)
+  if (h === "submission id" || h === "submissionid" || h.includes("submission id")) {
     return "submission_id";
+  }
+
+  // Omitir columnas técnicas de formularios para no colisionar con submission_id
+  if (h.includes("formid") || h === "form id" || h.includes("form name") || h.includes("form version")) {
+    return "ignore";
   }
 
   // Fecha / Submitted On
   if (h.includes("submitted on") || h.includes("fecha")) return "fecha";
 
   // Encuestador
-  if (h.includes("encuestador") || h === "submitted by" || h.startsWith("encuestador")) return "encuestador";
+  if (h.includes("encuestador") || h === "entrevistador") return "encuestador";
+  if (h === "submitted by") return "ignore";
 
-  // Código de Cliente (debe evaluarse antes de cliente)
-  if (h.includes("código") || h.includes("codigo") || h === "código" || h === "codigo") {
+  // Código de Cliente
+  if (h.includes("código") || h.includes("codigo")) {
     return "codigo_cliente";
   }
 
-  // Nombre del Cliente: "Cliente", "3. Nombre Cliente:", "Nombre Cliente", etc.
+  // Nombre del Cliente
   if (
     h === "cliente" ||
     h === "nombre" ||
@@ -95,6 +101,21 @@ function autoInferTarget(header = "", preguntas = []) {
   return "ignore";
 }
 
+async function safeFetchJson(url, options = {}) {
+  const res = await fetch(url, options);
+  const text = await res.text();
+  let data;
+  try {
+    data = text ? JSON.parse(text) : {};
+  } catch {
+    throw new Error(`El servidor devolvió una respuesta no válida (${res.status}): ${text.slice(0, 150)}`);
+  }
+  if (!res.ok) {
+    throw new Error(data.error || `Error ${res.status}: ${res.statusText}`);
+  }
+  return data;
+}
+
 export default function ImportModal({ isOpen, onClose, onSuccess }) {
   const [file, setFile] = useState(null);
   const [step, setStep] = useState(1);
@@ -105,35 +126,31 @@ export default function ImportModal({ isOpen, onClose, onSuccess }) {
   const [headers, setHeaders] = useState([]);
   const [samples, setSamples] = useState([]);
   const [totalRows, setTotalRows] = useState(0);
+  const [parsedRows, setParsedRows] = useState([]);
   const [preguntas, setPreguntas] = useState([]);
   const [mapping, setMapping] = useState({});
+
+  const [batchState, setBatchState] = useState({
+    loteActual: 0,
+    totalLotes: 0,
+    procesadas: 0,
+    total: 0,
+    importadas: 0,
+    duplicadas: 0,
+  });
 
   const [resultado, setResultado] = useState(null);
 
   useEffect(() => {
     if (isOpen) {
       fetch("/api/encuestas")
-        .then((r) => r.json())
+        .then(async (r) => {
+          if (!r.ok) return {};
+          return r.json().catch(() => ({}));
+        })
         .then((d) => setPreguntas(d.preguntas || []));
     }
   }, [isOpen]);
-
-  // Simulación de barra de progreso durante la carga o procesamiento
-  useEffect(() => {
-    let interval;
-    if (cargando) {
-      setProgresoVal(15);
-      interval = setInterval(() => {
-        setProgresoVal((prev) => {
-          if (prev >= 92) return 92;
-          return prev + 9;
-        });
-      }, 200);
-    } else {
-      setProgresoVal(100);
-    }
-    return () => clearInterval(interval);
-  }, [cargando]);
 
   if (!isOpen) return null;
 
@@ -145,28 +162,24 @@ export default function ImportModal({ isOpen, onClose, onSuccess }) {
 
     setError("");
     setCargando(true);
+    setProgresoVal(0);
 
     try {
       const formData = new FormData();
       formData.append("file", file);
       formData.append("preview", "true");
 
-      const res = await fetch("/api/admin/import", {
+      const d = await safeFetchJson("/api/admin/import", {
         method: "POST",
         body: formData,
       });
 
-      const d = await res.json();
-      if (!res.ok) {
-        setError(d.error || "No se pudo leer el archivo");
-        return;
-      }
-
       setHeaders(d.headers || []);
       setSamples(d.samples || []);
       setTotalRows(d.totalRows || 0);
+      setParsedRows(d.rows || []);
 
-      // Auto-mapeo inteligente incluyendo 'Cliente' -> 'Nombre del Cliente'
+      // Auto-mapeo inteligente
       const autoMap = {};
       (d.headers || []).forEach((h) => {
         autoMap[h] = autoInferTarget(h, preguntas);
@@ -181,26 +194,79 @@ export default function ImportModal({ isOpen, onClose, onSuccess }) {
   }
 
   async function handleImportar() {
+    if (parsedRows.length === 0) {
+      setError("No hay registros en el archivo para procesar.");
+      return;
+    }
+
     setError("");
     setCargando(true);
+    setProgresoVal(0);
+
+    const BATCH_SIZE = 25;
+    const total = parsedRows.length;
+    const totalBatches = Math.ceil(total / BATCH_SIZE);
+
+    let acumuladoImportadas = 0;
+    let acumuladoDuplicados = 0;
+    const acumuladoErrores = [];
+
+    setBatchState({
+      loteActual: 1,
+      totalLotes: totalBatches,
+      procesadas: 0,
+      total,
+      importadas: 0,
+      duplicadas: 0,
+    });
 
     try {
-      const formData = new FormData();
-      formData.append("file", file);
-      formData.append("mapping", JSON.stringify(mapping));
+      for (let b = 0; b < totalBatches; b++) {
+        const start = b * BATCH_SIZE;
+        const end = Math.min(start + BATCH_SIZE, total);
+        const batchRows = parsedRows.slice(start, end);
 
-      const res = await fetch("/api/admin/import", {
-        method: "POST",
-        body: formData,
-      });
+        setBatchState({
+          loteActual: b + 1,
+          totalLotes: totalBatches,
+          procesadas: start,
+          total,
+          importadas: acumuladoImportadas,
+          duplicadas: acumuladoDuplicados,
+        });
 
-      const d = await res.json();
-      if (!res.ok) {
-        setError(d.error || "Error al importar los datos");
-        return;
+        // Enviar el lote actual en JSON
+        const resLote = await safeFetchJson("/api/admin/import", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            rows: batchRows,
+            mapping,
+          }),
+        });
+
+        acumuladoImportadas += resLote.importadas || 0;
+        acumuladoDuplicados += resLote.duplicados || 0;
+        if (resLote.errores?.length) {
+          acumuladoErrores.push(...resLote.errores);
+        }
+
+        const progresoReal = Math.min(100, Math.round((end / total) * 100));
+        setProgresoVal(progresoReal);
+        setBatchState((prev) => ({
+          ...prev,
+          procesadas: end,
+          importadas: acumuladoImportadas,
+          duplicadas: acumuladoDuplicados,
+        }));
       }
 
-      setResultado(d);
+      setProgresoVal(100);
+      setResultado({
+        importadas: acumuladoImportadas,
+        duplicados: acumuladoDuplicados,
+        errores: acumuladoErrores,
+      });
       setStep(3);
       if (onSuccess) onSuccess();
     } catch (err) {
@@ -217,15 +283,24 @@ export default function ImportModal({ isOpen, onClose, onSuccess }) {
     setHeaders([]);
     setSamples([]);
     setTotalRows(0);
+    setParsedRows([]);
     setMapping({});
     setResultado(null);
     setProgresoVal(0);
+    setBatchState({
+      loteActual: 0,
+      totalLotes: 0,
+      procesadas: 0,
+      total: 0,
+      importadas: 0,
+      duplicadas: 0,
+    });
     onClose();
   }
 
   const targetOptions = [
     { key: "ignore", label: "-- Omitir / No importar --" },
-    { key: "submission_id", label: "ID de Encuesta (Submission Id / FormId)" },
+    { key: "submission_id", label: "ID de Encuesta (Submission Id)" },
     { key: "fecha", label: "Fecha de Envío (Submitted On)" },
     { key: "encuestador", label: "Encuestador / Entrevistador" },
     { key: "nombre_cliente", label: "Nombre del Cliente" },
@@ -253,8 +328,8 @@ export default function ImportModal({ isOpen, onClose, onSuccess }) {
         </div>
 
         {error && (
-          <div className="validation-box" style={{ marginTop: 16, marginBottom: 0 }}>
-            <p style={{ margin: 0, color: "#991b1b", fontSize: 13.5 }}>⚠️ {error}</p>
+          <div className="validation-box" style={{ marginTop: 16, marginBottom: 0, background: "#fef2f2", border: "1px solid #fecaca", borderRadius: 8, padding: 12 }}>
+            <p style={{ margin: 0, color: "#991b1b", fontSize: 13.5, lineHeight: 1.4 }}>⚠️ {error}</p>
           </div>
         )}
 
@@ -278,16 +353,11 @@ export default function ImportModal({ isOpen, onClose, onSuccess }) {
               )}
             </div>
 
-            {/* Barra de progreso de lectura del archivo */}
             {cargando && (
-              <div style={{ marginTop: 18 }}>
-                <div style={{ display: "flex", justifyContent: "space-between", fontSize: 12.5, marginBottom: 6, fontWeight: 600, color: "#4f46e5" }}>
-                  <span>Leyendo y analizando archivo Excel...</span>
-                  <span>{progresoVal}%</span>
-                </div>
-                <div className="progress-track" style={{ height: 8 }}>
-                  <div className="progress-fill" style={{ width: `${progresoVal}%`, background: "#4f46e5" }} />
-                </div>
+              <div style={{ marginTop: 18, textAlign: "center" }}>
+                <p style={{ fontSize: 13, color: "#4f46e5", fontWeight: 600, margin: "0 0 8px" }}>
+                  ⏳ Leyendo y analizando archivo Excel...
+                </p>
               </div>
             )}
 
@@ -303,19 +373,41 @@ export default function ImportModal({ isOpen, onClose, onSuccess }) {
         {step === 2 && (
           <div className="pad" style={{ padding: "16px 0 0" }}>
             {cargando ? (
-              <div style={{ textAlign: "center", padding: "40px 20px" }}>
-                <div className="result-icon-circle" style={{ background: "#4f46e5", margin: "0 auto 16px" }}>⏳</div>
-                <h3 style={{ margin: "0 0 8px", fontSize: 18 }}>Importando {totalRows} encuestas a Supabase...</h3>
-                <p style={{ color: "#6b7280", fontSize: 13.5, marginBottom: 24, maxWidth: 460, margin: "0 auto 24px" }}>
-                  Validando duplicados por FormId / Submission Id, vinculando encuestadores y guardando respuestas...
+              <div style={{ textAlign: "center", padding: "36px 20px" }}>
+                <div className="result-icon-circle" style={{ background: "#4f46e5", margin: "0 auto 16px" }}>⚡</div>
+                <h3 style={{ margin: "0 0 8px", fontSize: 18 }}>
+                  Importando {totalRows} encuestas por lotes...
+                </h3>
+                <p style={{ color: "#6b7280", fontSize: 13.5, marginBottom: 20, maxWidth: 460, margin: "0 auto 20px" }}>
+                  Lote {batchState.loteActual} de {batchState.totalLotes} ({batchState.procesadas} de {batchState.total} procesadas)
                 </p>
-                <div style={{ maxWidth: 440, margin: "0 auto" }}>
+
+                {/* Barra de progreso real */}
+                <div style={{ maxWidth: 460, margin: "0 auto" }}>
                   <div style={{ display: "flex", justifyContent: "space-between", fontSize: 13, marginBottom: 8, fontWeight: 600, color: "#4f46e5" }}>
-                    <span>Progreso de importación</span>
+                    <span>Progreso real</span>
                     <span>{progresoVal}%</span>
                   </div>
-                  <div className="progress-track" style={{ height: 10 }}>
-                    <div className="progress-fill" style={{ width: `${progresoVal}%`, background: "#4f46e5" }} />
+                  <div className="progress-track" style={{ height: 10, borderRadius: 5, overflow: "hidden", background: "#e5e7eb" }}>
+                    <div
+                      className="progress-fill"
+                      style={{
+                        width: `${progresoVal}%`,
+                        background: "#4f46e5",
+                        height: "100%",
+                        transition: "width 0.3s ease",
+                      }}
+                    />
+                  </div>
+
+                  {/* Estadísticas en vivo */}
+                  <div style={{ display: "flex", justifyContent: "center", gap: 20, marginTop: 14, fontSize: 13 }}>
+                    <span style={{ color: "#16a34a", fontWeight: 600 }}>
+                      ✓ {batchState.importadas} importadas
+                    </span>
+                    <span style={{ color: "#ca8a04", fontWeight: 600 }}>
+                      ⚠️ {batchState.duplicadas} omitidas (duplicados)
+                    </span>
                   </div>
                 </div>
               </div>
@@ -326,25 +418,25 @@ export default function ImportModal({ isOpen, onClose, onSuccess }) {
                 </p>
 
                 <div style={{ maxHeight: 360, overflowY: "auto", border: "1px solid #e5e7eb", borderRadius: 8 }}>
-                  <table style={{ fontSize: 13 }}>
+                  <table style={{ fontSize: 13, width: "100%", borderCollapse: "collapse" }}>
                     <thead>
-                      <tr>
-                        <th style={{ width: "35%" }}>Columna en Excel</th>
-                        <th style={{ width: "30%" }}>Valor Muestra</th>
-                        <th style={{ width: "35%" }}>Campo Destino en Supabase</th>
+                      <tr style={{ background: "#f9fafb", borderBottom: "1px solid #e5e7eb" }}>
+                        <th style={{ width: "35%", padding: "8px 12px", textAlign: "left" }}>Columna en Excel</th>
+                        <th style={{ width: "30%", padding: "8px 12px", textAlign: "left" }}>Valor Muestra</th>
+                        <th style={{ width: "35%", padding: "8px 12px", textAlign: "left" }}>Campo Destino en Supabase</th>
                       </tr>
                     </thead>
                     <tbody>
                       {headers.map((h, i) => (
-                        <tr key={i}>
-                          <td style={{ fontWeight: 600, fontSize: 12.5 }}>{h}</td>
-                          <td style={{ fontSize: 12, color: "#6b7280", maxWidth: 180, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                        <tr key={i} style={{ borderBottom: "1px solid #f3f4f6" }}>
+                          <td style={{ fontWeight: 600, fontSize: 12.5, padding: "8px 12px" }}>{h}</td>
+                          <td style={{ fontSize: 12, color: "#6b7280", maxWidth: 180, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", padding: "8px 12px" }}>
                             {samples[0]?.[h] || "—"}
                           </td>
-                          <td>
+                          <td style={{ padding: "8px 12px" }}>
                             <select
                               className="text-input"
-                              style={{ padding: "4px 8px", fontSize: 12.5 }}
+                              style={{ padding: "4px 8px", fontSize: 12.5, width: "100%" }}
                               value={mapping[h] || "ignore"}
                               onChange={(e) => setMapping({ ...mapping, [h]: e.target.value })}
                             >
@@ -364,7 +456,7 @@ export default function ImportModal({ isOpen, onClose, onSuccess }) {
                 <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginTop: 20 }}>
                   <button className="btn" onClick={() => setStep(1)} disabled={cargando}>◀ Cambiar archivo</button>
                   <button className="btn btn-primary" onClick={handleImportar} disabled={cargando}>
-                    Procesar e Importar {totalRows} Encuestas ✓
+                    Procesar e Importar {totalRows} Encuestas (por lotes) ✓
                   </button>
                 </div>
               </>
@@ -374,27 +466,41 @@ export default function ImportModal({ isOpen, onClose, onSuccess }) {
 
         {step === 3 && (
           <div className="pad" style={{ padding: "24px 0 0", textAlign: "center" }}>
-            <div className="result-icon-circle success">✓</div>
+            <div className="result-icon-circle success" style={{ width: 48, height: 48, borderRadius: "50%", background: "#dcfce7", color: "#16a34a", fontSize: 24, display: "flex", alignItems: "center", justifyContent: "center", margin: "0 auto 16px" }}>
+              ✓
+            </div>
             <h3 style={{ margin: "0 0 16px" }}>Resumen del Proceso de Importación</h3>
 
             {/* Tarjetas de Resumen KPI */}
-            <div className="import-kpi-grid">
-              <div className="import-kpi-card success">
-                <div className="import-kpi-value">{resultado?.importadas || 0}</div>
-                <div className="import-kpi-label">Importadas con éxito</div>
+            <div className="import-kpi-grid" style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 12, marginBottom: 20 }}>
+              <div className="import-kpi-card success" style={{ padding: 16, background: "#f0fdf4", border: "1px solid #bbf7d0", borderRadius: 8 }}>
+                <div className="import-kpi-value" style={{ fontSize: 24, fontWeight: 700, color: "#16a34a" }}>
+                  {resultado?.importadas || 0}
+                </div>
+                <div className="import-kpi-label" style={{ fontSize: 12, color: "#15803d", marginTop: 4 }}>
+                  Importadas con éxito
+                </div>
               </div>
-              <div className="import-kpi-card warning">
-                <div className="import-kpi-value">{resultado?.duplicados || 0}</div>
-                <div className="import-kpi-label">Omitidas (Duplicadas)</div>
+              <div className="import-kpi-card warning" style={{ padding: 16, background: "#fefce8", border: "1px solid #fef08a", borderRadius: 8 }}>
+                <div className="import-kpi-value" style={{ fontSize: 24, fontWeight: 700, color: "#ca8a04" }}>
+                  {resultado?.duplicados || 0}
+                </div>
+                <div className="import-kpi-label" style={{ fontSize: 12, color: "#a16207", marginTop: 4 }}>
+                  Omitidas (Duplicadas)
+                </div>
               </div>
-              <div className="import-kpi-card danger">
-                <div className="import-kpi-value">{resultado?.errores?.length || 0}</div>
-                <div className="import-kpi-label">Errores / Fallidos</div>
+              <div className="import-kpi-card danger" style={{ padding: 16, background: "#fef2f2", border: "1px solid #fecaca", borderRadius: 8 }}>
+                <div className="import-kpi-value" style={{ fontSize: 24, fontWeight: 700, color: "#dc2626" }}>
+                  {resultado?.errores?.length || 0}
+                </div>
+                <div className="import-kpi-label" style={{ fontSize: 12, color: "#b91c1c", marginTop: 4 }}>
+                  Errores / Fallidos
+                </div>
               </div>
             </div>
 
-            <p style={{ fontSize: 13, color: "#6b7280", margin: "18px 0 20px" }}>
-              Las encuestas duplicadas (existentes previamente por FormId, Submission Id o cliente) fueron omitidas automáticamente para evitar duplicaciones.
+            <p style={{ fontSize: 13, color: "#6b7280", margin: "0 0 20px" }}>
+              Las encuestas existentes previamente (por Submission Id o combinación de cliente y fecha) fueron omitidas para prevenir duplicaciones.
             </p>
 
             <button className="btn btn-primary" onClick={handleReset}>Finalizar</button>
