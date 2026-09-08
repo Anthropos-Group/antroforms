@@ -137,7 +137,7 @@ function validarCuestionarioCompleto(preguntas, respuestas, cliente) {
     if (autoRespuestas[p.id] === "N/A") continue;
 
     const val = respuestas[p.id];
-    const numPregunta = i + 1;
+    const numPregunta = p.numero_reporte ?? (i + 1);
 
     if (p.tipo === "aceptacion_si_no") {
       if (typeof val !== "boolean") {
@@ -194,6 +194,8 @@ export default function EncuestaPage() {
   const [buscando, setBuscando] = useState(false);
   const [cliente, setCliente] = useState(null);
   const [mesesDisponibles, setMesesDisponibles] = useState([]);
+  const [mesActual, setMesActual] = useState("");
+  const [mesAnterior, setMesAnterior] = useState("");
   const [mesSeleccionado, setMesSeleccionado] = useState("");
 
   const [respuestas, setRespuestas] = useState({});
@@ -218,6 +220,8 @@ export default function EncuestaPage() {
       .then((r) => r.json())
       .then((d) => {
         setMesesDisponibles(d.meses || []);
+        setMesActual(d.mesActual || "");
+        setMesAnterior(d.mesAnterior || "");
         setMesSeleccionado(d.mesActual || "TODOS");
       });
   }, []);
@@ -490,10 +494,47 @@ export default function EncuestaPage() {
 
           <div className="card pad">
             <h3 style={{ margin: "0 0 16px", fontSize: 16 }}>Iniciar nueva encuesta</h3>
-            <label className="field-label">Buscar cliente por nombre, código o teléfono</label>
+
+            {/* Selector de Mes de Gestión */}
+            <div className="mes-filtro-container">
+              <label className="field-label" style={{ marginBottom: 6 }}>
+                Mes de gestión a encuestar:
+              </label>
+              <div className="mes-tabs">
+                {mesActual && (
+                  <button
+                    type="button"
+                    className={`mes-tab ${mesSeleccionado === mesActual ? "active" : ""}`}
+                    onClick={() => setMesSeleccionado(mesActual)}
+                  >
+                    📅 {mesActual} (Mes actual)
+                  </button>
+                )}
+                {mesAnterior && (
+                  <button
+                    type="button"
+                    className={`mes-tab ${mesSeleccionado === mesAnterior ? "active" : ""}`}
+                    onClick={() => setMesSeleccionado(mesAnterior)}
+                  >
+                    ⏪ {mesAnterior} (Mes anterior)
+                  </button>
+                )}
+                <button
+                  type="button"
+                  className={`mes-tab ${mesSeleccionado === "TODOS" ? "active" : ""}`}
+                  onClick={() => setMesSeleccionado("TODOS")}
+                >
+                  🔍 Todos los meses
+                </button>
+              </div>
+            </div>
+
+            <label className="field-label" style={{ marginTop: 14 }}>
+              Buscar cliente por nombre, código o teléfono ({mesSeleccionado === "TODOS" ? "todos los meses" : `filtro: ${mesSeleccionado}`})
+            </label>
             <input
               className="search-input"
-              placeholder="Escribe al menos 3 caracteres (nombre, código cliente o teléfono)…"
+              placeholder={`Buscar clientes en ${mesSeleccionado === "TODOS" ? "cualquier mes" : mesSeleccionado} (escribe al menos 3 caracteres)…`}
               value={query}
               onChange={(e) => setQuery(e.target.value)}
               autoFocus
@@ -501,36 +542,83 @@ export default function EncuestaPage() {
             {buscando && <div style={{ fontSize: 13, color: "#9ca3af", marginTop: 8 }}>Buscando…</div>}
             {resultados.length > 0 && (
               <div className="option-list" style={{ marginTop: 12 }}>
-                {resultados.map((r) => (
-                  <div key={r.id_twenty} className="option-item" onClick={() => elegirCliente(r)}>
-                    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-                      <div className="nombre">{r.nombre}</div>
-                      {r.status === "EFECTIVA" ? (
-                        <span className="badge badge-completado" style={{ fontSize: 11, padding: "2px 8px" }}>✓ Ya encuestado</span>
-                      ) : r.status ? (
-                        <span className="badge badge-mode-incremental" style={{ fontSize: 11, padding: "2px 8px" }}>{r.status}</span>
-                      ) : null}
+                {resultados.map((r) => {
+                  const tieneCorte = tieneDatoCliente(r, "total");
+                  return (
+                    <div key={r.id_twenty} className="option-item" onClick={() => elegirCliente(r)}>
+                      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 8 }}>
+                        <div className="nombre">{r.nombre}</div>
+                        <div style={{ display: "flex", gap: 6, alignItems: "center" }}>
+                          {tieneCorte ? (
+                            <span
+                              className="badge"
+                              style={{
+                                background: "#ecfdf5",
+                                color: "#065f46",
+                                border: "1px solid #a7f3d0",
+                                fontSize: 11,
+                                padding: "2px 8px",
+                              }}
+                              title="El cliente registra servicio de corte y laminado en Twenty CRM"
+                            >
+                              ✂️ Corte (${r.total}) · P7 activa
+                            </span>
+                          ) : (
+                            <span
+                              className="badge"
+                              style={{
+                                background: "#f1f5f9",
+                                color: "#64748b",
+                                border: "1px solid #e2e8f0",
+                                fontSize: 11,
+                                padding: "2px 8px",
+                              }}
+                              title="Sin servicio de corte registrado. La pregunta 7 se omitirá automáticamente."
+                            >
+                              Sin corte · P7 N/A
+                            </span>
+                          )}
+                          {r.status === "EFECTIVA" ? (
+                            <span className="badge badge-completado" style={{ fontSize: 11, padding: "2px 8px" }}>✓ Ya encuestado</span>
+                          ) : r.status ? (
+                            <span className="badge badge-mode-incremental" style={{ fontSize: 11, padding: "2px 8px" }}>{r.status}</span>
+                          ) : null}
+                        </div>
+                      </div>
+                      <div className="detalle" style={{ marginTop: 6, display: "flex", gap: "10px", flexWrap: "wrap", alignItems: "center" }}>
+                        <span>Código: <strong>{r.codigo_cliente || "—"}</strong></span>
+                        <span>·</span>
+                        <span>PDV: {r.pdv || "—"}</span>
+                        <span>·</span>
+                        <span>Mes: <strong>{r.mes_gestion || "—"}</strong></span>
+                        {r.telefono1 && (
+                          <>
+                            <span>·</span>
+                            <span style={{ color: "#4f46e5", fontWeight: 600 }}>📞 {r.telefono1}</span>
+                          </>
+                        )}
+                      </div>
                     </div>
-                    <div className="detalle" style={{ marginTop: 4, display: "flex", gap: "10px", flexWrap: "wrap", alignItems: "center" }}>
-                      <span>Código: <strong>{r.codigo_cliente || "—"}</strong></span>
-                      <span>·</span>
-                      <span>PDV: {r.pdv || "—"}</span>
-                      <span>·</span>
-                      <span>Mes: {r.mes_gestion || "—"}</span>
-                      {r.telefono1 && (
-                        <>
-                          <span>·</span>
-                          <span style={{ color: "#4f46e5", fontWeight: 600 }}>📞 {r.telefono1}</span>
-                        </>
-                      )}
-                    </div>
-                  </div>
-                ))}
+                  );
+                })}
               </div>
             )}
             {!buscando && query.trim().length >= 3 && resultados.length === 0 && (
               <div className="empty-state">
-                Sin coincidencias {mesSeleccionado !== "TODOS" ? `en ${mesSeleccionado}` : ""} — prueba cambiando el mes de gestión arriba.
+                Sin coincidencias en <strong>{mesSeleccionado === "TODOS" ? "ningún mes" : mesSeleccionado}</strong>.
+                {mesSeleccionado !== mesAnterior && mesAnterior && (
+                  <div style={{ marginTop: 10 }}>
+                    ¿El cliente corresponde al mes pasado?{" "}
+                    <button
+                      type="button"
+                      className="btn"
+                      style={{ fontSize: 12, padding: "4px 12px", marginLeft: 4 }}
+                      onClick={() => setMesSeleccionado(mesAnterior)}
+                    >
+                      Buscar en {mesAnterior} (Mes anterior)
+                    </button>
+                  </div>
+                )}
               </div>
             )}
           </div>
@@ -545,6 +633,18 @@ export default function EncuestaPage() {
             {cliente.telefono1 && <div><span>Teléfono</span>📞 {cliente.telefono1}</div>}
             <div><span>PDV</span>{cliente.pdv}</div>
             <div><span>Mes</span>{cliente.mes_gestion}</div>
+            <div>
+              <span>Servicio de corte</span>
+              {tieneDatoCliente(cliente, "total") ? (
+                <span style={{ color: "#059669", fontWeight: 700 }}>
+                  ✂️ Sí (${cliente.total}) · P7 activa
+                </span>
+              ) : (
+                <span style={{ color: "#6b7280", fontWeight: 600 }}>
+                  Sin corte · P7 omitida (N/A)
+                </span>
+              )}
+            </div>
             <div style={{ marginLeft: "auto" }}>
               <button
                 className="btn"
@@ -577,9 +677,11 @@ export default function EncuestaPage() {
               {cuestionario.preguntas.map((p, i) => {
                 const val = respuestas[p.id];
                 const auto = evaluarAutoRespuestas(cuestionario.preguntas, cliente)[p.id];
+                const esNA = auto === "N/A";
+                const numLabel = p.numero_reporte ?? (i + 1);
                 const cal = typeof val === "object" ? val?.calificacion : val;
                 const esCompleta =
-                  auto === "N/A" ||
+                  esNA ||
                   (p.tipo === "aceptacion_si_no" && typeof val === "boolean") ||
                   (p.tipo === "escala_1_10" &&
                     cal !== undefined &&
@@ -590,13 +692,18 @@ export default function EncuestaPage() {
                 return (
                   <button
                     key={p.id}
-                    className={`question-pill${i === indice ? " active" : ""}${esCompleta ? " done" : ""}`}
+                    className={`question-pill${i === indice ? " active" : ""}${esNA ? " na" : esCompleta ? " done" : ""}`}
                     onClick={() => {
                       setIndice(i);
                       setErroresValidacion([]);
                     }}
+                    title={
+                      esNA
+                        ? `Pregunta ${numLabel}: Omitida (N/A) - Cliente sin servicio de corte`
+                        : `Pregunta ${numLabel}`
+                    }
                   >
-                    P{i + 1}
+                    P{numLabel} {esNA && <span style={{ fontSize: 10, marginLeft: 2 }}>(N/A)</span>}
                   </button>
                 );
               })}
@@ -660,134 +767,182 @@ export default function EncuestaPage() {
               </div>
             )}
 
-            {!enviando && preguntaActual && (
-              <div style={{ marginTop: 16 }}>
-                <div style={{ fontSize: 12, textTransform: "uppercase", color: "#6b7280", fontWeight: 600, marginBottom: 4 }}>
-                  Pregunta {indice + 1} de {cuestionario.preguntas.length}
-                </div>
-                <p style={{ fontSize: 17, fontWeight: 500, marginBottom: 12 }}>
-                  {preguntaActual.texto}
-                </p>
+            {!enviando && preguntaActual && (() => {
+              const auto = evaluarAutoRespuestas(cuestionario.preguntas, cliente)[preguntaActual.id];
+              const esNA = auto === "N/A";
+              const numReporte = preguntaActual.numero_reporte ?? (indice + 1);
 
-                {preguntaActual.tipo === "aceptacion_si_no" && (
-                  <div className="choice-row">
-                    <button
-                      className={`btn-choice btn-choice-yes${respuestas[preguntaActual.id] === true ? " selected" : ""}`}
-                      onClick={() => actualizarRespuesta(preguntaActual.id, true)}
-                    >
-                      Sí
-                    </button>
-                    <button
-                      className={`btn-choice btn-choice-no${respuestas[preguntaActual.id] === false ? " selected" : ""}`}
-                      onClick={() => actualizarRespuesta(preguntaActual.id, false)}
-                    >
-                      No
-                    </button>
+              return (
+                <div style={{ marginTop: 16 }}>
+                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 6, flexWrap: "wrap", gap: 8 }}>
+                    <div style={{ fontSize: 12, textTransform: "uppercase", color: "#6b7280", fontWeight: 700 }}>
+                      Pregunta {numReporte} · Paso {indice + 1} de {cuestionario.preguntas.length}
+                    </div>
+                    {preguntaActual.condicion?.campo === "total" && (
+                      <div>
+                        {tieneDatoCliente(cliente, "total") ? (
+                          <span className="badge" style={{ background: "#ecfdf5", color: "#065f46", border: "1px solid #a7f3d0", fontSize: 11 }}>
+                            ✂️ Servicio de corte registrado: ${cliente.total}
+                          </span>
+                        ) : (
+                          <span className="badge" style={{ background: "#f1f5f9", color: "#64748b", border: "1px solid #cbd5e1", fontSize: 11 }}>
+                            ℹ️ Sin servicio de corte (Total vacío en CRM)
+                          </span>
+                        )}
+                      </div>
+                    )}
                   </div>
-                )}
 
-                {preguntaActual.tipo === "escala_1_10" && (() => {
-                  const valObj = respuestas[preguntaActual.id];
-                  const cal = typeof valObj === "object" ? valObj?.calificacion : valObj;
-                  const just = typeof valObj === "object" ? (valObj?.justificacion ?? "") : "";
-                  const etiquetas = obtenerEtiquetasEscala(preguntaActual.texto);
+                  <p style={{ fontSize: 17, fontWeight: 500, marginBottom: 14 }}>
+                    {preguntaActual.texto}
+                  </p>
 
-                  return (
-                    <div>
-                      <div className="scale-grid">
-                        {Array.from({ length: 10 }, (_, i) => i + 1).map((n) => {
-                          const nps = n <= 6 ? "detractor" : n <= 8 ? "passive" : "promoter";
-                          return (
-                            <button
-                              key={n}
-                              className={`scale-btn ${nps}${cal === n ? " selected" : ""}`}
-                              onClick={() =>
-                                actualizarRespuesta(
-                                  preguntaActual.id,
-                                  preguntaActual.requiere_justificacion
-                                    ? { calificacion: n, justificacion: just }
-                                    : { calificacion: n }
-                                )
-                              }
-                            >
-                              {n}
-                            </button>
-                          );
-                        })}
+                  {esNA ? (
+                    <div
+                      className="card pad"
+                      style={{
+                        background: "#f8fafc",
+                        border: "1px dashed #cbd5e1",
+                        textAlign: "center",
+                        padding: "24px 16px",
+                        margin: "16px 0",
+                      }}
+                    >
+                      <div style={{ fontSize: 28, marginBottom: 8 }}>✂️</div>
+                      <h4 style={{ margin: "0 0 6px", color: "#334155", fontSize: 16 }}>
+                        Pregunta omitida automáticamente (N/A)
+                      </h4>
+                      <p style={{ margin: "0 0 12px", color: "#64748b", fontSize: 14, maxWidth: 520, marginInline: "auto", lineHeight: 1.5 }}>
+                        Esta pregunta sobre la calidad de piezas cortadas y laminadas solo aplica para clientes que registraron dicho servicio (columna <code>total</code> en Twenty CRM).
+                      </p>
+                      <div style={{ display: "inline-block", padding: "6px 14px", borderRadius: 6, background: "#e2e8f0", color: "#475569", fontSize: 13, fontWeight: 600 }}>
+                        ✓ Registrada como N/A — No requiere respuesta del encuestador
                       </div>
+                    </div>
+                  ) : (
+                    <>
+                      {preguntaActual.tipo === "aceptacion_si_no" && (
+                        <div className="choice-row">
+                          <button
+                            className={`btn-choice btn-choice-yes${respuestas[preguntaActual.id] === true ? " selected" : ""}`}
+                            onClick={() => actualizarRespuesta(preguntaActual.id, true)}
+                          >
+                            Sí
+                          </button>
+                          <button
+                            className={`btn-choice btn-choice-no${respuestas[preguntaActual.id] === false ? " selected" : ""}`}
+                            onClick={() => actualizarRespuesta(preguntaActual.id, false)}
+                          >
+                            No
+                          </button>
+                        </div>
+                      )}
 
-                      {/* Leyendas explicativas para 1 y 10 */}
-                      <div className="scale-labels">
-                        <span className="scale-label-min">{etiquetas.min}</span>
-                        <span className="scale-label-max">{etiquetas.max}</span>
-                      </div>
+                      {preguntaActual.tipo === "escala_1_10" && (() => {
+                        const valObj = respuestas[preguntaActual.id];
+                        const cal = typeof valObj === "object" ? valObj?.calificacion : valObj;
+                        const just = typeof valObj === "object" ? (valObj?.justificacion ?? "") : "";
+                        const etiquetas = obtenerEtiquetasEscala(preguntaActual.texto);
 
-                      {preguntaActual.requiere_justificacion && (
-                        <div style={{ marginTop: 16 }}>
-                          <label className="field-label">¿Por qué? (motivo de su calificación)</label>
+                        return (
+                          <div>
+                            <div className="scale-grid">
+                              {Array.from({ length: 10 }, (_, i) => i + 1).map((n) => {
+                                const nps = n <= 6 ? "detractor" : n <= 8 ? "passive" : "promoter";
+                                return (
+                                  <button
+                                    key={n}
+                                    className={`scale-btn ${nps}${cal === n ? " selected" : ""}`}
+                                    onClick={() =>
+                                      actualizarRespuesta(
+                                        preguntaActual.id,
+                                        preguntaActual.requiere_justificacion
+                                          ? { calificacion: n, justificacion: just }
+                                          : { calificacion: n }
+                                      )
+                                    }
+                                  >
+                                    {n}
+                                  </button>
+                                );
+                              })}
+                            </div>
+
+                            {/* Leyendas explicativas para 1 y 10 */}
+                            <div className="scale-labels">
+                              <span className="scale-label-min">{etiquetas.min}</span>
+                              <span className="scale-label-max">{etiquetas.max}</span>
+                            </div>
+
+                            {preguntaActual.requiere_justificacion && (
+                              <div style={{ marginTop: 16 }}>
+                                <label className="field-label">¿Por qué? (motivo de su calificación)</label>
+                                <textarea
+                                  value={just}
+                                  onChange={(e) =>
+                                    actualizarRespuesta(preguntaActual.id, {
+                                      calificacion: cal ?? null,
+                                      justificacion: e.target.value,
+                                    })
+                                  }
+                                  placeholder="Escribe el motivo de la calificación…"
+                                />
+                              </div>
+                            )}
+                          </div>
+                        );
+                      })()}
+
+                      {preguntaActual.tipo === "texto_abierto" && (
+                        <div>
                           <textarea
-                            value={just}
-                            onChange={(e) =>
-                              actualizarRespuesta(preguntaActual.id, {
-                                calificacion: cal ?? null,
-                                justificacion: e.target.value,
-                              })
-                            }
-                            placeholder="Escribe el motivo de la calificación…"
+                            value={typeof respuestas[preguntaActual.id] === "string" ? respuestas[preguntaActual.id] : ""}
+                            onChange={(e) => actualizarRespuesta(preguntaActual.id, e.target.value)}
+                            placeholder="Escribe la respuesta…"
                           />
                         </div>
                       )}
-                    </div>
-                  );
-                })()}
+                    </>
+                  )}
 
-                {preguntaActual.tipo === "texto_abierto" && (
-                  <div>
-                    <textarea
-                      value={typeof respuestas[preguntaActual.id] === "string" ? respuestas[preguntaActual.id] : ""}
-                      onChange={(e) => actualizarRespuesta(preguntaActual.id, e.target.value)}
-                      placeholder="Escribe la respuesta…"
-                    />
-                  </div>
-                )}
-
-                {/* Botones de Navegación Flexible */}
-                <div className="nav-buttons-row">
-                  <button
-                    className="btn btn-secondary"
-                    disabled={indice === 0}
-                    onClick={() => {
-                      setIndice((prev) => Math.max(0, prev - 1));
-                      setErroresValidacion([]);
-                    }}
-                  >
-                    ◀ Anterior
-                  </button>
-
-                  {indice < cuestionario.preguntas.length - 1 ? (
+                  {/* Botones de Navegación Flexible */}
+                  <div className="nav-buttons-row">
                     <button
                       className="btn btn-secondary"
+                      disabled={indice === 0}
                       onClick={() => {
-                        setIndice((prev) => Math.min(cuestionario.preguntas.length - 1, prev + 1));
+                        setIndice((prev) => Math.max(0, prev - 1));
                         setErroresValidacion([]);
                       }}
                     >
-                      Siguiente ▶
+                      ◀ Anterior
                     </button>
-                  ) : (
-                    <div />
-                  )}
 
-                  <button
-                    className="btn btn-primary"
-                    style={{ marginLeft: "auto" }}
-                    onClick={manejarSubmit}
-                  >
-                    Finalizar y Enviar Encuesta ✓
-                  </button>
+                    {indice < cuestionario.preguntas.length - 1 ? (
+                      <button
+                        className="btn btn-secondary"
+                        onClick={() => {
+                          setIndice((prev) => Math.min(cuestionario.preguntas.length - 1, prev + 1));
+                          setErroresValidacion([]);
+                        }}
+                      >
+                        Siguiente ▶
+                      </button>
+                    ) : (
+                      <div />
+                    )}
+
+                    <button
+                      className="btn btn-primary"
+                      style={{ marginLeft: "auto" }}
+                      onClick={manejarSubmit}
+                    >
+                      Finalizar y Enviar Encuesta ✓
+                    </button>
+                  </div>
                 </div>
-              </div>
-            )}
+              );
+            })()}
           </div>
         </div>
       )}

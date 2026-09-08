@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { getPool } from "../../../../lib/db";
-import { MESES_ES, mesActualUTC5 } from "../../../../lib/fecha";
+import { MESES_ES, mesActualUTC5, mesAnteriorUTC5 } from "../../../../lib/fecha";
 
 export const dynamic = "force-dynamic";
 
@@ -23,5 +23,9 @@ export async function GET() {
       return ia - ib;
     });
 
-  return NextResponse.json({ mesActual: mesActualUTC5(), meses });
+  return NextResponse.json({
+    mesActual: mesActualUTC5(),
+    mesAnterior: mesAnteriorUTC5(),
+    meses,
+  });
 }

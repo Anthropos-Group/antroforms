@@ -76,10 +76,44 @@ async function procesarLote(rows, mapping) {
       [cuestionarioId]
     );
 
-    // 3. Caché de encuestadores existentes para optimizar transacciones
-    const { rows: encRows } = await client.query(`select id, lower(trim(nombre)) as nom from encuestadores`);
-    const encMap = new Map();
-    encRows.forEach((e) => encMap.set(e.nom, e.id));
+    // 3. Caché de encuestadores existentes con matching inteligente (evita crear encuestadores duplicados)
+    const { rows: encRows } = await client.query(`select id, nombre, activo from encuestadores`);
+
+    function normalizar(str) {
+      return (str || "")
+        .normalize("NFD")
+        .replace(/[\u0300-\u036f]/g, "")
+        .toLowerCase()
+        .trim();
+    }
+
+    function resolverEncuestador(nombreRaw) {
+      if (!nombreRaw) return encRows.find((e) => e.activo)?.id || encRows[0]?.id;
+      const normInput = normalizar(nombreRaw);
+      if (!normInput) return encRows.find((e) => e.activo)?.id || encRows[0]?.id;
+
+      // 1. Coincidencia exacta normalizada
+      const exacto = encRows.find((e) => normalizar(e.nombre) === normInput);
+      if (exacto) return exacto.id;
+
+      // 2. Coincidencia por primer nombre o prefijo (ej: "Evelyn" -> "Evelyn Velasquez", "Vanessa" -> "Vanessa Velasquez", "Verónica" -> "Verónica Manosalvas", "Andrés" -> "Andrés Balarezo")
+      const primerPalabra = normInput.split(/\s+/)[0];
+      const matchPrimerNombre = encRows.find((e) => {
+        const dbPrimerPalabra = normalizar(e.nombre).split(/\s+/)[0];
+        return dbPrimerPalabra === primerPalabra;
+      });
+      if (matchPrimerNombre) return matchPrimerNombre.id;
+
+      // 3. Coincidencia por inclusión de subcadena
+      const matchInclusion = encRows.find((e) => {
+        const dbNorm = normalizar(e.nombre);
+        return dbNorm.includes(normInput) || normInput.includes(dbNorm);
+      });
+      if (matchInclusion) return matchInclusion.id;
+
+      // 4. Si no se puede inferir, asignar a un encuestador activo existente sin duplicar
+      return encRows.find((e) => e.activo)?.id || encRows[0]?.id;
+    }
 
     // Caché de clientes para optimizar transacciones
     const cliMap = new Map();
@@ -92,170 +126,174 @@ async function procesarLote(rows, mapping) {
 
     for (let rIdx = 0; rIdx < rows.length; rIdx++) {
       const row = rows[rIdx];
+      const spName = `sp_${rIdx}`;
+      await client.query(`savepoint ${spName}`);
 
-      let submissionId = null;
-      let fecha = new Date().toISOString();
-      let nombreEncuestador = "Encuestador Importado";
-      let codigoCliente = null;
-      let nombreCliente = "Cliente Importado";
-      let pdv = "MATRIZ";
-      let mesGestion = new Date().toLocaleDateString("es-EC", { month: "long" });
+      try {
+        let submissionId = null;
+        let fecha = new Date().toISOString();
+        let nombreEncuestador = "";
+        let codigoCliente = null;
+        let nombreCliente = "Cliente Importado";
+        let pdv = "MATRIZ";
+        let mesGestion = new Date().toLocaleDateString("es-EC", { month: "long" });
 
-      const respuestasDict = {};
-      const justificativoDict = {};
+        const respuestasDict = {};
+        const justificativoDict = {};
 
-      Object.entries(mapping).forEach(([headerName, targetField]) => {
-        const cellValue = row[headerName];
-        if (!targetField || targetField === "ignore" || cellValue === undefined || cellValue === "") return;
+        Object.entries(mapping).forEach(([headerName, targetField]) => {
+          const cellValue = row[headerName];
+          if (!targetField || targetField === "ignore" || cellValue === undefined || cellValue === "") return;
 
-        if (targetField === "submission_id") {
-          const val = String(cellValue).trim();
-          // Dar preferencia a UUIDs reales en caso de mapeos múltiples accidentales (como FormId + Submission Id)
-          if (!submissionId || (!UUID_REGEX.test(submissionId) && UUID_REGEX.test(val))) {
-            submissionId = val;
-          }
-        } else if (targetField === "fecha") {
-          fecha = parseDateValue(cellValue);
-        } else if (targetField === "encuestador") {
-          nombreEncuestador = String(cellValue).trim() || "Encuestador Importado";
-        } else if (targetField === "codigo_cliente") {
-          codigoCliente = String(cellValue).trim();
-        } else if (targetField === "nombre_cliente") {
-          nombreCliente = String(cellValue).trim();
-        } else if (targetField === "pdv") {
-          pdv = String(cellValue).trim();
-        } else if (targetField === "mes_gestion") {
-          mesGestion = String(cellValue).trim();
-        } else if (targetField.startsWith("pregunta_")) {
-          const qId = targetField.replace("pregunta_", "");
-          respuestasDict[qId] = cellValue;
-        } else if (targetField.startsWith("justificacion_")) {
-          const qId = targetField.replace("justificacion_", "");
-          justificativoDict[qId] = cellValue;
-        }
-      });
-
-      // Deduplicación: por submissionId (UUID) o por código de cliente + fecha
-      let esDuplicado = false;
-      if (submissionId && UUID_REGEX.test(submissionId)) {
-        const { rows: dups } = await client.query(
-          `select 1 from encuestas where id = $1 limit 1`,
-          [submissionId]
-        );
-        if (dups.length > 0) esDuplicado = true;
-      } else if (codigoCliente) {
-        const { rows: dups } = await client.query(
-          `select 1 from encuestas where codigo_cliente = $1 and created_at = $2 limit 1`,
-          [codigoCliente, fecha]
-        );
-        if (dups.length > 0) esDuplicado = true;
-      }
-
-      if (esDuplicado) {
-        duplicados++;
-        continue;
-      }
-
-      // 1. Obtener o crear encuestador
-      const encKey = nombreEncuestador.toLowerCase().trim();
-      let encuestadorId = encMap.get(encKey);
-      if (!encuestadorId) {
-        const { rows: newEnc } = await client.query(
-          `insert into encuestadores (nombre, activo) values ($1, true) returning id`,
-          [nombreEncuestador]
-        );
-        encuestadorId = newEnc[0].id;
-        encMap.set(encKey, encuestadorId);
-      }
-
-      // 2. Obtener o crear cliente en clientes_cache
-      let clienteTwentyId = null;
-      if (codigoCliente) {
-        clienteTwentyId = cliMap.get(codigoCliente);
-        if (!clienteTwentyId) {
-          const { rows: cliRows } = await client.query(
-            `select id_twenty from clientes_cache where codigo_cliente = $1 limit 1`,
-            [codigoCliente]
-          );
-          if (cliRows.length > 0) {
-            clienteTwentyId = cliRows[0].id_twenty;
-          } else {
-            const { rows: newCli } = await client.query(
-              `insert into clientes_cache (id_twenty, codigo_cliente, nombre, pdv, mes_gestion)
-               values (gen_random_uuid(), $1, $2, $3, $4)
-               returning id_twenty`,
-              [codigoCliente, nombreCliente, pdv, mesGestion]
-            );
-            clienteTwentyId = newCli[0].id_twenty;
-          }
-          cliMap.set(codigoCliente, clienteTwentyId);
-        }
-      }
-
-      let completada = true;
-
-      // 3. Crear encuesta
-      let encuestaId;
-      if (submissionId && UUID_REGEX.test(submissionId)) {
-        const { rows: encInsert } = await client.query(
-          `insert into encuestas (id, cuestionario_id, cliente_twenty_id, codigo_cliente, encuestador_id, completada, created_at)
-           values ($1, $2, $3, $4, $5, $6, $7)
-           returning id`,
-          [submissionId, cuestionarioId, clienteTwentyId, codigoCliente, encuestadorId, completada, fecha]
-        );
-        encuestaId = encInsert[0].id;
-      } else {
-        const { rows: encInsert } = await client.query(
-          `insert into encuestas (cuestionario_id, cliente_twenty_id, codigo_cliente, encuestador_id, completada, created_at)
-           values ($1, $2, $3, $4, $5, $6)
-           returning id`,
-          [cuestionarioId, clienteTwentyId, codigoCliente, encuestadorId, completada, fecha]
-        );
-        encuestaId = encInsert[0].id;
-      }
-
-      // 4. Inserción de respuestas
-      for (const p of preguntas) {
-        const rawVal = respuestasDict[p.id];
-        const rawJust = justificativoDict[p.id] || "";
-
-        let valorFinal = null;
-
-        if (p.tipo === "aceptacion_si_no") {
-          const boolVal = parseBooleanValue(rawVal);
-          if (boolVal !== null) {
-            valorFinal = boolVal;
-            if (boolVal === false) completada = false;
-          }
-        } else if (p.tipo === "escala_1_10") {
-          const numVal = parseNumberValue(rawVal);
-          if (numVal !== null) {
-            if (p.requiere_justificacion) {
-              valorFinal = {
-                calificacion: numVal,
-                justificacion: String(rawJust).trim(),
-              };
-            } else {
-              valorFinal = { calificacion: numVal };
+          if (targetField === "submission_id") {
+            const val = String(cellValue).trim();
+            // Dar preferencia a UUIDs reales en caso de mapeos múltiples accidentales (como FormId + Submission Id)
+            if (!submissionId || (!UUID_REGEX.test(submissionId) && UUID_REGEX.test(val))) {
+              submissionId = val;
             }
+          } else if (targetField === "fecha") {
+            fecha = parseDateValue(cellValue);
+          } else if (targetField === "encuestador") {
+            nombreEncuestador = String(cellValue).trim();
+          } else if (targetField === "codigo_cliente") {
+            codigoCliente = String(cellValue).trim();
+          } else if (targetField === "nombre_cliente") {
+            nombreCliente = String(cellValue).trim();
+          } else if (targetField === "pdv") {
+            pdv = String(cellValue).trim();
+          } else if (targetField === "mes_gestion") {
+            mesGestion = String(cellValue).trim();
+          } else if (targetField.startsWith("pregunta_")) {
+            const qId = targetField.replace("pregunta_", "");
+            respuestasDict[qId] = cellValue;
+          } else if (targetField.startsWith("justificacion_")) {
+            const qId = targetField.replace("justificacion_", "");
+            justificativoDict[qId] = cellValue;
           }
-        } else if (p.tipo === "texto_abierto") {
-          if (rawVal) valorFinal = String(rawVal).trim();
-        }
+        });
 
-        if (valorFinal !== null) {
-          await client.query(
-            `insert into respuestas (encuesta_id, pregunta_id, valor) values ($1, $2, $3)`,
-            [encuestaId, p.id, JSON.stringify(valorFinal)]
+        // Deduplicación: por submissionId (UUID) o por código de cliente + fecha
+        let esDuplicado = false;
+        if (submissionId && UUID_REGEX.test(submissionId)) {
+          const { rows: dups } = await client.query(
+            `select 1 from encuestas where id = $1 limit 1`,
+            [submissionId]
           );
+          if (dups.length > 0) esDuplicado = true;
+        } else if (codigoCliente) {
+          const { rows: dups } = await client.query(
+            `select 1 from encuestas where codigo_cliente = $1 and created_at = $2 limit 1`,
+            [codigoCliente, fecha]
+          );
+          if (dups.length > 0) esDuplicado = true;
         }
-      }
 
-      if (!completada) {
-        await client.query(`update encuestas set completada = false where id = $1`, [encuestaId]);
-      }
+        if (esDuplicado) {
+          duplicados++;
+          await client.query(`release savepoint ${spName}`);
+          continue;
+        }
 
-      importadas++;
+        // 1. Resolver encuestador existente legítimo (nunca duplica)
+        const encuestadorId = resolverEncuestador(nombreEncuestador);
+
+        // 2. Obtener o crear cliente en clientes_cache
+        let clienteTwentyId = null;
+        if (codigoCliente) {
+          clienteTwentyId = cliMap.get(codigoCliente);
+          if (!clienteTwentyId) {
+            const { rows: cliRows } = await client.query(
+              `select id_twenty from clientes_cache where codigo_cliente = $1 limit 1`,
+              [codigoCliente]
+            );
+            if (cliRows.length > 0) {
+              clienteTwentyId = cliRows[0].id_twenty;
+            } else {
+              const { rows: newCli } = await client.query(
+                `insert into clientes_cache (id_twenty, codigo_cliente, nombre, pdv, mes_gestion)
+                 values (gen_random_uuid(), $1, $2, $3, $4)
+                 returning id_twenty`,
+                [codigoCliente, nombreCliente, pdv, mesGestion]
+              );
+              clienteTwentyId = newCli[0].id_twenty;
+            }
+            cliMap.set(codigoCliente, clienteTwentyId);
+          }
+        }
+
+        let completada = true;
+
+        // 3. Crear encuesta
+        let encuestaId;
+        if (submissionId && UUID_REGEX.test(submissionId)) {
+          const { rows: encInsert } = await client.query(
+            `insert into encuestas (id, cuestionario_id, cliente_twenty_id, codigo_cliente, encuestador_id, completada, created_at)
+             values ($1, $2, $3, $4, $5, $6, $7)
+             returning id`,
+            [submissionId, cuestionarioId, clienteTwentyId, codigoCliente, encuestadorId, completada, fecha]
+          );
+          encuestaId = encInsert[0].id;
+        } else {
+          const { rows: encInsert } = await client.query(
+            `insert into encuestas (cuestionario_id, cliente_twenty_id, codigo_cliente, encuestador_id, completada, created_at)
+             values ($1, $2, $3, $4, $5, $6)
+             returning id`,
+            [cuestionarioId, clienteTwentyId, codigoCliente, encuestadorId, completada, fecha]
+          );
+          encuestaId = encInsert[0].id;
+        }
+
+        // 4. Inserción de respuestas
+        for (const p of preguntas) {
+          const rawVal = respuestasDict[p.id];
+          const rawJust = justificativoDict[p.id] || "";
+
+          let valorFinal = null;
+
+          if (p.tipo === "aceptacion_si_no") {
+            const boolVal = parseBooleanValue(rawVal);
+            if (boolVal !== null) {
+              valorFinal = boolVal;
+              if (boolVal === false) completada = false;
+            }
+          } else if (p.tipo === "escala_1_10") {
+            const numVal = parseNumberValue(rawVal);
+            if (numVal !== null) {
+              if (p.requiere_justificacion) {
+                valorFinal = {
+                  calificacion: numVal,
+                  justificacion: String(rawJust).trim(),
+                };
+              } else {
+                valorFinal = { calificacion: numVal };
+              }
+            }
+          } else if (p.tipo === "texto_abierto") {
+            if (rawVal) valorFinal = String(rawVal).trim();
+          }
+
+          if (valorFinal !== null) {
+            await client.query(
+              `insert into respuestas (encuesta_id, pregunta_id, valor) values ($1, $2, $3)`,
+              [encuestaId, p.id, JSON.stringify(valorFinal)]
+            );
+          }
+        }
+
+        if (!completada) {
+          await client.query(`update encuestas set completada = false where id = $1`, [encuestaId]);
+        }
+
+        await client.query(`release savepoint ${spName}`);
+        importadas++;
+      } catch (rowErr) {
+        await client.query(`rollback to savepoint ${spName}`);
+        errores.push({
+          fila: rIdx + 1,
+          cliente: row["Nombre"] || row["Cliente"] || codigoCliente || `Fila ${rIdx + 1}`,
+          error: rowErr.message,
+        });
+      }
     }
 
     await client.query("commit");
@@ -302,11 +340,44 @@ export async function POST(request) {
 
     const buffer = Buffer.from(await file.arrayBuffer());
     const workbook = new ExcelJS.Workbook();
-    await workbook.xlsx.load(buffer);
 
-    const worksheet = workbook.worksheets[0];
+    const fileName = (file.name || "").toLowerCase();
+    const isCsv = fileName.endsWith(".csv");
+
+    let worksheet;
+    if (isCsv) {
+      const { Readable } = await import("stream");
+      worksheet = await workbook.csv.read(Readable.from(buffer));
+    } else {
+      try {
+        await workbook.xlsx.load(buffer);
+        worksheet = workbook.worksheets[0];
+      } catch (xlsxErr) {
+        try {
+          const { Readable } = await import("stream");
+          worksheet = await workbook.csv.read(Readable.from(buffer));
+        } catch {
+          return NextResponse.json(
+            { error: `No se pudo leer el archivo Excel/CSV. Asegúrate de subir un archivo .xlsx o .csv válido: ${xlsxErr.message}` },
+            { status: 400 }
+          );
+        }
+      }
+    }
+
     if (!worksheet) {
-      return NextResponse.json({ error: "El archivo Excel está vacío o no contiene hojas válidas" }, { status: 400 });
+      return NextResponse.json({ error: "El archivo Excel/CSV está vacío o no contiene hojas válidas" }, { status: 400 });
+    }
+
+    function extraerTextoCelda(val) {
+      if (val === null || val === undefined) return "";
+      if (typeof val === "object") {
+        if (val.result !== undefined) return String(val.result).trim();
+        if (val.text !== undefined) return String(val.text).trim();
+        if (Array.isArray(val.richText)) return val.richText.map((t) => t.text).join("").trim();
+        if (val instanceof Date) return val.toISOString();
+      }
+      return String(val).trim();
     }
 
     const headers = [];
@@ -316,14 +387,15 @@ export async function POST(request) {
       const rowValues = row.values.slice(1);
       if (rowNumber === 1) {
         rowValues.forEach((cellVal, colIdx) => {
-          headers.push(cellVal ? String(cellVal).trim() : `Columna ${colIdx + 1}`);
+          const text = extraerTextoCelda(cellVal);
+          headers.push(text || `Columna ${colIdx + 1}`);
         });
       } else {
         const rowObj = {};
         let hasData = false;
         headers.forEach((h, idx) => {
           const val = rowValues[idx];
-          const textVal = val !== null && val !== undefined ? String(val).trim() : "";
+          const textVal = extraerTextoCelda(val);
           rowObj[h] = textVal;
           if (textVal) hasData = true;
         });
