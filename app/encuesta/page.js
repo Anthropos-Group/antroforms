@@ -98,7 +98,12 @@ function tieneDatoCliente(cliente, campo) {
   const texto = String(valor).trim();
   if (texto === "") return false;
   const upper = texto.toUpperCase();
-  return upper !== "NULL" && upper !== "N/A" && upper !== "NA";
+  if (upper === "NULL" || upper === "N/A" || upper === "NA" || upper === "NONE" || upper === "NO") return false;
+  if (campo === "total") {
+    const num = Number(texto.replace(/[^0-9.-]/g, ""));
+    if (isNaN(num) || num <= 0) return false;
+  }
+  return true;
 }
 
 function evaluarAutoRespuestas(preguntas, cliente) {
@@ -561,7 +566,7 @@ export default function EncuestaPage() {
                               }}
                               title="El cliente registra servicio de corte y laminado en Twenty CRM"
                             >
-                              ✂️ Corte (${r.total}) · P7 activa
+                              ✂️ Corte: {r.total} · P7 activa
                             </span>
                           ) : (
                             <span
@@ -637,7 +642,7 @@ export default function EncuestaPage() {
               <span>Servicio de corte</span>
               {tieneDatoCliente(cliente, "total") ? (
                 <span style={{ color: "#059669", fontWeight: 700 }}>
-                  ✂️ Sí (${cliente.total}) · P7 activa
+                  ✂️ Sí ({cliente.total}) · P7 activa
                 </span>
               ) : (
                 <span style={{ color: "#6b7280", fontWeight: 600 }}>
@@ -782,11 +787,11 @@ export default function EncuestaPage() {
                       <div>
                         {tieneDatoCliente(cliente, "total") ? (
                           <span className="badge" style={{ background: "#ecfdf5", color: "#065f46", border: "1px solid #a7f3d0", fontSize: 11 }}>
-                            ✂️ Servicio de corte registrado: ${cliente.total}
+                            ✂️ Servicio de corte registrado: {cliente.total}
                           </span>
                         ) : (
                           <span className="badge" style={{ background: "#f1f5f9", color: "#64748b", border: "1px solid #cbd5e1", fontSize: 11 }}>
-                            ℹ️ Sin servicio de corte (Total vacío en CRM)
+                            ℹ️ Sin servicio de corte registrado en CRM
                           </span>
                         )}
                       </div>
