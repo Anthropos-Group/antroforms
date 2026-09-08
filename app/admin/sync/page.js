@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { getPool } from "../../../lib/db";
+import ManualSyncButton from "../../../components/ManualSyncButton";
 
 export const dynamic = "force-dynamic";
 
@@ -34,6 +35,8 @@ export default async function SyncHistoryPage() {
         Cada corrida revisa el objeto <code>people</code> de Twenty y corrige espacios y valores
         sucios. En modo <em>dry_run</em> solo se registra lo que cambiaría, sin escribir en Twenty.
       </p>
+
+      <ManualSyncButton />
 
       <div className="card">
         {runs.length === 0 ? (
