@@ -31,6 +31,7 @@ export default function ReportesPage() {
   const [resumen, setResumen] = useState(null);
   const [cargando, setCargando] = useState(false);
   const [descargando, setDescargando] = useState(false);
+  const [errorRango, setErrorRango] = useState("");
 
   // Filtro rápido en tabla y paginación
   const [filtroTexto, setFiltroTexto] = useState("");
@@ -61,16 +62,42 @@ export default function ReportesPage() {
   }
 
   async function verResumen() {
+    if (desde && hasta && desde > hasta) {
+      setErrorRango("La fecha 'Desde' no puede ser posterior a 'Hasta'.");
+      return;
+    }
+    setErrorRango("");
     setCargando(true);
     setPagina(1);
     try {
       const res = await fetch(`/api/encuestas?${construirQuery()}`);
       const data = await res.json();
+      if (!res.ok) {
+        console.error("Error en reporte:", data.error);
+        return;
+      }
       setResumen(data);
+    } catch (err) {
+      console.error("Error de red al consultar reporte:", err);
     } finally {
       setCargando(false);
     }
   }
+
+  // Cargar resumen automáticamente en tiempo real al cambiar cualquier filtro
+  useEffect(() => {
+    if (desde && hasta && desde > hasta) {
+      setErrorRango("La fecha 'Desde' no puede ser posterior a 'Hasta'.");
+      return;
+    }
+    setErrorRango("");
+
+    const timer = setTimeout(() => {
+      verResumen();
+    }, 350);
+
+    return () => clearTimeout(timer);
+  }, [desde, hasta, encuestadorId, mesGestion, pdv]);
 
   async function descargarExcel() {
     setDescargando(true);
@@ -183,11 +210,11 @@ export default function ReportesPage() {
             </select>
           </div>
 
-          <div style={{ display: "flex", gap: 10, marginTop: 8, flexWrap: "wrap" }}>
-            <button className="btn" onClick={verResumen} disabled={cargando}>
-              {cargando ? "Consultando…" : "Ver resumen"}
+          <div style={{ display: "flex", gap: 10, marginTop: 8, flexWrap: "wrap", alignItems: "center" }}>
+            <button className="btn" onClick={verResumen} disabled={cargando || !!errorRango}>
+              {cargando ? "⏳ Actualizando…" : "Ver resumen"}
             </button>
-            <button className="btn btn-primary" onClick={descargarExcel} disabled={descargando}>
+            <button className="btn btn-primary" onClick={descargarExcel} disabled={descargando || !!errorRango}>
               {descargando ? "Generando Excel…" : "Descargar Excel"}
             </button>
             <button
@@ -197,8 +224,19 @@ export default function ReportesPage() {
             >
               📥 Importar desde Excel
             </button>
+            {cargando && (
+              <span style={{ fontSize: 13, color: "#4f46e5", fontWeight: 500 }}>
+                Actualizando datos del reporte…
+              </span>
+            )}
           </div>
         </div>
+
+        {errorRango && (
+          <div style={{ marginTop: 12, padding: "8px 14px", background: "#fef2f2", color: "#b91c1c", border: "1px solid #fecaca", borderRadius: 6, fontSize: 13 }}>
+            ⚠️ {errorRango}
+          </div>
+        )}
       </div>
 
       <ImportModal
@@ -209,8 +247,10 @@ export default function ReportesPage() {
         }}
       />
 
-      {/* Tarjetas KPI de Resumen Ejecutivo */}
-      {kpis && (
+      {/* Contenedor reactivo con feedback visual de carga */}
+      <div style={{ opacity: cargando ? 0.6 : 1, transition: "opacity 0.2s" }}>
+        {/* Tarjetas KPI de Resumen Ejecutivo */}
+        {kpis && (
         <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))", gap: 14, marginTop: 20 }}>
           <div className="card pad" style={{ textAlign: "center", borderTop: "4px solid #4f46e5" }}>
             <div style={{ fontSize: 26, fontWeight: 700, color: "#111827" }}>{kpis.total}</div>
@@ -336,6 +376,7 @@ export default function ReportesPage() {
           )}
         </div>
       )}
+      </div>
     </div>
   );
 }

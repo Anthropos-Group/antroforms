@@ -96,7 +96,7 @@ async function procesarLote(rows, mapping) {
       const exacto = encRows.find((e) => normalizar(e.nombre) === normInput);
       if (exacto) return exacto.id;
 
-      // 2. Coincidencia por primer nombre o prefijo (ej: "Evelyn" -> "Evelyn Velasquez", "Vanessa" -> "Vanessa Velasquez", "Verónica" -> "Verónica Manosalvas", "Andrés" -> "Andrés Balarezo")
+      // 2. Coincidencia por primer nombre o prefijo (ej: "Evelyn" -> "Evelyn Velasquez", "Vanessa" -> "Vanessa Velasquez", "Verónica" -> "Verónica Manosalvas")
       const primerPalabra = normInput.split(/\s+/)[0];
       const matchPrimerNombre = encRows.find((e) => {
         const dbPrimerPalabra = normalizar(e.nombre).split(/\s+/)[0];
@@ -208,10 +208,14 @@ async function procesarLote(rows, mapping) {
             );
             if (cliRows.length > 0) {
               clienteTwentyId = cliRows[0].id_twenty;
+              await client.query(
+                `update clientes_cache set status = 'EFECTIVA', synced_at = now() where id_twenty = $1 or codigo_cliente = $2`,
+                [clienteTwentyId, codigoCliente]
+              );
             } else {
               const { rows: newCli } = await client.query(
-                `insert into clientes_cache (id_twenty, codigo_cliente, nombre, pdv, mes_gestion)
-                 values (gen_random_uuid(), $1, $2, $3, $4)
+                `insert into clientes_cache (id_twenty, codigo_cliente, nombre, pdv, mes_gestion, status, synced_at)
+                 values (gen_random_uuid(), $1, $2, $3, $4, 'EFECTIVA', now())
                  returning id_twenty`,
                 [codigoCliente, nombreCliente, pdv, mesGestion]
               );

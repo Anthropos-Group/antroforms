@@ -139,11 +139,36 @@ export async function POST(request) {
       client.release();
     }
 
-    // Sincronización con Twenty CRM con cola de contingencia
+    // Sincronización con Twenty CRM y clientes_cache con cola de contingencia
     let twentyError = null;
+    let targetStatus = null;
+
     if (completada) {
+      targetStatus = "EFECTIVA";
+    } else {
+      // Si rechazó participar explícitamente en la primera pregunta, marcar NO_LLAMAR
+      const primerValor = respuestas[0]?.valor;
+      if (primerValor === false) {
+        targetStatus = "NO_LLAMAR";
+      }
+    }
+
+    if (targetStatus) {
+      // 1. Actualizar inmediatamente la caché local en PostgreSQL
       try {
-        await patchPerson(cliente_twenty_id, { status: "EFECTIVA" });
+        await pool.query(
+          `update clientes_cache
+           set status = $1, synced_at = now()
+           where id_twenty = $2`,
+          [targetStatus, cliente_twenty_id]
+        );
+      } catch (cacheErr) {
+        console.warn("Aviso al actualizar status en clientes_cache:", cacheErr.message);
+      }
+
+      // 2. Sincronizar con Twenty CRM
+      try {
+        await patchPerson(cliente_twenty_id, { status: targetStatus });
       } catch (err) {
         twentyError = err.message;
         console.error(`Twenty CRM no respondió para ${cliente_twenty_id}. Encolando reintento:`, err.message);
@@ -152,8 +177,8 @@ export async function POST(request) {
         try {
           await pool.query(
             `insert into pending_twenty_sync (cliente_twenty_id, status_target, ultimo_error)
-             values ($1, 'EFECTIVA', $2)`,
-            [cliente_twenty_id, err.message]
+             values ($1, $2, $3)`,
+            [cliente_twenty_id, targetStatus, err.message]
           );
         } catch (qErr) {
           // No romper si la tabla aún no se ha migrado

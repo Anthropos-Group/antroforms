@@ -198,11 +198,6 @@ export default function EncuestaPage() {
   const [resultados, setResultados] = useState([]);
   const [buscando, setBuscando] = useState(false);
   const [cliente, setCliente] = useState(null);
-  const [mesesDisponibles, setMesesDisponibles] = useState([]);
-  const [mesActual, setMesActual] = useState("");
-  const [mesAnterior, setMesAnterior] = useState("");
-  const [mesSeleccionado, setMesSeleccionado] = useState("");
-
   const [respuestas, setRespuestas] = useState({});
   const [indice, setIndice] = useState(0);
   const [activeDraftId, setActiveDraftId] = useState(null);
@@ -221,14 +216,6 @@ export default function EncuestaPage() {
       .then((r) => r.json())
       .then((d) => setCuestionario(d.preguntas ? d : null))
       .finally(() => setCargandoCuestionario(false));
-    fetch("/api/clientes/meses")
-      .then((r) => r.json())
-      .then((d) => {
-        setMesesDisponibles(d.meses || []);
-        setMesActual(d.mesActual || "");
-        setMesAnterior(d.mesAnterior || "");
-        setMesSeleccionado(d.mesActual || "TODOS");
-      });
   }, []);
 
   useEffect(() => {
@@ -239,14 +226,13 @@ export default function EncuestaPage() {
     setBuscando(true);
     const t = setTimeout(() => {
       const params = new URLSearchParams({ q: query.trim() });
-      if (mesSeleccionado) params.set("mes_gestion", mesSeleccionado);
       fetch(`/api/clientes/search?${params.toString()}`)
         .then((r) => r.json())
         .then((d) => setResultados(d.results || []))
         .finally(() => setBuscando(false));
     }, 300);
     return () => clearTimeout(t);
-  }, [query, mesSeleccionado]);
+  }, [query]);
 
   // Cargar borradores cuando cambia el encuestador
   useEffect(() => {
@@ -500,46 +486,12 @@ export default function EncuestaPage() {
           <div className="card pad">
             <h3 style={{ margin: "0 0 16px", fontSize: 16 }}>Iniciar nueva encuesta</h3>
 
-            {/* Selector de Mes de Gestión */}
-            <div className="mes-filtro-container">
-              <label className="field-label" style={{ marginBottom: 6 }}>
-                Mes de gestión a encuestar:
-              </label>
-              <div className="mes-tabs">
-                {mesActual && (
-                  <button
-                    type="button"
-                    className={`mes-tab ${mesSeleccionado === mesActual ? "active" : ""}`}
-                    onClick={() => setMesSeleccionado(mesActual)}
-                  >
-                    📅 {mesActual} (Mes actual)
-                  </button>
-                )}
-                {mesAnterior && (
-                  <button
-                    type="button"
-                    className={`mes-tab ${mesSeleccionado === mesAnterior ? "active" : ""}`}
-                    onClick={() => setMesSeleccionado(mesAnterior)}
-                  >
-                    ⏪ {mesAnterior} (Mes anterior)
-                  </button>
-                )}
-                <button
-                  type="button"
-                  className={`mes-tab ${mesSeleccionado === "TODOS" ? "active" : ""}`}
-                  onClick={() => setMesSeleccionado("TODOS")}
-                >
-                  🔍 Todos los meses
-                </button>
-              </div>
-            </div>
-
-            <label className="field-label" style={{ marginTop: 14 }}>
-              Buscar cliente por nombre, código o teléfono ({mesSeleccionado === "TODOS" ? "todos los meses" : `filtro: ${mesSeleccionado}`})
+            <label className="field-label" style={{ marginTop: 4 }}>
+              Buscar cliente por nombre, código o teléfono:
             </label>
             <input
               className="search-input"
-              placeholder={`Buscar clientes en ${mesSeleccionado === "TODOS" ? "cualquier mes" : mesSeleccionado} (escribe al menos 3 caracteres)…`}
+              placeholder="Buscar cliente por nombre, código o teléfono (escribe al menos 3 caracteres)…"
               value={query}
               onChange={(e) => setQuery(e.target.value)}
               autoFocus
@@ -610,20 +562,7 @@ export default function EncuestaPage() {
             )}
             {!buscando && query.trim().length >= 3 && resultados.length === 0 && (
               <div className="empty-state">
-                Sin coincidencias en <strong>{mesSeleccionado === "TODOS" ? "ningún mes" : mesSeleccionado}</strong>.
-                {mesSeleccionado !== mesAnterior && mesAnterior && (
-                  <div style={{ marginTop: 10 }}>
-                    ¿El cliente corresponde al mes pasado?{" "}
-                    <button
-                      type="button"
-                      className="btn"
-                      style={{ fontSize: 12, padding: "4px 12px", marginLeft: 4 }}
-                      onClick={() => setMesSeleccionado(mesAnterior)}
-                    >
-                      Buscar en {mesAnterior} (Mes anterior)
-                    </button>
-                  </div>
-                )}
+                No se encontraron clientes que coincidan con la búsqueda.
               </div>
             )}
           </div>

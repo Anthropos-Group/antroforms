@@ -37,7 +37,7 @@ async function ejecutarSincronizacion(request, modeOverride, maxPagesOverride) {
 
   const { searchParams } = new URL(request.url);
   const mode = modeOverride || searchParams.get("modo") || "incremental";
-  const maxPages = maxPagesOverride ?? (searchParams.get("max_pages") ? Number(searchParams.get("max_pages")) : 5);
+  const maxPages = maxPagesOverride ?? (searchParams.get("max_pages") ? Number(searchParams.get("max_pages")) : 50);
 
   if (!VALID_MODES.includes(mode)) {
     return NextResponse.json(
