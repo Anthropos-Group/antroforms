@@ -216,7 +216,7 @@ export default function EncuestaPage() {
           const d = await r.json();
           if (!r.ok) throw new Error(d.error || "Error en la búsqueda");
           setResultados(d.results || []);
-          setTwentyCaido(d.twentyDisponible === false);
+          setTwentyCaido(d.twentyDisponible === false ? d.twentyMotivo || "error" : false);
           setErrorBusqueda("");
         })
         .catch((err) => {
@@ -575,7 +575,10 @@ export default function EncuestaPage() {
             )}
             {twentyCaido && !buscando && !errorBusqueda && (
               <div style={{ fontSize: 12.5, color: "#92400e", marginTop: 8 }}>
-                Twenty CRM no respondió a tiempo: los resultados vienen de la copia local y pueden no incluir altas de los últimos minutos.
+                {twentyCaido === "lento"
+                  ? "Twenty CRM está lento y no respondió a tiempo"
+                  : "No se pudo consultar Twenty CRM en este momento"}
+                : los resultados vienen de la copia local, que se actualiza cada 10 minutos.
               </div>
             )}
             {resultados.length > 0 && (

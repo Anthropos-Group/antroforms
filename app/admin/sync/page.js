@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { getPool } from "../../../lib/db";
 import ManualSyncButton from "../../../components/ManualSyncButton";
+import RefrescoClientes from "../../../components/RefrescoClientes";
 import TwentyPendientes from "../../../components/TwentyPendientes";
 import { formatFechaHoraEcuador } from "../../../lib/fecha";
 
@@ -34,9 +35,12 @@ export default async function SyncHistoryPage() {
       <Link href="/admin/preguntas" className="back-link">← Panel admin</Link>
       <h1 className="page-title">Historial de limpieza de Twenty</h1>
       <p className="page-subtitle">
-        Cada corrida revisa el objeto <code>people</code> de Twenty y corrige espacios y valores
-        sucios. En modo <em>dry_run</em> solo se registra lo que cambiaría, sin escribir en Twenty.
+        La limpieza revisa el objeto <code>people</code> de Twenty y corrige espacios y valores
+        sucios; corre sola cada noche. En modo <em>dry_run</em> solo se registra lo que cambiaría,
+        sin escribir en Twenty.
       </p>
+
+      <RefrescoClientes />
 
       <ManualSyncButton />
 

@@ -82,7 +82,7 @@ npm run sync:twenty -- --mode=dry_run
 npm run sync:twenty -- --mode=backfill_completo
 ```
 
-En producción, la corrida incremental la lanza el propio contenedor a las 07:00 y 13:00 (hora de Ecuador), junto con un keep-alive para que Supabase no pause el proyecto por inactividad — no hace falta un cron externo. Ver [docs/DEPLOY.md §6](./docs/DEPLOY.md#6-tareas-programadas-sincronización-con-twenty-y-keep-alive).
+En producción el propio contenedor refresca la copia local de clientes cada 10 minutos, corre la limpieza de datos en Twenty a las 22:00 (hora de Ecuador) y mantiene activa la base de Supabase — no hace falta un cron externo. Cómo funciona: [docs/SINCRONIZACION.md](./docs/SINCRONIZACION.md). Ver [docs/DEPLOY.md §6](./docs/DEPLOY.md#6-tareas-programadas-sincronización-con-twenty-y-keep-alive).
 
 ## Scripts disponibles
 

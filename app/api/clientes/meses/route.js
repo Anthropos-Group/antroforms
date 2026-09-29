@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { getPool } from "../../../../lib/db";
-import { MESES_ES, mesActualUTC5, mesAnteriorUTC5 } from "../../../../lib/fecha";
+import { MESES_ES, mesesPermitidosEncuestador } from "../../../../lib/fecha";
 
 export const dynamic = "force-dynamic";
 
@@ -23,9 +23,11 @@ export async function GET() {
       return ia - ib;
     });
 
+  // Meses de gestión (con la semana de anticipación), no de calendario.
+  const [mesActual, mesAnterior] = mesesPermitidosEncuestador();
   return NextResponse.json({
-    mesActual: mesActualUTC5(),
-    mesAnterior: mesAnteriorUTC5(),
+    mesActual,
+    mesAnterior,
     meses,
   });
 }

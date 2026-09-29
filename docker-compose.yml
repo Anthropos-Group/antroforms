@@ -17,7 +17,8 @@ services:
       # Tareas programadas dentro del contenedor (keep-alive de Supabase y
       # sincronización con Twenty). Ver docs/DEPLOY.md §6.
       TAREAS_PROGRAMADAS: ${TAREAS_PROGRAMADAS:-on}
-      SYNC_HORAS_ECUADOR: ${SYNC_HORAS_ECUADOR:-7,13}
+      REFRESCO_MINUTOS: ${REFRESCO_MINUTOS:-10}
+      SYNC_HORAS_ECUADOR: ${SYNC_HORAS_ECUADOR:-22}
       KEEPALIVE_MINUTOS: ${KEEPALIVE_MINUTOS:-60}
     expose:
       - "3000"
