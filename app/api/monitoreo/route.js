@@ -4,7 +4,15 @@ import {
   verifySessionToken,
   SESSION_COOKIE,
 } from "../../../lib/auth";
-import { rangoMesEcuador } from "../../../lib/fecha";
+import {
+  MESES_ES,
+  rangoMesEcuador,
+  periodoGestionActual,
+  periodoAnterior,
+  nombreMesDePeriodo,
+  periodoDeMesGestion,
+  DIAS_ANTICIPACION_GESTION,
+} from "../../../lib/fecha";
 
 export const dynamic = "force-dynamic";
 
@@ -25,9 +33,27 @@ async function metaMensual(pool) {
 export async function GET(request) {
   try {
     const { searchParams } = new URL(request.url);
-    // Mes calendario en hora de Ecuador (antes se cortaba a medianoche UTC y las
-    // encuestas hechas después de las 19:00 del último día caían en el mes siguiente).
-    const { inicio: fechaInicio, fin: fechaFin, mes } = rangoMesEcuador(searchParams.get("mes"));
+    // Mes de gestión (no de calendario): una encuesta cuenta para el mes de gestión
+    // de su cliente. Una de un cliente de OCTUBRE hecha el 28/09 cuenta en octubre, y
+    // una de SEPTIEMBRE hecha el 2/10 cuenta en septiembre.
+    const pedido = searchParams.get("mes");
+    const mes = /^\d{4}-(0[1-9]|1[0-2])$/.test(pedido || "") ? pedido : periodoGestionActual();
+    const nombreMes = nombreMesDePeriodo(mes);
+    const siguiente = rangoMesEcuador(rangoMesEcuador(mes).fin.slice(0, 7)).mes;
+    // Ventana amplia para distinguir el año (el mes de gestión del cliente no lo trae):
+    // desde el mes anterior hasta el siguiente.
+    const ventanaInicio = rangoMesEcuador(periodoAnterior(mes)).inicio;
+    const ventanaFin = rangoMesEcuador(siguiente).fin;
+    // Clientes sin mes reconocible: cuentan en el mes de gestión vigente el día de la encuesta.
+    const corrimiento = DIAS_ANTICIPACION_GESTION * 24 * 60 * 60 * 1000;
+    const sinMesInicio = new Date(new Date(rangoMesEcuador(mes).inicio).getTime() - corrimiento).toISOString();
+    const sinMesFin = new Date(new Date(rangoMesEcuador(mes).fin).getTime() - corrimiento).toISOString();
+    const filtroMes = `e.completada = true
+      and (
+        (upper(trim(cc.mes_gestion)) = $1 and e.created_at >= $2 and e.created_at < $3)
+        or (coalesce(upper(trim(cc.mes_gestion)), '') <> all($4::text[]) and e.created_at >= $5 and e.created_at < $6)
+      )`;
+    const valoresMes = [nombreMes, ventanaInicio, ventanaFin, MESES_ES, sinMesInicio, sinMesFin];
 
     // El proxy ya garantiza que hay una sesión válida; aquí solo se distingue el rol.
     const rol = verifySessionToken(request.cookies.get(SESSION_COOKIE)?.value) ? "admin" : "encuestador";
@@ -35,8 +61,8 @@ export async function GET(request) {
     const pool = getPool();
     const meta = await metaMensual(pool);
 
-    // 1. Obtener todas las sucursales (PDVs) del catálogo de clientes y cruzar con encuestas completadas en el rango.
-    // Esto asegura que gerencia y encuestadores vean qué sucursales tienen 0 avance.
+    // 1. Todas las sucursales (PDVs) del catálogo de clientes cruzadas con las encuestas
+    // completadas del mes de gestión: así se ven también las que tienen 0 avance.
     const { rows: pdvs } = await pool.query(
       `with catalogo as (
          select distinct trim(pdv) as pdv
@@ -47,35 +73,47 @@ export async function GET(request) {
          select trim(cc.pdv) as pdv, count(*)::int as completadas
          from encuestas e
          join clientes_cache cc on cc.id_twenty = e.cliente_twenty_id
-         where e.completada = true and e.created_at >= $1 and e.created_at < $2
+         where ${filtroMes}
          group by trim(cc.pdv)
        )
        select cat.pdv, coalesce(c.completadas, 0) as completadas
        from catalogo cat
        left join completadas_mes c on c.pdv = cat.pdv
        order by completadas desc, cat.pdv asc`,
-      [fechaInicio, fechaFin]
+      valoresMes
     );
 
-    // 2. Histórico mensual general (últimos 12 meses, agrupado en hora de Ecuador)
-    const { rows: historico } = await pool.query(
-      `select to_char(created_at at time zone 'America/Guayaquil', 'YYYY-MM') as mes, count(*)::int as completadas
-       from encuestas
-       where completada = true
-       group by 1
-       order by 1 desc
-       limit 12`
+    // 2. Histórico por mes de gestión (últimos 12). Se agrupa en SQL por mes del
+    // cliente y día de la encuesta, y el período se resuelve con la misma regla.
+    const { rows: grupos } = await pool.query(
+      `select upper(trim(cc.mes_gestion)) as mes_cliente,
+              to_char(e.created_at at time zone 'America/Guayaquil', 'YYYY-MM-DD') as dia,
+              count(*)::int as completadas
+       from encuestas e
+       left join clientes_cache cc on cc.id_twenty = e.cliente_twenty_id
+       where e.completada = true
+       group by 1, 2`
     );
+    const porPeriodo = new Map();
+    for (const g of grupos) {
+      const periodo = periodoDeMesGestion(g.mes_cliente, `${g.dia}T17:00:00Z`);
+      porPeriodo.set(periodo, (porPeriodo.get(periodo) || 0) + g.completadas);
+    }
+    const historico = [...porPeriodo.entries()]
+      .map(([m, completadas]) => ({ mes: m, completadas }))
+      .sort((a, b) => a.mes.localeCompare(b.mes))
+      .slice(-12);
 
-    // 3. Conteo de encuestas por encuestador para el mes seleccionado utilizando índice de fecha
+    // 3. Encuestas completadas por encuestador en el mes de gestión.
     const { rows: entrevistadoresRaw } = await pool.query(
       `select enc.nombre as encuestador_nombre, count(*)::int as completadas
        from encuestas e
        join encuestadores enc on enc.id = e.encuestador_id
-       where e.completada = true and e.created_at >= $1 and e.created_at < $2
+       left join clientes_cache cc on cc.id_twenty = e.cliente_twenty_id
+       where ${filtroMes}
        group by enc.id, enc.nombre
        order by completadas desc`,
-      [fechaInicio, fechaFin]
+      valoresMes
     );
 
     const totalEntrevistas = entrevistadoresRaw.reduce((acc, r) => acc + r.completadas, 0);
@@ -90,7 +128,7 @@ export async function GET(request) {
       mes,
       meta_por_pdv: meta,
       pdvs,
-      historico: historico.reverse(),
+      historico,
       entrevistadores,
       rol,
     });

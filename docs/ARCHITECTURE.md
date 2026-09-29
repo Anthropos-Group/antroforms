@@ -47,7 +47,7 @@ flowchart LR
 
 ### 2.1 Limpieza autónoma de Twenty (diaria)
 
-1. El programador interno del contenedor (`lib/programador.js`, arrancado desde `instrumentation.js`) lanza la corrida incremental a las 07:00 y 13:00 hora de Ecuador (`SYNC_HORAS_ECUADOR`). El botón manual del panel y un cron externo opcional usan `/api/cron/sync-twenty`.
+1. El programador interno del contenedor (`lib/programador.js`, arrancado desde `instrumentation.js`) lanza la limpieza a las 22:00 hora de Ecuador (`SYNC_HORAS_ECUADOR`). El botón manual del panel y un cron externo opcional usan `/api/cron/sync-twenty`. La copia local de clientes se refresca aparte cada 10 minutos (solo lectura, `lib/refresco.js`); ver `SINCRONIZACION.md`.
 2. El job pagina sobre `/rest/people` en Twenty (solo `updatedAt` reciente, salvo backfill inicial que recorre todo).
 3. Por cada registro, calcula el valor normalizado de los campos de texto (ver `TRD.md` §4).
 4. Si el valor cambia, hace `PATCH /rest/people/{id}` en Twenty y registra el cambio en `sync_changes`.

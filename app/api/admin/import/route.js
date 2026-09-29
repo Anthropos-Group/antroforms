@@ -5,7 +5,7 @@ import {
   verifySessionToken,
   SESSION_COOKIE,
 } from "../../../../lib/auth";
-import { mesActualUTC5 } from "../../../../lib/fecha";
+import { mesesPermitidosEncuestador } from "../../../../lib/fecha";
 
 export const dynamic = "force-dynamic";
 
@@ -163,7 +163,7 @@ async function procesarLote(rows, mapping) {
         // Sin PDV en el archivo se deja vacío: antes se inventaba "MATRIZ" y esa
         // sucursal ficticia aparecía en el monitoreo.
         let pdv = null;
-        let mesGestion = mesActualUTC5();
+        let mesGestion = mesesPermitidosEncuestador()[0];
 
         const respuestasDict = {};
         const justificativoDict = {};

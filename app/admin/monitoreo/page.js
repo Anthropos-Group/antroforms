@@ -1,10 +1,11 @@
 "use client";
 
 import { useEffect, useState, useMemo } from "react";
-import { mesISOEcuador } from "../../../lib/fecha";
+import { periodoGestionActual } from "../../../lib/fecha";
 
 // Mes en curso según la hora de Ecuador (no la del navegador ni UTC).
-const mesActualISO = () => mesISOEcuador();
+// Mes de gestión en curso (con la semana de anticipación), no el de calendario.
+const mesActualISO = () => periodoGestionActual();
 
 function nombreMesCorto(yyyyMm) {
   const [anio, mes] = yyyyMm.split("-").map(Number);

@@ -203,3 +203,9 @@ La cola `pending_twenty_sync` (migración 0008) guarda los cambios de estado pen
 |---|---|---|
 | `sync_runs` | `detalle text` | Motivo de los errores de la corrida (error general y hasta 10 errores por registro). |
 | `sync_runs` | `actualizado_en timestamptz` | Latido por página procesada: avance en vivo en el panel y detección de corridas muertas (15 min sin latido). |
+
+## 6. Cambios de la migración `0011_sync_control.sql`
+
+| Tabla | Cambio | Para qué |
+|---|---|---|
+| `sync_control` | Tabla nueva (`clave`, `valor`, `detalle`, `actualizado_en`) | Estado del refresco periódico de la copia local: desde cuándo volver a leer de Twenty (`valor`) y el resultado de la última pasada (`detalle`, JSON). Sin la migración, el refresco guarda ese estado en memoria. |

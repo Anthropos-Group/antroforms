@@ -9,7 +9,7 @@ Busca en `clientes_cache` (nunca en Twenty en vivo).
 
 **Query params:** `q` (texto, mínimo 3 caracteres) — busca por nombre, código, teléfono o id EDIMCA.
 
-Solo devuelve clientes del **mes de gestión en curso y el anterior** (en septiembre: SEPTIEMBRE y AGOSTO), que además vienen en `mesesPermitidos`. `POST /api/encuestas` aplica la misma regla a los encuestadores (422 `MES_NO_PERMITIDO`); los administradores no tienen el límite.
+Solo devuelve clientes del **mes de gestión en curso y el anterior**, con una semana de anticipación al cambio de mes (del 24/09 al 24/10: OCTUBRE y SEPTIEMBRE), que además vienen en `mesesPermitidos`. Si Twenty no respondió, `twentyDisponible: false` y `twentyMotivo: "lento" | "error"`. `POST /api/encuestas` aplica la misma regla a los encuestadores (422 `MES_NO_PERMITIDO`); los administradores no tienen el límite.
 
 **Response 200:**
 ```json
@@ -171,6 +171,9 @@ Valores de `modo`: `dry_run` | `incremental` (default) | `backfill_completo`.
 Con `?esperar=1` (o `"esperar": true`) responde 200 al terminar, con `registros_escaneados`, `registros_modificados`, `errores`, `estado` y `parcial`.
 
 **Response 409:** ya hay una sincronización en curso.
+
+### `GET` / `POST /api/admin/refrescar-clientes` (admin)
+`POST` lanza ya un refresco de la copia local de clientes (solo lectura en Twenty) y responde `202`. `GET` devuelve el estado: `enCurso`, `actualizado_en` y `ultimo` (`leidos`, `segundos`, `completo`, o `error`).
 
 ### `GET /api/admin/sync-runs/:id` (admin)
 Estado y avance de una corrida (`sync_runs`): `estado`, `registros_escaneados`, `registros_modificados`, `errores`, `parcial`, `detalle` (motivo de los errores). El botón manual la consulta cada 3 s.

@@ -67,13 +67,16 @@ propio programador (`instrumentation.js` → `lib/programador.js`):
 
 | Tarea | Cuándo | Para qué |
 |---|---|---|
-| Sincronización incremental con Twenty | 07:00 y 13:00 hora de Ecuador | Trae altas y cambios de clientes (p. ej. la carga del mes nuevo), normaliza los datos en Twenty y reintenta la cola de estados pendientes. Si el contenedor estaba caído a esa hora, se recupera apenas vuelve a levantar (mismo día). |
+| Refresco de la copia local de clientes | cada 10 min | Lee de Twenty (solo lectura) los clientes modificados — altas como la carga del mes nuevo, cambios de estado — y los guarda ya normalizados. Reintenta también la cola de estados pendientes hacia Twenty. |
+| Limpieza de datos en Twenty | 22:00 hora de Ecuador | Corrige en Twenty espacios, teléfonos y valores sucios (un `PATCH` por registro, lento: de noche para no cargar Twenty en horario de trabajo). Si el contenedor estaba caído a esa hora, se recupera apenas vuelve a levantar (mismo día). |
 | Keep-alive de Supabase | cada 60 min | Consulta la base (y la API REST si `NEXT_PUBLIC_SUPABASE_URL` y la anon key están configuradas) para que el plan gratuito no pause el proyecto por inactividad. |
+
+Cómo encajan, y por qué hay una copia local: [SINCRONIZACION.md](./SINCRONIZACION.md).
 
 En los logs del contenedor debe aparecer al arrancar:
 
 ```
-[programador] Keep-alive cada 60 min; sincronización con Twenty a las 7:00 y 13:00 (Ecuador).
+[programador] Keep-alive cada 60 min; refresco de clientes cada 10 min; limpieza en Twenty a las 22:00 (Ecuador).
 ```
 
 Variables opcionales (ya declaradas en `docker-compose.yml` con estos valores por defecto):
@@ -81,7 +84,8 @@ Variables opcionales (ya declaradas en `docker-compose.yml` con estos valores po
 | Variable | Default | |
 |---|---|---|
 | `TAREAS_PROGRAMADAS` | `on` | `off` desactiva todo (si algún día se corre más de una réplica, dejarlo en `on` solo en una). |
-| `SYNC_HORAS_ECUADOR` | `7,13` | Horas de la sincronización, separadas por coma. Vacío = sin sincronización automática. |
+| `REFRESCO_MINUTOS` | `10` | Frecuencia del refresco de la copia local. `0` lo desactiva. |
+| `SYNC_HORAS_ECUADOR` | `22` | Horas de la limpieza en Twenty, separadas por coma. Vacío = sin limpieza automática. |
 | `KEEPALIVE_MINUTOS` | `60` | Frecuencia del keep-alive. |
 
 Solo corre una sincronización a la vez: si ya hay una en curso (por ejemplo,

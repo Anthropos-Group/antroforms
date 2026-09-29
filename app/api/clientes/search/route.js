@@ -7,8 +7,9 @@ import { mesesPermitidosEncuestador } from "../../../../lib/fecha";
 export const dynamic = "force-dynamic";
 
 // Timeout defensivo para no degradar la UX si Twenty tiene lentitud: si no
-// responde a tiempo, se busca igual en la caché local.
-const TIMEOUT_TWENTY_MS = 3500;
+// responde a tiempo, se busca igual en la caché local (que se refresca sola cada
+// pocos minutos, así que igual incluye las altas recientes).
+const TIMEOUT_TWENTY_MS = 6000;
 
 // El término va dentro de la sintaxis de filtros de Twenty (`or(campo[ilike]:%q%,...)`):
 // comas, paréntesis y dos puntos romperían o alterarían la expresión.
@@ -36,19 +37,25 @@ export async function GET(request) {
 
     const pool = getPool();
     let twentyDisponible = null;
+    let twentyMotivo = null;
 
     // Sincronización en vivo con Twenty CRM: trae altas y cambios de estado en
     // tiempo real antes de buscar en la caché.
     const qTwenty = terminoParaTwenty(q);
     if (twentyConfigurado() && qTwenty.length >= 3) {
       try {
-        const orConditions = [
-          `name.firstName[ilike]:%${qTwenty}%`,
-          `name.lastName[ilike]:%${qTwenty}%`,
-          `codigoCliente[ilike]:%${qTwenty}%`,
-          `telefono1[ilike]:%${qTwenty}%`,
-          `idEdimca[ilike]:%${qTwenty}%`,
-        ];
+        // Si se tecleó un número (código de cliente, id EDIMCA o teléfono) no hace
+        // falta buscar en los nombres, y el código se busca exacto: consulta más liviana.
+        const esNumero = /^\d{4,}$/.test(qTwenty);
+        const orConditions = esNumero
+          ? [`codigoCliente[eq]:${qTwenty}`, `idEdimca[eq]:${qTwenty}`, `telefono1[ilike]:%${qTwenty}%`]
+          : [
+              `name.firstName[ilike]:%${qTwenty}%`,
+              `name.lastName[ilike]:%${qTwenty}%`,
+              `codigoCliente[ilike]:%${qTwenty}%`,
+              `telefono1[ilike]:%${qTwenty}%`,
+              `idEdimca[ilike]:%${qTwenty}%`,
+            ];
         const condMeses = meses.map((m) => `mesGestion[ilike]:%${m}%`);
         const filtroMeses = condMeses.length === 1 ? condMeses[0] : `or(${condMeses.join(",")})`;
         const filter = `and(or(${orConditions.join(",")}),${filtroMeses})`;
@@ -63,6 +70,7 @@ export async function GET(request) {
         twentyDisponible = true;
       } catch (twentyErr) {
         twentyDisponible = false;
+        twentyMotivo = /no respondió/.test(twentyErr.message) ? "lento" : "error";
         console.warn("Aviso en live sync con Twenty CRM:", twentyErr.message);
       }
     }
@@ -110,7 +118,7 @@ export async function GET(request) {
       }
     }
 
-    return NextResponse.json({ results: resultadosUnicos, twentyDisponible, mesesPermitidos });
+    return NextResponse.json({ results: resultadosUnicos, twentyDisponible, twentyMotivo, mesesPermitidos });
   } catch (err) {
     console.error("Error en búsqueda de clientes:", err);
     return NextResponse.json({ error: "No se pudo completar la búsqueda", results: [] }, { status: 500 });
