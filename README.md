@@ -92,7 +92,7 @@ En producción, la corrida diaria (`--mode=incremental`) se dispara vía `POST /
 | `npm run build` | Build de producción |
 | `npm run start` | Sirve el build de producción |
 | `npm run db:migrate` | Aplica las migraciones pendientes de `supabase/migrations/` |
-| `npm run db:migrate:api` | Igual que `db:migrate` pero vía la Management API de Supabase (HTTPS), para cuando el puerto 5432 está bloqueado. Requiere `SUPABASE_ACCESS_TOKEN` y `SUPABASE_PROJECT_REF`; acepta `--dry-run` |
+| `npm run db:migrate:api` | Igual que `db:migrate` pero vía la Management API de Supabase (HTTPS), para cuando el puerto 5432 está bloqueado. Requiere `SUPABASE_ACCESS_TOKEN` y `SUPABASE_PROJECT_REF` (el ref o la URL del dashboard del proyecto); acepta `--dry-run` |
 | `npm test` | Pruebas automatizadas (reglas del cuestionario, normalización, fechas, reportes, autenticación) |
 | `npm run sync:twenty -- --mode=<dry_run\|incremental\|backfill_completo>` | Corre el cron de limpieza/sincronización manualmente |
 
