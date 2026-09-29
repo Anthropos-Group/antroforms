@@ -1,9 +1,13 @@
 import Link from "next/link";
 import { getPool } from "../../../../lib/db";
+import { formatFechaHoraEcuador } from "../../../../lib/fecha";
+
+const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 export const dynamic = "force-dynamic";
 
 async function getRunWithChanges(id) {
+  if (!UUID.test(id)) return { run: null, changes: [] };
   const pool = getPool();
   const { rows: runRows } = await pool.query(`select * from sync_runs where id = $1`, [id]);
   const { rows: changeRows } = await pool.query(
@@ -36,7 +40,7 @@ export default async function SyncRunDetailPage({ params }) {
         Corrida {run.tipo} — <span className={`badge badge-${run.estado}`}>{run.estado}</span>
       </h1>
       <p className="page-subtitle">
-        {new Date(run.iniciado_en).toLocaleString("es-EC")} · {run.registros_escaneados} escaneados,{" "}
+        {formatFechaHoraEcuador(run.iniciado_en)} · {run.registros_escaneados} escaneados,{" "}
         {run.registros_modificados} con cambios, {run.errores} errores
         {changes.length === 500 && " (mostrando los primeros 500 cambios)"}
       </p>

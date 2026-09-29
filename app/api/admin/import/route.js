@@ -5,6 +5,7 @@ import {
   verifySessionToken,
   SESSION_COOKIE,
 } from "../../../../lib/auth";
+import { mesActualUTC5 } from "../../../../lib/fecha";
 
 export const dynamic = "force-dynamic";
 
@@ -22,9 +23,16 @@ function parseBooleanValue(val) {
 function parseNumberValue(val) {
   if (val === null || val === undefined) return null;
   if (typeof val === "number" && !Number.isNaN(val)) return val;
-  const str = String(val).trim();
+  const str = String(val).trim().replace(",", ".");
+  if (!str) return null;
   const num = Number(str);
   return Number.isNaN(num) ? null : num;
+}
+
+// Solo calificaciones enteras 1-10 (mismo criterio que la app del encuestador).
+function parseCalificacion(val) {
+  const num = parseNumberValue(val);
+  return Number.isInteger(num) && num >= 1 && num <= 10 ? num : null;
 }
 
 function parseDateValue(val) {
@@ -87,10 +95,19 @@ async function procesarLote(rows, mapping) {
         .trim();
     }
 
+    const porDefecto = () => encRows.find((e) => e.activo)?.id || encRows[0]?.id;
+
+    // Devuelve { id, inferido } — inferido=true cuando no hubo coincidencia y se
+    // usó un encuestador por defecto (se reporta como advertencia al admin).
     function resolverEncuestador(nombreRaw) {
-      if (!nombreRaw) return encRows.find((e) => e.activo)?.id || encRows[0]?.id;
+      const r = resolverEncuestadorId(nombreRaw);
+      return r ? { id: r, inferido: false } : { id: porDefecto(), inferido: true };
+    }
+
+    function resolverEncuestadorId(nombreRaw) {
+      if (!nombreRaw) return null;
       const normInput = normalizar(nombreRaw);
-      if (!normInput) return encRows.find((e) => e.activo)?.id || encRows[0]?.id;
+      if (!normInput) return null;
 
       // 1. Coincidencia exacta normalizada
       const exacto = encRows.find((e) => normalizar(e.nombre) === normInput);
@@ -111,8 +128,15 @@ async function procesarLote(rows, mapping) {
       });
       if (matchInclusion) return matchInclusion.id;
 
-      // 4. Si no se puede inferir, asignar a un encuestador activo existente sin duplicar
-      return encRows.find((e) => e.activo)?.id || encRows[0]?.id;
+      // 4. Sin coincidencia: el llamador asigna un encuestador por defecto y lo advierte.
+      return null;
+    }
+
+    if (encRows.length === 0) {
+      return NextResponse.json(
+        { error: "No hay encuestadores registrados. Crea al menos uno antes de importar." },
+        { status: 400 }
+      );
     }
 
     // Caché de clientes para optimizar transacciones
@@ -123,6 +147,7 @@ async function procesarLote(rows, mapping) {
     let importadas = 0;
     let duplicados = 0;
     const errores = [];
+    const advertencias = [];
 
     for (let rIdx = 0; rIdx < rows.length; rIdx++) {
       const row = rows[rIdx];
@@ -135,8 +160,10 @@ async function procesarLote(rows, mapping) {
         let nombreEncuestador = "";
         let codigoCliente = null;
         let nombreCliente = "Cliente Importado";
-        let pdv = "MATRIZ";
-        let mesGestion = new Date().toLocaleDateString("es-EC", { month: "long" });
+        // Sin PDV en el archivo se deja vacío: antes se inventaba "MATRIZ" y esa
+        // sucursal ficticia aparecía en el monitoreo.
+        let pdv = null;
+        let mesGestion = mesActualUTC5();
 
         const respuestasDict = {};
         const justificativoDict = {};
@@ -162,7 +189,7 @@ async function procesarLote(rows, mapping) {
           } else if (targetField === "pdv") {
             pdv = String(cellValue).trim();
           } else if (targetField === "mes_gestion") {
-            mesGestion = String(cellValue).trim();
+            mesGestion = String(cellValue).trim().toUpperCase();
           } else if (targetField.startsWith("pregunta_")) {
             const qId = targetField.replace("pregunta_", "");
             respuestasDict[qId] = cellValue;
@@ -195,7 +222,7 @@ async function procesarLote(rows, mapping) {
         }
 
         // 1. Resolver encuestador existente legítimo (nunca duplica)
-        const encuestadorId = resolverEncuestador(nombreEncuestador);
+        const { id: encuestadorId, inferido } = resolverEncuestador(nombreEncuestador);
 
         // 2. Obtener o crear cliente en clientes_cache
         let clienteTwentyId = null;
@@ -208,14 +235,12 @@ async function procesarLote(rows, mapping) {
             );
             if (cliRows.length > 0) {
               clienteTwentyId = cliRows[0].id_twenty;
-              await client.query(
-                `update clientes_cache set status = 'EFECTIVA', synced_at = now() where id_twenty = $1 or codigo_cliente = $2`,
-                [clienteTwentyId, codigoCliente]
-              );
             } else {
+              // Cliente histórico que no está en Twenty (id ficticio): se marca como ya
+              // encuestado para que nunca aparezca en el buscador del encuestador.
               const { rows: newCli } = await client.query(
                 `insert into clientes_cache (id_twenty, codigo_cliente, nombre, pdv, mes_gestion, status, synced_at)
-                 values (gen_random_uuid(), $1, $2, $3, $4, 'EFECTIVA', now())
+                 values (gen_random_uuid(), $1, $2, $3, $4, 'YA_LE_REALIZARON_LA_ENCUESTA', now())
                  returning id_twenty`,
                 [codigoCliente, nombreCliente, pdv, mesGestion]
               );
@@ -261,7 +286,7 @@ async function procesarLote(rows, mapping) {
               if (boolVal === false) completada = false;
             }
           } else if (p.tipo === "escala_1_10") {
-            const numVal = parseNumberValue(rawVal);
+            const numVal = parseCalificacion(rawVal);
             if (numVal !== null) {
               if (p.requiere_justificacion) {
                 valorFinal = {
@@ -286,6 +311,22 @@ async function procesarLote(rows, mapping) {
 
         if (!completada) {
           await client.query(`update encuestas set completada = false where id = $1`, [encuestaId]);
+        } else if (clienteTwentyId) {
+          // Solo una encuesta efectiva saca al cliente del buscador (antes también las cortadas).
+          await client.query(
+            `update clientes_cache set status = 'EFECTIVA', synced_at = now() where id_twenty = $1`,
+            [clienteTwentyId]
+          );
+        }
+
+        if (inferido) {
+          advertencias.push({
+            fila: rIdx + 1,
+            cliente: nombreCliente || codigoCliente || `Fila ${rIdx + 1}`,
+            mensaje: nombreEncuestador
+              ? `Encuestador "${nombreEncuestador}" no reconocido: se asignó uno por defecto.`
+              : "Fila sin encuestador: se asignó uno por defecto.",
+          });
         }
 
         await client.query(`release savepoint ${spName}`);
@@ -301,7 +342,7 @@ async function procesarLote(rows, mapping) {
     }
 
     await client.query("commit");
-    return NextResponse.json({ ok: true, importadas, duplicados, errores });
+    return NextResponse.json({ ok: true, importadas, duplicados, errores, advertencias });
   } catch (err) {
     await client.query("rollback");
     console.error("Error en lote de importación masiva:", err);

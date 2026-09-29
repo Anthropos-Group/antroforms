@@ -109,35 +109,47 @@ Baja lógica.
 ## Encuestas
 
 ### `POST /api/encuestas`
-Crea una encuesta completa (o parcial si se cortó por condición).
+Registra una encuesta completa (o parcial si se cortó por condición). El servidor **no confía en el navegador**: valida las respuestas con las mismas reglas de la UI (`lib/encuesta-logica.js`) y calcula él mismo si quedó `completada` y qué estado va a Twenty.
 
 **Request:**
 ```json
 {
   "cuestionario_id": "uuid",
   "cliente_twenty_id": "uuid-de-twenty",
-  "codigo_cliente": "1455446",
   "encuestador_id": "uuid",
-  "completada": true,
+  "idempotency_key": "draft_1727...",
   "respuestas": [
     { "pregunta_id": "uuid", "valor": true },
-    { "pregunta_id": "uuid", "valor": 9 },
-    { "pregunta_id": "uuid", "valor": "Buena atención" }
+    { "pregunta_id": "uuid", "valor": { "calificacion": 9, "justificacion": "Buena atención" } },
+    { "pregunta_id": "uuid", "valor": "N/A" }
   ]
 }
 ```
 
-**Efecto secundario:** si `completada: true`, dispara `PATCH` a Twenty (`status: "EFECTIVA"`) sobre `cliente_twenty_id`. Si ese `PATCH` falla, la encuesta igual se guarda (no se pierde el trabajo del encuestador) y el error queda logueado para reintento manual desde el admin.
+- `idempotency_key` (recomendado): reintentar con la misma clave devuelve la encuesta ya creada (`duplicada: true`) en vez de duplicarla.
+- Escalas: `calificacion` entera 1-10; justificación obligatoria si la pregunta la requiere (máx. 2000 caracteres).
+- Preguntas con condición de dato del cliente (P7/TOTAL) sin dato se guardan como `"N/A"` aunque no vengan.
 
-**Response 201:** `{ "id": "uuid" }`
+**Efectos:** si queda completada → `status: "EFECTIVA"`; si el cliente no aceptó participar (primera pregunta = No) → `status: "NO_LLAMAR"`. Se actualiza `clientes_cache` en la misma transacción y luego se hace `PATCH` a Twenty con timeout de 8 s; si falla, queda en la cola `pending_twenty_sync` (la encuesta igual queda guardada).
+
+**Respuestas:**
+
+| Código | Cuándo |
+|---|---|
+| `201` | `{ "id", "completada", "status", "twentyError" }` |
+| `200` | Reintento de un envío ya guardado: `{ "id", "completada", "duplicada": true }` |
+| `400` | Campos faltantes / ids inválidos / encuestador inexistente |
+| `404` | Cliente no existe en `clientes_cache` |
+| `409` | `code: "YA_ENCUESTADO"` (el cliente ya tiene una encuesta efectiva) o `code: "CUESTIONARIO_DESACTUALIZADO"` |
+| `422` | `code: "RESPUESTAS_INVALIDAS"`, con `errores: [{ preguntaId, mensaje }]` |
 
 ### `GET /api/encuestas` (admin)
-Lista encuestas con filtros de query: `encuestador_id`, `desde`, `hasta`, `mes_gestion`. Usado por la vista de reportes antes de exportar.
+Lista encuestas con filtros de query: `encuestador_id`, `desde`, `hasta` (fechas en hora de Ecuador), `mes_gestion`, `pdv`, `estado` (`efectiva` | `cortada`). Devuelve hasta 1000 filas (`truncado: true` si hay más) y un `resumen` calculado en SQL sobre todo el universo filtrado: totales, tasa de efectividad y, por pregunta, promedio, promotores/pasivos/detractores, índice neto (NPS) y conteos Sí/No/N/A.
 
 ### `GET /api/encuestas/export`
 Genera y descarga el Excel. Mismos filtros que el listado.
 
-**Response:** archivo `.xlsx` (una fila por encuesta, columnas: encuestador, cliente, código, PDV, mes de gestión, fecha, completada, y una columna por pregunta con su respuesta).
+**Response:** archivo `.xlsx` con dos hojas: "Encuestas" (una fila por encuesta: fecha en hora de Ecuador, encuestador, cliente, código, teléfono, PDV, mes de gestión, etiqueta, completada, y una columna por pregunta y su justificación) y "Resumen" (KPIs y promedio / NPS por pregunta).
 
 ## Cron / Sync con Twenty
 
@@ -165,3 +177,20 @@ Historial de corridas (`sync_runs`), paginado.
 
 ### `GET /api/cron/sync-twenty/runs/:id/changes` (admin)
 Detalle de cambios de una corrida específica (`sync_changes`) — para auditar qué se modificó en Twenty.
+
+## Configuración y operación (nuevo)
+
+### `PATCH /api/cuestionarios/activo` (admin)
+Edita `nombre`, `guion_apertura`, `guion_cierre` (variables `{{ENCUESTADOR}}`, `{{SUCURSAL}}`, `{{FECHA}}`) y `meta_mensual_pdv` (entero ≥ 1, usada por el monitoreo).
+
+### `POST /api/preguntas/reordenar` (admin)
+`{ "ids": ["uuid", ...] }` con todas las preguntas del cuestionario activo en el nuevo orden. Rechaza órdenes que dejen una pregunta antes de la pregunta de la que depende.
+
+### `GET /api/admin/twenty-pendientes` · `POST /api/admin/twenty-pendientes` (admin)
+Lista la cola de cambios de estado que Twenty no aceptó al cerrar encuestas / reintenta todos ahora (incluidos los que agotaron los 5 reintentos automáticos).
+
+### `GET /api/health` (público)
+`{ "ok": true, "db": "ok" }` o `503`. Lo usa el `HEALTHCHECK` de Docker.
+
+### Límites de login
+`POST /api/admin/login` y `POST /api/encuestador/login` responden `429` (con `Retry-After`) tras demasiados intentos fallidos en 15 minutos.

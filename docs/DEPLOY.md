@@ -43,7 +43,9 @@ En Cloudflare Zero Trust → tu túnel → **Published application routes → Ad
 |---|---|
 | `encuestas.aiagentrevenue.online` (o el que prefieras) | `http://antroforms-web-strattos:3000` |
 
-## 5. Aplicar el esquema de base de datos (una sola vez)
+## 5. Aplicar el esquema de base de datos
+
+> **Cada actualización que agregue un archivo en `supabase/migrations/` requiere correr las migraciones _antes_ del "Pull and redeploy".** Es seguro correrlas varias veces.
 
 Las migraciones solo necesitan `SUPABASE_DB_URL` — se pueden correr desde cualquier máquina con acceso a internet, no hace falta que sea el servidor:
 
@@ -72,9 +74,16 @@ crontab -e
 
 (11:00 hora Ecuador = 16:00 UTC)
 
+Solo corre una sincronización a la vez: si ya hay una en curso (por ejemplo, alguien presionó el botón manual) la llamada responde `409`. Una corrida que quede colgada más de 15 minutos se marca como fallida automáticamente.
+
+## 7. Healthcheck y monitoreo
+
+La imagen trae un `HEALTHCHECK` contra `GET /api/health` (verifica la conexión a la base de datos). En Portainer el contenedor debe aparecer como **healthy**. Conviene apuntar además un monitor externo (UptimeRobot, Better Stack…) a `https://<dominio>/api/health`.
+
 ## Actualizar la app
 
-Con un push a `main` en GitHub, en Portainer: **Stacks → antroforms → Pull and redeploy** (o configura un webhook de Portainer para que se redepliegue solo con cada push).
+1. Si la actualización trae migraciones nuevas, aplicarlas primero (paso 5).
+2. Con un push a `main` en GitHub, en Portainer: **Stacks → antroforms → Pull and redeploy** (o configura un webhook de Portainer para que se redepliegue solo con cada push).
 
 ## Dar de baja
 

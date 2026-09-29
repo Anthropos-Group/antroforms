@@ -3,54 +3,37 @@ import { getPool } from "../../../lib/db";
 import {
   verifySessionToken,
   SESSION_COOKIE,
-  verifyEncuestadorSessionToken,
-  ENCUESTADOR_SESSION_COOKIE,
 } from "../../../lib/auth";
+import { rangoMesEcuador } from "../../../lib/fecha";
 
 export const dynamic = "force-dynamic";
 
-// Meta mensual por PDV — regla de negocio del cliente (meta de 25 encuestas completadas por sucursal).
-const META_MENSUAL_POR_PDV = 25;
+// Valor por defecto si la migración 0009 (meta configurable) aún no se aplicó.
+const META_MENSUAL_POR_PDV_DEFAULT = 25;
 
-function calcularRangoMes(yyyyMm) {
-  const parts = (yyyyMm || "").split("-");
-  const now = new Date();
-  const anio = parts.length === 2 ? Number(parts[0]) : now.getFullYear();
-  const mes = parts.length === 2 ? Number(parts[1]) : now.getMonth() + 1;
-
-  const inicio = new Date(Date.UTC(anio, mes - 1, 1, 0, 0, 0, 0)).toISOString();
-  const fin = new Date(Date.UTC(anio, mes, 1, 0, 0, 0, 0)).toISOString();
-  return { inicio, fin };
+async function metaMensual(pool) {
+  try {
+    const { rows } = await pool.query(
+      `select meta_mensual_pdv from cuestionarios where activo = true order by created_at desc limit 1`
+    );
+    return rows[0]?.meta_mensual_pdv || META_MENSUAL_POR_PDV_DEFAULT;
+  } catch {
+    return META_MENSUAL_POR_PDV_DEFAULT;
+  }
 }
 
 export async function GET(request) {
   try {
     const { searchParams } = new URL(request.url);
-    const mes = searchParams.get("mes") || new Date().toISOString().slice(0, 7); // YYYY-MM
+    // Mes calendario en hora de Ecuador (antes se cortaba a medianoche UTC y las
+    // encuestas hechas después de las 19:00 del último día caían en el mes siguiente).
+    const { inicio: fechaInicio, fin: fechaFin, mes } = rangoMesEcuador(searchParams.get("mes"));
 
-    // Determinar el rol de la sesión activa
-    let rol = "encuestador";
-    const adminToken = request.cookies.get(SESSION_COOKIE)?.value;
-    if (verifySessionToken(adminToken)) {
-      rol = "admin";
-    } else {
-      const encToken = request.cookies.get(ENCUESTADOR_SESSION_COOKIE)?.value;
-      if (verifyEncuestadorSessionToken(encToken)) {
-        rol = "encuestador";
-      }
-    }
+    // El proxy ya garantiza que hay una sesión válida; aquí solo se distingue el rol.
+    const rol = verifySessionToken(request.cookies.get(SESSION_COOKIE)?.value) ? "admin" : "encuestador";
 
-    let pool;
-    try {
-      pool = getPool();
-    } catch (err) {
-      return NextResponse.json(
-        { error: `Error de configuración de BD: ${err.message}` },
-        { status: 500 }
-      );
-    }
-
-    const { inicio: fechaInicio, fin: fechaFin } = calcularRangoMes(mes);
+    const pool = getPool();
+    const meta = await metaMensual(pool);
 
     // 1. Obtener todas las sucursales (PDVs) del catálogo de clientes y cruzar con encuestas completadas en el rango.
     // Esto asegura que gerencia y encuestadores vean qué sucursales tienen 0 avance.
@@ -74,9 +57,9 @@ export async function GET(request) {
       [fechaInicio, fechaFin]
     );
 
-    // 2. Histórico mensual general (últimos 12 meses)
+    // 2. Histórico mensual general (últimos 12 meses, agrupado en hora de Ecuador)
     const { rows: historico } = await pool.query(
-      `select to_char(created_at, 'YYYY-MM') as mes, count(*)::int as completadas
+      `select to_char(created_at at time zone 'America/Guayaquil', 'YYYY-MM') as mes, count(*)::int as completadas
        from encuestas
        where completada = true
        group by 1
@@ -105,7 +88,7 @@ export async function GET(request) {
 
     return NextResponse.json({
       mes,
-      meta_por_pdv: META_MENSUAL_POR_PDV,
+      meta_por_pdv: meta,
       pdvs,
       historico: historico.reverse(),
       entrevistadores,
@@ -113,6 +96,6 @@ export async function GET(request) {
     });
   } catch (err) {
     console.error("Error en /api/monitoreo:", err);
-    return NextResponse.json({ error: err.message, pdvs: [], entrevistadores: [] }, { status: 500 });
+    return NextResponse.json({ error: "No se pudo cargar el monitoreo", pdvs: [], entrevistadores: [] }, { status: 500 });
   }
 }

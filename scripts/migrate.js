@@ -1,7 +1,13 @@
-require("dotenv").config();
+// dotenv es opcional: dentro del contenedor las variables ya vienen del entorno.
+try {
+  require("dotenv").config();
+} catch {
+  // sin dotenv instalado (imagen de producción)
+}
 const fs = require("fs");
 const path = require("path");
 const { Client } = require("pg");
+const { sslConfig } = require("../lib/db");
 
 async function main() {
   const connectionString = process.env.SUPABASE_DB_URL;
@@ -16,7 +22,7 @@ async function main() {
     .filter((f) => f.endsWith(".sql"))
     .sort();
 
-  const client = new Client({ connectionString, ssl: { rejectUnauthorized: false } });
+  const client = new Client({ connectionString, ssl: sslConfig(connectionString) });
   await client.connect();
 
   try {

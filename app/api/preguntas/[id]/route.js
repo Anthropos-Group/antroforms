@@ -1,36 +1,42 @@
 import { NextResponse } from "next/server";
 import { getPool } from "../../../../lib/db";
+import { validarPregunta, validarCondicionContraBD } from "../../../../lib/preguntas";
+import { esUUID, errorJson, leerJson, conErrores } from "../../../../lib/http";
 
 export const dynamic = "force-dynamic";
 
-const CAMPOS_EDITABLES = {
-  texto: "text",
-  tipo: "text",
-  orden: "int",
-  numero_reporte: "int",
-  requiere_justificacion: "bool",
-  condicion: "json",
-  activa: "bool",
-};
-
-export async function PATCH(request, { params }) {
+export const PATCH = conErrores("PATCH /api/preguntas/[id]", async (request, { params }) => {
   const { id } = await params;
-  const body = await request.json();
+  if (!esUUID(id)) return errorJson("Pregunta no encontrada", 404);
+  const body = await leerJson(request);
+  if (!body) return errorJson("Cuerpo de la solicitud inválido");
+
+  const { error, datos } = validarPregunta(body, { parcial: true });
+  if (error) return errorJson(error);
+  if (Object.keys(datos).length === 0) return errorJson("Nada que actualizar");
+
   const pool = getPool();
+  const { rows: actuales } = await pool.query(
+    `select cuestionario_id, orden from preguntas where id = $1`,
+    [id]
+  );
+  if (!actuales[0]) return errorJson("No encontrada", 404);
+
+  if ("condicion" in datos) {
+    const errorCondicion = await validarCondicionContraBD(pool, {
+      cuestionarioId: actuales[0].cuestionario_id,
+      preguntaId: id,
+      orden: datos.orden ?? actuales[0].orden,
+      condicion: datos.condicion,
+    });
+    if (errorCondicion) return errorJson(errorCondicion);
+  }
 
   const sets = [];
   const valores = [];
-  for (const [campo, kind] of Object.entries(CAMPOS_EDITABLES)) {
-    if (!(campo in body)) continue;
-    let valor = body[campo];
-    if (kind === "text" && typeof valor === "string") valor = valor.trim();
-    if (kind === "json") valor = valor === null ? null : JSON.stringify(valor);
-    valores.push(valor);
+  for (const [campo, valor] of Object.entries(datos)) {
+    valores.push(campo === "condicion" ? (valor === null ? null : JSON.stringify(valor)) : valor);
     sets.push(`${campo} = $${valores.length}`);
-  }
-
-  if (sets.length === 0) {
-    return NextResponse.json({ error: "Nada que actualizar" }, { status: 400 });
   }
 
   valores.push(id);
@@ -39,21 +45,19 @@ export async function PATCH(request, { params }) {
      returning id, orden, numero_reporte, texto, tipo, requiere_justificacion, condicion, activa`,
     valores
   );
-  if (rows.length === 0) {
-    return NextResponse.json({ error: "No encontrada" }, { status: 404 });
-  }
   return NextResponse.json(rows[0]);
-}
+});
 
-export async function DELETE(request, { params }) {
+export const DELETE = conErrores("DELETE /api/preguntas/[id]", async (request, { params }) => {
   const { id } = await params;
+  if (!esUUID(id)) return errorJson("Pregunta no encontrada", 404);
   const pool = getPool();
   const { rows } = await pool.query(
     `update preguntas set activa = false where id = $1 returning id`,
     [id]
   );
   if (rows.length === 0) {
-    return NextResponse.json({ error: "No encontrada" }, { status: 404 });
+    return errorJson("No encontrada", 404);
   }
   return NextResponse.json({ ok: true });
-}
+});

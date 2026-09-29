@@ -42,6 +42,8 @@ cp .env.example .env
 
 **Nunca subas `.env` a git** — ya está en `.gitignore`.
 
+Para usar un Postgres local o interno sin SSL (desarrollo), agrega `?sslmode=disable` al final de `SUPABASE_DB_URL`. Opcional: `PG_POOL_MAX` (conexiones máximas del pool, por defecto 10).
+
 ## 3. Aplicar el esquema de base de datos
 
 Corre las migraciones (crea las tablas en Supabase y carga el cuestionario inicial):
@@ -90,6 +92,7 @@ En producción, la corrida diaria (`--mode=incremental`) se dispara vía `POST /
 | `npm run build` | Build de producción |
 | `npm run start` | Sirve el build de producción |
 | `npm run db:migrate` | Aplica las migraciones pendientes de `supabase/migrations/` |
+| `npm test` | Pruebas automatizadas (reglas del cuestionario, normalización, fechas, reportes, autenticación) |
 | `npm run sync:twenty -- --mode=<dry_run\|incremental\|backfill_completo>` | Corre el cron de limpieza/sincronización manualmente |
 
 ## Estructura del proyecto
@@ -97,12 +100,17 @@ En producción, la corrida diaria (`--mode=incremental`) se dispara vía `POST /
 ```
 app/            Páginas y API routes (Next.js App Router)
 components/     Componentes compartidos (navegación)
-lib/            Lógica de negocio (auth, sync con Twenty, normalización, reportes)
+lib/            Lógica de negocio (auth, reglas del cuestionario, sync con Twenty, normalización, reportes)
+tests/          Pruebas automatizadas (node --test)
 scripts/        CLIs de mantenimiento (migraciones, sync, alta de admin)
 supabase/       Migraciones SQL versionadas
 docs/           Documentación de diseño (PRD, arquitectura, base de datos, API)
 proxy.js        Protección de rutas por rol (admin / encuestador)
 ```
+
+## Salida a producción
+
+Antes de desplegar, revisa el checklist y el resultado de la auditoría en [docs/PRODUCCION.md](docs/PRODUCCION.md).
 
 ## Despliegue
 

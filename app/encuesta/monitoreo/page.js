@@ -2,10 +2,10 @@
 
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
+import { mesISOEcuador } from "../../../lib/fecha";
 
-function mesActualISO() {
-  return new Date().toISOString().slice(0, 7); // YYYY-MM
-}
+// Mes en curso según la hora de Ecuador (no la del navegador ni UTC).
+const mesActualISO = () => mesISOEcuador();
 
 function nombreMesLargo(yyyyMm) {
   const [anio, mes] = yyyyMm.split("-").map(Number);
@@ -30,6 +30,10 @@ export default function EncuestadorMonitoreoPage() {
     setCargando(true);
     try {
       const res = await fetch(`/api/monitoreo?mes=${mes}`);
+      if (res.status === 401) {
+        router.replace("/login?next=/encuesta/monitoreo");
+        return;
+      }
       const d = await res.json();
 
       // Si quien accede es un administrador, redirigir inmediatamente a la vista de administración
@@ -46,6 +50,8 @@ export default function EncuestadorMonitoreoPage() {
 
   useEffect(() => {
     cargar();
+    const intervalo = setInterval(cargar, 60_000);
+    return () => clearInterval(intervalo);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -66,7 +72,7 @@ export default function EncuestadorMonitoreoPage() {
           <p className="section-subtitle">Mostrando únicamente sucursales con registros en el mes de gestión.</p>
         </div>
 
-        {cargando ? (
+        {cargando && !data ? (
           <div className="empty-state">Cargando datos…</div>
         ) : pdvs.length === 0 ? (
           <div className="empty-state">No existen encuestas registradas para las sucursales en este mes.</div>

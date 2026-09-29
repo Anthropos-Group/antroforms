@@ -1,195 +1,226 @@
 import { NextResponse } from "next/server";
 import { getPool } from "../../../lib/db";
-import { patchPerson } from "../../../lib/twenty";
-import { obtenerReporte } from "../../../lib/reportes";
+import { patchPerson, twentyConfigurado } from "../../../lib/twenty";
+import { obtenerReporte, obtenerResumen, leerFiltros } from "../../../lib/reportes";
+import { prepararEnvio } from "../../../lib/encuesta-logica";
+import { esUUID, errorJson, leerJson, conErrores } from "../../../lib/http";
 
 export const dynamic = "force-dynamic";
 
-export async function GET(request) {
-  try {
-    const { searchParams } = new URL(request.url);
-    const desde = searchParams.get("desde");
-    const hasta = searchParams.get("hasta");
-    const encuestadorId = searchParams.get("encuestador_id");
-    const mesGestion = searchParams.get("mes_gestion");
-    const pdv = searchParams.get("pdv");
+// Tope de filas que se mandan al navegador; los KPIs se calculan en SQL sobre
+// el universo completo, así que no se distorsionan si se supera el tope.
+const LIMITE_LISTADO = 1000;
 
-    let pool;
-    try {
-      pool = getPool();
-    } catch (err) {
-      return NextResponse.json({ error: `Error de BD: ${err.message}` }, { status: 500 });
-    }
+export const GET = conErrores("GET /api/encuestas", async (request) => {
+  const { searchParams } = new URL(request.url);
+  const filtros = leerFiltros(searchParams);
+  const pool = getPool();
 
-    const reporte = await obtenerReporte(pool, { desde, hasta, encuestadorId, mesGestion, pdv, limit: 1000 });
-    if (!reporte) {
-      return NextResponse.json({ preguntas: [], encuestas: [] });
-    }
-
-    return NextResponse.json({
-      preguntas: reporte.cuestionario.preguntas.map((p) => ({
-        id: p.id,
-        orden: p.orden,
-        numero_reporte: p.numero_reporte ?? p.orden,
-        texto: p.texto,
-        requiere_justificacion: p.requiere_justificacion,
-      })),
-      encuestas: reporte.encuestas.map((e) => ({
-        id: e.id,
-        created_at: e.created_at,
-        completada: e.completada,
-        codigo_cliente: e.codigo_cliente,
-        encuestador_nombre: e.encuestador_nombre,
-        cliente_nombre: e.cliente_nombre,
-        pdv: e.pdv,
-        mes_gestion: e.mes_gestion,
-        respuestas: e.respuestas,
-      })),
-    });
-  } catch (err) {
-    console.error("Error en GET /api/encuestas:", err);
-    return NextResponse.json({ error: err.message, preguntas: [], encuestas: [] }, { status: 500 });
+  const [reporte, resumen] = await Promise.all([
+    obtenerReporte(pool, { ...filtros, limit: LIMITE_LISTADO }),
+    obtenerResumen(pool, filtros),
+  ]);
+  if (!reporte) {
+    return NextResponse.json({ preguntas: [], encuestas: [], resumen: null });
   }
+
+  return NextResponse.json({
+    preguntas: reporte.cuestionario.preguntas.map((p) => ({
+      id: p.id,
+      orden: p.orden,
+      numero_reporte: p.numero_reporte ?? p.orden,
+      texto: p.texto,
+      tipo: p.tipo,
+      requiere_justificacion: p.requiere_justificacion,
+    })),
+    encuestas: reporte.encuestas,
+    resumen,
+    limite: LIMITE_LISTADO,
+    truncado: resumen.total > reporte.encuestas.length,
+  });
+});
+
+async function cargarCuestionarioActivo(pool) {
+  const { rows } = await pool.query(
+    `select id from cuestionarios where activo = true order by created_at desc limit 1`
+  );
+  if (!rows[0]) return null;
+  const { rows: preguntas } = await pool.query(
+    `select id, orden, numero_reporte, texto, tipo, requiere_justificacion, condicion
+     from preguntas where cuestionario_id = $1 and activa = true
+     order by orden asc`,
+    [rows[0].id]
+  );
+  return { id: rows[0].id, preguntas };
 }
 
-export async function POST(request) {
+export const POST = conErrores("POST /api/encuestas", async (request) => {
+  const body = await leerJson(request);
+  if (!body) return errorJson("Cuerpo de la solicitud inválido");
+
+  const { cuestionario_id, cliente_twenty_id, encuestador_id, respuestas } = body;
+  const idempotencyKey =
+    typeof body.idempotency_key === "string" && body.idempotency_key.trim()
+      ? body.idempotency_key.trim().slice(0, 100)
+      : null;
+
+  if (!esUUID(cliente_twenty_id) || !esUUID(encuestador_id) || !Array.isArray(respuestas)) {
+    return errorJson("Faltan campos requeridos para registrar la encuesta");
+  }
+
+  const pool = getPool();
+
+  // 1. Idempotencia: el mismo envío reintentado (doble clic, red intermitente,
+  //    reintento tras un error) devuelve la encuesta ya creada en vez de duplicarla.
+  if (idempotencyKey) {
+    const { rows } = await pool.query(
+      `select id, completada from encuestas where idempotency_key = $1`,
+      [idempotencyKey]
+    );
+    if (rows[0]) {
+      return NextResponse.json({ id: rows[0].id, completada: rows[0].completada, duplicada: true });
+    }
+  }
+
+  // 2. Contexto real desde la BD (no se confía en lo que manda el navegador).
+  const cuestionario = await cargarCuestionarioActivo(pool);
+  if (!cuestionario) return errorJson("No hay un cuestionario activo", 409);
+  if (cuestionario_id && cuestionario_id !== cuestionario.id) {
+    return errorJson(
+      "El cuestionario cambió mientras se llenaba esta encuesta. Recarga la página: el borrador se conserva.",
+      409,
+      { code: "CUESTIONARIO_DESACTUALIZADO" }
+    );
+  }
+
+  const [{ rows: encRows }, { rows: cliRows }] = await Promise.all([
+    pool.query(`select id from encuestadores where id = $1`, [encuestador_id]),
+    pool.query(`select * from clientes_cache where id_twenty = $1`, [cliente_twenty_id]),
+  ]);
+  if (!encRows[0]) return errorJson("El encuestador seleccionado no existe", 400);
+  const cliente = cliRows[0];
+  if (!cliente) return errorJson("El cliente no existe en la base de clientes", 404);
+
+  // 3. Validación con las mismas reglas que la UI y cálculo del estado final.
+  const idsValidos = new Set(cuestionario.preguntas.map((p) => p.id));
+  const mapa = {};
+  for (const r of respuestas) {
+    if (r && idsValidos.has(r.pregunta_id)) mapa[r.pregunta_id] = r.valor;
+  }
+  const envio = prepararEnvio(cuestionario.preguntas, mapa, cliente);
+  if (!envio.valido) {
+    return errorJson(
+      "Faltan respuestas o hay valores inválidos. Si el cuestionario fue modificado, recarga la página (el borrador se conserva).",
+      422,
+      { code: "RESPUESTAS_INVALIDAS", errores: envio.errores }
+    );
+  }
+
+  const targetStatus = envio.completada ? "EFECTIVA" : envio.rechazo ? "NO_LLAMAR" : null;
+
+  // 4. Transacción con candado por cliente: dos encuestadores (o dos pestañas)
+  //    no pueden registrar a la vez una encuesta efectiva del mismo cliente.
+  const client = await pool.connect();
+  let encuestaId;
   try {
-    const body = await request.json();
-    const {
-      cuestionario_id,
-      cliente_twenty_id,
-      codigo_cliente,
-      encuestador_id,
-      completada,
-      respuestas,
-    } = body;
+    await client.query("begin");
+    await client.query(`select pg_advisory_xact_lock(hashtext($1))`, [cliente_twenty_id]);
 
-    if (!cuestionario_id || !cliente_twenty_id || !encuestador_id || !Array.isArray(respuestas)) {
-      return NextResponse.json({ error: "Faltan campos requeridos para registrar la encuesta" }, { status: 400 });
-    }
-
-    let pool;
-    try {
-      pool = getPool();
-    } catch (err) {
-      return NextResponse.json({ error: `Error de configuración de BD: ${err.message}` }, { status: 500 });
-    }
-
-    const client = await pool.connect();
-    let encuestaId;
-
-    try {
-      await client.query("begin");
-
-      // Idempotencia: Verificar si este cliente ya fue encuestado en los últimos 5 minutos por el mismo encuestador
-      const { rows: dups } = await client.query(
-        `select id from encuestas
-         where cliente_twenty_id = $1
-           and encuestador_id = $2
-           and created_at > now() - interval '5 minutes'
-         order by created_at desc
-         limit 1`,
-        [cliente_twenty_id, encuestador_id]
-      );
-
-      if (dups.length > 0) {
-        await client.query("rollback");
-        return NextResponse.json({
-          id: dups[0].id,
-          duplicada: true,
-          mensaje: "Esta encuesta ya fue guardada recientemente.",
-        });
-      }
-
-      const { rows } = await client.query(
-        `insert into encuestas (cuestionario_id, cliente_twenty_id, codigo_cliente, encuestador_id, completada)
-         values ($1, $2, $3, $4, $5)
-         returning id`,
-        [cuestionario_id, cliente_twenty_id, codigo_cliente ?? null, encuestador_id, !!completada]
-      );
-      encuestaId = rows[0].id;
-
-      // Inserción multi-fila optimizada de respuestas en una sola llamada SQL
-      if (respuestas.length > 0) {
-        const placeholders = [];
-        const params = [];
-        let pIdx = 1;
-
-        for (const r of respuestas) {
-          if (!r.pregunta_id) continue;
-          placeholders.push(`($${pIdx}, $${pIdx + 1}, $${pIdx + 2})`);
-          params.push(encuestaId, r.pregunta_id, JSON.stringify(r.valor));
-          pIdx += 3;
-        }
-
-        if (placeholders.length > 0) {
-          await client.query(
-            `insert into respuestas (encuesta_id, pregunta_id, valor) values ${placeholders.join(", ")}`,
-            params
-          );
-        }
-      }
-
-      await client.query("commit");
-    } catch (err) {
+    const { rows: previas } = await client.query(
+      `select e.id, e.created_at, enc.nombre as encuestador
+       from encuestas e left join encuestadores enc on enc.id = e.encuestador_id
+       where e.completada = true
+         and (e.cliente_twenty_id = $1 or ($2::text is not null and e.codigo_cliente = $2))
+       order by e.created_at desc limit 1`,
+      [cliente_twenty_id, cliente.codigo_cliente]
+    );
+    if (previas[0]) {
       await client.query("rollback");
-      console.error("Error en transacción de encuesta:", err);
-      return NextResponse.json({ error: `Error guardando encuesta: ${err.message}` }, { status: 500 });
-    } finally {
-      client.release();
+      const fecha = new Date(previas[0].created_at).toLocaleString("es-EC", { timeZone: "America/Guayaquil" });
+      return errorJson(
+        `Este cliente ya tiene una encuesta efectiva registrada${previas[0].encuestador ? ` por ${previas[0].encuestador}` : ""} (${fecha}); no se guardó una segunda.`,
+        409,
+        { code: "YA_ENCUESTADO", id: previas[0].id }
+      );
     }
 
-    // Sincronización con Twenty CRM y clientes_cache con cola de contingencia
-    let twentyError = null;
-    let targetStatus = null;
-
-    if (completada) {
-      targetStatus = "EFECTIVA";
-    } else {
-      // Si rechazó participar explícitamente en la primera pregunta, marcar NO_LLAMAR
-      const primerValor = respuestas[0]?.valor;
-      if (primerValor === false) {
-        targetStatus = "NO_LLAMAR";
-      }
+    // Red de seguridad para clientes sin idempotency_key (versiones viejas de la UI).
+    const { rows: recientes } = await client.query(
+      `select id, completada from encuestas
+       where cliente_twenty_id = $1 and encuestador_id = $2 and created_at > now() - interval '5 minutes'
+       order by created_at desc limit 1`,
+      [cliente_twenty_id, encuestador_id]
+    );
+    if (recientes[0] && !idempotencyKey) {
+      await client.query("rollback");
+      return NextResponse.json({ id: recientes[0].id, completada: recientes[0].completada, duplicada: true });
     }
 
+    const { rows } = await client.query(
+      `insert into encuestas (cuestionario_id, cliente_twenty_id, codigo_cliente, encuestador_id, completada, idempotency_key)
+       values ($1, $2, $3, $4, $5, $6)
+       returning id`,
+      [cuestionario.id, cliente_twenty_id, cliente.codigo_cliente ?? null, encuestador_id, envio.completada, idempotencyKey]
+    );
+    encuestaId = rows[0].id;
+
+    if (envio.respuestas.length > 0) {
+      const placeholders = [];
+      const params = [];
+      envio.respuestas.forEach((r, i) => {
+        placeholders.push(`($${i * 3 + 1}, $${i * 3 + 2}, $${i * 3 + 3})`);
+        params.push(encuestaId, r.pregunta_id, JSON.stringify(r.valor));
+      });
+      await client.query(
+        `insert into respuestas (encuesta_id, pregunta_id, valor) values ${placeholders.join(", ")}`,
+        params
+      );
+    }
+
+    // La caché local se actualiza en la misma transacción: el cliente desaparece
+    // del buscador de inmediato aunque Twenty tarde o esté caído.
     if (targetStatus) {
-      // 1. Actualizar inmediatamente la caché local en PostgreSQL
+      await client.query(
+        `update clientes_cache set status = $1, synced_at = now() where id_twenty = $2`,
+        [targetStatus, cliente_twenty_id]
+      );
+    }
+
+    await client.query("commit");
+  } catch (err) {
+    await client.query("rollback").catch(() => {});
+    // Carrera entre dos reintentos con la misma idempotency_key.
+    if (err.code === "23505" && idempotencyKey) {
+      const { rows } = await pool.query(`select id, completada from encuestas where idempotency_key = $1`, [idempotencyKey]);
+      if (rows[0]) return NextResponse.json({ id: rows[0].id, completada: rows[0].completada, duplicada: true });
+    }
+    throw err;
+  } finally {
+    client.release();
+  }
+
+  // 5. Cierre del ciclo con Twenty (fuera de la transacción). Timeout corto para
+  //    no dejar esperando al encuestador; si falla, queda en la cola de reintentos.
+  let twentyError = null;
+  if (targetStatus && twentyConfigurado()) {
+    try {
+      await patchPerson(cliente_twenty_id, { status: targetStatus }, { timeoutMs: 8000, reintentos: 0 });
+    } catch (err) {
+      twentyError = err.message;
+      console.error(`Twenty CRM no respondió para ${cliente_twenty_id}. Encolando reintento:`, err.message);
       try {
         await pool.query(
-          `update clientes_cache
-           set status = $1, synced_at = now()
-           where id_twenty = $2`,
-          [targetStatus, cliente_twenty_id]
+          `insert into pending_twenty_sync (cliente_twenty_id, status_target, ultimo_error) values ($1, $2, $3)`,
+          [cliente_twenty_id, targetStatus, err.message.slice(0, 1000)]
         );
-      } catch (cacheErr) {
-        console.warn("Aviso al actualizar status en clientes_cache:", cacheErr.message);
-      }
-
-      // 2. Sincronizar con Twenty CRM
-      try {
-        await patchPerson(cliente_twenty_id, { status: targetStatus });
-      } catch (err) {
-        twentyError = err.message;
-        console.error(`Twenty CRM no respondió para ${cliente_twenty_id}. Encolando reintento:`, err.message);
-
-        // Guardar en cola de contingencia de reintentos
-        try {
-          await pool.query(
-            `insert into pending_twenty_sync (cliente_twenty_id, status_target, ultimo_error)
-             values ($1, $2, $3)`,
-            [cliente_twenty_id, targetStatus, err.message]
-          );
-        } catch (qErr) {
-          // No romper si la tabla aún no se ha migrado
-          console.warn("No se pudo registrar en pending_twenty_sync:", qErr.message);
-        }
+      } catch (qErr) {
+        console.warn("No se pudo registrar en pending_twenty_sync:", qErr.message);
       }
     }
-
-    return NextResponse.json({ id: encuestaId, twentyError });
-  } catch (err) {
-    console.error("Error general en POST /api/encuestas:", err);
-    return NextResponse.json({ error: `Error en servidor: ${err.message}` }, { status: 500 });
   }
-}
+
+  return NextResponse.json(
+    { id: encuestaId, completada: envio.completada, status: targetStatus, twentyError },
+    { status: 201 }
+  );
+});

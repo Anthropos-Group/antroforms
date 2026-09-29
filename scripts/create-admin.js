@@ -1,6 +1,11 @@
 // Bootstrap del primer administrador (los siguientes se crean desde /admin/administradores).
 // Uso: node scripts/create-admin.js --nombre="Ana Perez" --email=ana@empresa.com --password=algoseguro
-require("dotenv").config();
+// dotenv es opcional: dentro del contenedor las variables ya vienen del entorno.
+try {
+  require("dotenv").config();
+} catch {
+  // sin dotenv instalado (imagen de producción)
+}
 const { getPool } = require("../lib/db");
 const { hashPassword } = require("../lib/auth");
 

@@ -1,43 +1,48 @@
 import { NextResponse } from "next/server";
 import { runSync, VALID_MODES } from "../../../../lib/sync";
-import { verifySessionToken, SESSION_COOKIE } from "../../../../lib/auth";
+import { verifySessionToken, SESSION_COOKIE, safeEqual, adminSigueActivo } from "../../../../lib/auth";
+import { getPool } from "../../../../lib/db";
 
 export const maxDuration = 300;
 export const dynamic = "force-dynamic";
 
-function estaAutorizado(request) {
+async function estaAutorizado(request) {
   const cronSecret = process.env.CRON_SECRET;
-  const authHeader = request.headers.get("authorization");
 
-  // 1. Header Bearer token
-  if (cronSecret && authHeader === `Bearer ${cronSecret}`) {
-    return true;
-  }
+  if (cronSecret) {
+    // 1. Header Bearer token
+    const authHeader = request.headers.get("authorization") || "";
+    if (authHeader.startsWith("Bearer ") && safeEqual(authHeader.slice(7), cronSecret)) return true;
 
-  // 2. Query param ?secret=... o ?key=... (ideal para servicios externos de cron sencillos)
-  const { searchParams } = new URL(request.url);
-  const paramSecret = searchParams.get("secret") || searchParams.get("key");
-  if (cronSecret && paramSecret === cronSecret) {
-    return true;
+    // 2. Query param ?secret=... o ?key=... (para servicios externos de cron sencillos).
+    //    Preferir el header: la URL con el secreto puede quedar en logs de proxies.
+    const { searchParams } = new URL(request.url);
+    const paramSecret = searchParams.get("secret") || searchParams.get("key");
+    if (paramSecret && safeEqual(paramSecret, cronSecret)) return true;
   }
 
   // 3. Sesión activa de administrador (para botón manual en /admin/sync)
-  const adminToken = request.cookies.get(SESSION_COOKIE)?.value;
-  if (verifySessionToken(adminToken)) {
-    return true;
+  const adminId = verifySessionToken(request.cookies.get(SESSION_COOKIE)?.value);
+  if (adminId) {
+    try {
+      return await adminSigueActivo(adminId, getPool);
+    } catch {
+      return false;
+    }
   }
 
   return false;
 }
 
 async function ejecutarSincronizacion(request, modeOverride, maxPagesOverride) {
-  if (!estaAutorizado(request)) {
+  if (!(await estaAutorizado(request))) {
     return NextResponse.json({ error: "No autorizado" }, { status: 401 });
   }
 
   const { searchParams } = new URL(request.url);
   const mode = modeOverride || searchParams.get("modo") || "incremental";
-  const maxPages = maxPagesOverride ?? (searchParams.get("max_pages") ? Number(searchParams.get("max_pages")) : 50);
+  const maxPagesRaw = maxPagesOverride ?? (searchParams.get("max_pages") ? Number(searchParams.get("max_pages")) : 50);
+  const maxPages = Number.isFinite(maxPagesRaw) && maxPagesRaw > 0 ? Math.min(Math.floor(maxPagesRaw), 1000) : 50;
 
   if (!VALID_MODES.includes(mode)) {
     return NextResponse.json(
@@ -56,8 +61,12 @@ async function ejecutarSincronizacion(request, modeOverride, maxPagesOverride) {
       registros_modificados: result.modificados,
       errores: result.errores,
       estado: result.estado,
+      parcial: result.parcial,
     });
   } catch (err) {
+    if (err.code === "SYNC_EN_CURSO") {
+      return NextResponse.json({ error: err.message }, { status: 409 });
+    }
     console.error("Error en cron sync-twenty:", err);
     return NextResponse.json({ error: err.message }, { status: 500 });
   }

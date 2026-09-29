@@ -1,10 +1,10 @@
 "use client";
 
 import { useEffect, useState, useMemo } from "react";
+import { mesISOEcuador } from "../../../lib/fecha";
 
-function mesActualISO() {
-  return new Date().toISOString().slice(0, 7); // YYYY-MM
-}
+// Mes en curso según la hora de Ecuador (no la del navegador ni UTC).
+const mesActualISO = () => mesISOEcuador();
 
 function nombreMesCorto(yyyyMm) {
   const [anio, mes] = yyyyMm.split("-").map(Number);
@@ -138,22 +138,32 @@ export default function AdminMonitoreoPage() {
   const [criterioOrden, setCriterioOrden] = useState("mayor_avance");
   const [filtroEstado, setFiltroEstado] = useState("todos");
 
-  async function cargar() {
-    setCargando(true);
+  const [error, setError] = useState("");
+
+  async function cargar({ silencioso = false } = {}) {
+    if (!/^\d{4}-\d{2}$/.test(mes)) return;
+    if (!silencioso) setCargando(true);
     try {
       const res = await fetch(`/api/monitoreo?mes=${mes}`);
       const d = await res.json();
+      if (!res.ok) throw new Error(d.error || "Error al cargar");
       setData(d);
+      setError("");
       setUltimaActualizacion(new Date());
+    } catch (err) {
+      setError(`No se pudo actualizar el monitoreo: ${err.message}`);
     } finally {
       setCargando(false);
     }
   }
 
+  // Recarga al cambiar de mes y refresca sola cada minuto (tablero en vivo).
   useEffect(() => {
     cargar();
+    const intervalo = setInterval(() => cargar({ silencioso: true }), 60_000);
+    return () => clearInterval(intervalo);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [mes]);
 
   const pdvs = data?.pdvs || [];
   const meta = data?.meta_por_pdv || 25;
@@ -202,15 +212,19 @@ export default function AdminMonitoreoPage() {
           <label className="field-label">Mes a consultar</label>
           <input type="month" className="text-input" value={mes} onChange={(e) => setMes(e.target.value)} />
         </div>
-        <button className="btn btn-primary" onClick={cargar} disabled={cargando}>
+        <button className="btn btn-primary" onClick={() => cargar()} disabled={cargando}>
           {cargando ? "Actualizando…" : "Consultar"}
         </button>
         {ultimaActualizacion && (
           <span style={{ fontSize: 12.5, color: "#9ca3af" }}>
-            Última actualización: {ultimaActualizacion.toLocaleTimeString("es-EC")}
+            Última actualización: {ultimaActualizacion.toLocaleTimeString("es-EC")} · se actualiza cada minuto
           </span>
         )}
       </div>
+
+      {error && (
+        <div className="validation-box" style={{ marginBottom: 20 }}>⚠️ {error}</div>
+      )}
 
       <div className="kpi-grid">
         <div className="kpi-card">

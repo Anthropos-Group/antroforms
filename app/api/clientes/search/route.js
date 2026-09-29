@@ -1,116 +1,75 @@
 import { NextResponse } from "next/server";
 import { getPool } from "../../../../lib/db";
+import { fetchPeoplePage, twentyConfigurado } from "../../../../lib/twenty";
+import { filaCache, upsertClientes } from "../../../../lib/clientes";
 
 export const dynamic = "force-dynamic";
+
+// Timeout defensivo para no degradar la UX si Twenty tiene lentitud: si no
+// responde a tiempo, se busca igual en la caché local.
+const TIMEOUT_TWENTY_MS = 3500;
+
+// El término va dentro de la sintaxis de filtros de Twenty (`or(campo[ilike]:%q%,...)`):
+// comas, paréntesis y dos puntos romperían o alterarían la expresión.
+function terminoParaTwenty(q) {
+  return q.replace(/[(),:%\\]/g, " ").replace(/\s+/g, " ").trim();
+}
+
+// Escapa comodines de LIKE para que "%" o "_" tecleados se busquen literalmente.
+function terminoParaLike(q) {
+  return q.replace(/[\\%_]/g, (c) => `\\${c}`);
+}
 
 export async function GET(request) {
   try {
     const { searchParams } = new URL(request.url);
-    const q = (searchParams.get("q") || "").trim();
+    const q = (searchParams.get("q") || "").trim().slice(0, 100);
     const mesGestion = (searchParams.get("mes_gestion") || "").trim();
 
     if (q.length < 3) {
       return NextResponse.json({ results: [] });
     }
 
-    let pool;
-    try {
-      pool = getPool();
-    } catch (err) {
-      return NextResponse.json(
-        { error: `Error de base de datos: ${err.message}` },
-        { status: 500 }
-      );
-    }
+    const pool = getPool();
+    let twentyDisponible = null;
 
-    // Sincronización en vivo con Twenty CRM:
-    // Consultar directamente a Twenty CRM para traer altas y cambios de estado en tiempo real
-    if (process.env.TWENTY_API_URL && process.env.TWENTY_API_KEY) {
+    // Sincronización en vivo con Twenty CRM: trae altas y cambios de estado en
+    // tiempo real antes de buscar en la caché.
+    const qTwenty = terminoParaTwenty(q);
+    if (twentyConfigurado() && qTwenty.length >= 3) {
       try {
         const orConditions = [
-          `name.firstName[ilike]:%${q}%`,
-          `name.lastName[ilike]:%${q}%`,
-          `codigoCliente[ilike]:%${q}%`,
-          `telefono1[ilike]:%${q}%`,
-          `idEdimca[ilike]:%${q}%`,
+          `name.firstName[ilike]:%${qTwenty}%`,
+          `name.lastName[ilike]:%${qTwenty}%`,
+          `codigoCliente[ilike]:%${qTwenty}%`,
+          `telefono1[ilike]:%${qTwenty}%`,
+          `idEdimca[ilike]:%${qTwenty}%`,
         ];
-        let filterExpr = `or(${orConditions.join(",")})`;
-        if (mesGestion && mesGestion !== "TODOS") {
-          filterExpr = `and(${filterExpr},mesGestion[ilike]:%${mesGestion}%)`;
+        let filter = `or(${orConditions.join(",")})`;
+        const mesTwenty = terminoParaTwenty(mesGestion);
+        if (mesTwenty && mesTwenty !== "TODOS") {
+          filter = `and(${filter},mesGestion[ilike]:%${mesTwenty}%)`;
         }
 
-        const params = new URLSearchParams({
-          limit: "25",
-          filter: filterExpr,
+        const { people } = await fetchPeoplePage({
+          limit: 25,
+          filter,
+          timeoutMs: TIMEOUT_TWENTY_MS,
+          reintentos: 0,
         });
-
-        // Timeout defensivo de 3.5 segundos para no degradar la UX si Twenty tiene lentitud
-        const controller = new AbortController();
-        const timeoutId = setTimeout(() => controller.abort(), 3500);
-
-        const twentyRes = await fetch(`${process.env.TWENTY_API_URL}/people?${params.toString()}`, {
-          headers: {
-            Authorization: `Bearer ${process.env.TWENTY_API_KEY}`,
-            "Content-Type": "application/json",
-          },
-          signal: controller.signal,
-        });
-
-        clearTimeout(timeoutId);
-
-        if (twentyRes.ok) {
-          const twentyData = await twentyRes.json();
-          const people = twentyData.data?.people || [];
-
-          for (const person of people) {
-            const first = person.name?.firstName ?? "";
-            const last = person.name?.lastName ?? "";
-            const nombre = [first, last].filter(Boolean).join(" ").trim();
-
-            await pool.query(
-              `insert into clientes_cache
-                 (id_twenty, codigo_cliente, nombre, pdv, mes_gestion, id_edimca, status, telefono1, total, fecha_atencion, etiqueta, synced_at, raw)
-               values ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11, now(), $12)
-               on conflict (id_twenty) do update set
-                 codigo_cliente = excluded.codigo_cliente,
-                 nombre = excluded.nombre,
-                 pdv = excluded.pdv,
-                 mes_gestion = excluded.mes_gestion,
-                 id_edimca = excluded.id_edimca,
-                 status = excluded.status,
-                 telefono1 = excluded.telefono1,
-                 total = excluded.total,
-                 fecha_atencion = excluded.fecha_atencion,
-                 etiqueta = excluded.etiqueta,
-                 synced_at = now(),
-                 raw = excluded.raw`,
-              [
-                person.id,
-                person.codigoCliente ?? null,
-                nombre,
-                person.nombrePuntoVenta ?? null,
-                person.mesGestion ?? null,
-                person.idEdimca ?? null,
-                person.status ?? null,
-                person.telefono1 ?? null,
-                person.total ?? null,
-                person.djulfechaRpdivj ?? null,
-                person.etiqueta ?? null,
-                JSON.stringify(person),
-              ]
-            );
-          }
-        }
+        await upsertClientes(pool, people.map((p) => filaCache(p)));
+        twentyDisponible = true;
       } catch (twentyErr) {
+        twentyDisponible = false;
         console.warn("Aviso en live sync con Twenty CRM:", twentyErr.message);
       }
     }
 
     // Búsqueda multi-campo en clientes_cache (ya enriquecida y sincronizada en tiempo real)
+    const valores = [`%${terminoParaLike(q)}%`];
     const condiciones = [
-      "(nombre ilike $1 or codigo_cliente ilike $1 or telefono1 ilike $1 or id_edimca ilike $1)"
+      "(nombre ilike $1 or codigo_cliente ilike $1 or telefono1 ilike $1 or id_edimca ilike $1)",
     ];
-    const valores = [`%${q}%`];
 
     if (mesGestion && mesGestion !== "TODOS") {
       valores.push(mesGestion);
@@ -130,7 +89,7 @@ export async function GET(request) {
         and e.completada = true
     )`);
 
-    let { rows } = await pool.query(
+    const { rows } = await pool.query(
       `select id_twenty, nombre, codigo_cliente, pdv, mes_gestion, id_edimca, status, telefono1, total, fecha_atencion, etiqueta
        from clientes_cache
        where ${condiciones.join(" and ")}
@@ -150,9 +109,9 @@ export async function GET(request) {
       }
     }
 
-    return NextResponse.json({ results: resultadosUnicos });
+    return NextResponse.json({ results: resultadosUnicos, twentyDisponible });
   } catch (err) {
     console.error("Error en búsqueda de clientes:", err);
-    return NextResponse.json({ error: err.message, results: [] }, { status: 500 });
+    return NextResponse.json({ error: "No se pudo completar la búsqueda", results: [] }, { status: 500 });
   }
 }

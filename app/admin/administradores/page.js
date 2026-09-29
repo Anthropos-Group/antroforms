@@ -44,12 +44,31 @@ export default function AdministradoresPage() {
   }
 
   async function toggleActivo(a) {
-    await fetch(`/api/administradores/${a.id}`, {
+    setError("");
+    const res = await fetch(`/api/administradores/${a.id}`, {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ activo: !a.activo }),
     });
+    if (!res.ok) {
+      const d = await res.json().catch(() => ({}));
+      setError(d.error || "No se pudo actualizar el administrador");
+    }
     cargar();
+  }
+
+  async function cambiarPassword(a) {
+    const password = window.prompt(`Nueva contraseña para ${a.nombre} (mínimo 8 caracteres):`);
+    if (password === null) return;
+    setError("");
+    const res = await fetch(`/api/administradores/${a.id}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ password }),
+    });
+    const d = await res.json().catch(() => ({}));
+    if (!res.ok) setError(d.error || "No se pudo cambiar la contraseña");
+    else window.alert("Contraseña actualizada.");
   }
 
   return (
@@ -114,8 +133,11 @@ export default function AdministradoresPage() {
                       {a.activo ? "Activo" : "Inactivo"}
                     </span>
                   </td>
-                  <td>
-                    <button className="btn" onClick={() => toggleActivo(a)}>
+                  <td style={{ whiteSpace: "nowrap" }}>
+                    <button className="btn" onClick={() => cambiarPassword(a)}>
+                      Cambiar contraseña
+                    </button>
+                    <button className="btn" style={{ marginLeft: 6 }} onClick={() => toggleActivo(a)}>
                       {a.activo ? "Desactivar" : "Activar"}
                     </button>
                   </td>

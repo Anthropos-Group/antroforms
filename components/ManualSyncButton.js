@@ -1,4 +1,4 @@
-﻿"use client";
+"use client";
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
@@ -25,7 +25,9 @@ export default function ManualSyncButton() {
 
       setMensaje({
         tipo: "success",
-        texto: `✓ Limpieza finalizada: ${data.registros_escaneados} escaneados, ${data.registros_modificados} actualizados, ${data.errores} errores.`,
+        texto: `✓ Limpieza finalizada: ${data.registros_escaneados} escaneados, ${data.registros_modificados} actualizados, ${data.errores} errores.${
+          data.parcial ? " Quedaron registros por revisar: se retoman en la próxima corrida." : ""
+        }`,
       });
       router.refresh();
     } catch (err) {

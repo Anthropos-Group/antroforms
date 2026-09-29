@@ -1,6 +1,15 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
+import { useRouter } from "next/navigation";
+import {
+  NA,
+  tieneDatoCliente,
+  evaluarAutoRespuestas,
+  evaluarCortePrematuro,
+  respuestaCompleta,
+  prepararEnvio,
+} from "../../lib/encuesta-logica";
 
 function armarGuion(texto, valores) {
   if (!texto) return "";
@@ -29,16 +38,52 @@ function obtenerEtiquetasEscala(textoPregunta = "") {
 }
 
 const DRAFTS_KEY = "antroforms_borradores";
+const ENCUESTADOR_KEY = "antroforms_encuestador";
+// Borradores más viejos que esto se descartan solos (el cliente seguramente ya
+// fue gestionado y la lista crecería sin límite en el navegador).
+const DRAFT_TTL_MS = 14 * 24 * 60 * 60 * 1000;
 
 function getBorradoresFromStorage() {
   if (typeof window === "undefined") return [];
   try {
     const raw = localStorage.getItem(DRAFTS_KEY);
-    return raw ? JSON.parse(raw) : [];
+    const list = raw ? JSON.parse(raw) : [];
+    if (!Array.isArray(list)) return [];
+    const limite = Date.now() - DRAFT_TTL_MS;
+    const vigentes = list.filter((b) => !b.updatedAt || new Date(b.updatedAt).getTime() > limite);
+    if (vigentes.length !== list.length) localStorage.setItem(DRAFTS_KEY, JSON.stringify(vigentes));
+    return vigentes;
   } catch (err) {
     console.error("Error leyendo borradores de localStorage:", err);
     return [];
   }
+}
+
+function leerEncuestadorRecordado() {
+  try {
+    return localStorage.getItem(ENCUESTADOR_KEY) || "";
+  } catch {
+    return "";
+  }
+}
+
+function recordarEncuestador(id) {
+  try {
+    if (id) localStorage.setItem(ENCUESTADOR_KEY, id);
+    else localStorage.removeItem(ENCUESTADOR_KEY);
+  } catch {
+    // Almacenamiento bloqueado (modo privado): solo se pierde la comodidad.
+  }
+}
+
+// fetch que manda al login si la sesión expiró (12 h) en vez de mostrar listas vacías.
+async function fetchSesion(url, options, onExpirada) {
+  const res = await fetch(url, options);
+  if (res.status === 401) {
+    onExpirada();
+    throw new Error("Sesión expirada");
+  }
+  return res;
 }
 
 function saveBorradorToStorage(borrador) {
@@ -92,99 +137,8 @@ function Stepper({ paso }) {
   );
 }
 
-function tieneDatoCliente(cliente, campo) {
-  const valor = cliente?.[campo];
-  if (valor === null || valor === undefined) return false;
-  const texto = String(valor).trim();
-  if (texto === "") return false;
-  const upper = texto.toUpperCase();
-  if (upper === "NULL" || upper === "N/A" || upper === "NA" || upper === "NONE" || upper === "NO") return false;
-  if (campo === "total") {
-    const num = Number(texto.replace(/[^0-9.-]/g, ""));
-    if (isNaN(num) || num <= 0) return false;
-  }
-  return true;
-}
-
-function evaluarAutoRespuestas(preguntas, cliente) {
-  const auto = {};
-  preguntas?.forEach((p) => {
-    if (p.condicion?.fuente === "cliente" && !tieneDatoCliente(cliente, p.condicion.campo)) {
-      auto[p.id] = "N/A";
-    }
-  });
-  return auto;
-}
-
-function evaluarCortePrematuro(preguntas, respuestas) {
-  for (let i = 0; i < preguntas.length; i++) {
-    const p = preguntas[i];
-    const cond = p.condicion;
-    if (cond?.pregunta_id) {
-      const previa = respuestas[cond.pregunta_id];
-      if (previa !== undefined && previa !== null && previa !== "N/A" && previa !== cond.valor_esperado) {
-        return { cortada: true, indiceCorte: i, preguntaCausaId: cond.pregunta_id };
-      }
-    }
-  }
-  return { cortada: false, indiceCorte: preguntas.length };
-}
-
-function validarCuestionarioCompleto(preguntas, respuestas, cliente) {
-  const errores = [];
-  const autoRespuestas = evaluarAutoRespuestas(preguntas, cliente);
-  const corteInfo = evaluarCortePrematuro(preguntas, respuestas);
-
-  const limite = corteInfo.cortada ? corteInfo.indiceCorte : preguntas.length;
-
-  for (let i = 0; i < limite; i++) {
-    const p = preguntas[i];
-    if (autoRespuestas[p.id] === "N/A") continue;
-
-    const val = respuestas[p.id];
-    const numPregunta = p.numero_reporte ?? (i + 1);
-
-    if (p.tipo === "aceptacion_si_no") {
-      if (typeof val !== "boolean") {
-        errores.push({
-          preguntaId: p.id,
-          indice: i,
-          mensaje: `Pregunta ${numPregunta}: Debe seleccionar Sí o No.`,
-        });
-      }
-    } else if (p.tipo === "escala_1_10") {
-      const cal = typeof val === "object" ? val?.calificacion : val;
-      const just = typeof val === "object" ? val?.justificacion : "";
-
-      if (cal === undefined || cal === null || Number.isNaN(cal)) {
-        errores.push({
-          preguntaId: p.id,
-          indice: i,
-          mensaje: `Pregunta ${numPregunta}: Debe seleccionar una calificación del 1 al 10.`,
-        });
-      } else if (p.requiere_justificacion && (!just || String(just).trim().length === 0)) {
-        errores.push({
-          preguntaId: p.id,
-          indice: i,
-          mensaje: `Pregunta ${numPregunta}: Debe escribir el motivo / por qué de su calificación.`,
-        });
-      }
-    } else if (p.tipo === "texto_abierto") {
-      const texto = typeof val === "string" ? val.trim() : "";
-      if (!texto) {
-        errores.push({
-          preguntaId: p.id,
-          indice: i,
-          mensaje: `Pregunta ${numPregunta}: Debe ingresar la respuesta.`,
-        });
-      }
-    }
-  }
-
-  return { valido: errores.length === 0, errores, cortada: corteInfo.cortada, hasta: limite };
-}
-
 export default function EncuestaPage() {
+  const router = useRouter();
   const [step, setStep] = useState("encuestador");
 
   const [encuestadores, setEncuestadores] = useState([]);
@@ -193,10 +147,13 @@ export default function EncuestaPage() {
 
   const [cuestionario, setCuestionario] = useState(null);
   const [cargandoCuestionario, setCargandoCuestionario] = useState(true);
+  const [errorCarga, setErrorCarga] = useState("");
 
   const [query, setQuery] = useState("");
   const [resultados, setResultados] = useState([]);
   const [buscando, setBuscando] = useState(false);
+  const [errorBusqueda, setErrorBusqueda] = useState("");
+  const [twentyCaido, setTwentyCaido] = useState(false);
   const [cliente, setCliente] = useState(null);
   const [respuestas, setRespuestas] = useState({});
   const [indice, setIndice] = useState(0);
@@ -204,34 +161,75 @@ export default function EncuestaPage() {
   const [erroresValidacion, setErroresValidacion] = useState([]);
 
   const [enviando, setEnviando] = useState(false);
+  const [errorEnvio, setErrorEnvio] = useState(null);
   const [resultadoFinal, setResultadoFinal] = useState(null);
   const [copiado, setCopiado] = useState(false);
   const [mostrarGuion, setMostrarGuion] = useState(true);
 
+  function sesionExpirada() {
+    router.replace("/login?next=/encuesta");
+  }
+
   useEffect(() => {
-    fetch("/api/encuestadores")
+    fetchSesion("/api/encuestadores", undefined, sesionExpirada)
       .then((r) => r.json())
-      .then((d) => setEncuestadores((d.encuestadores || []).filter((e) => e.activo)));
-    fetch("/api/cuestionarios/activo")
+      .then((d) => {
+        const activos = (d.encuestadores || []).filter((e) => e.activo);
+        setEncuestadores(activos);
+        // Recordar al encuestador del dispositivo: no tiene que elegirse en cada recarga.
+        const recordado = leerEncuestadorRecordado();
+        if (recordado && activos.some((e) => e.id === recordado)) {
+          setEncuestadorId(recordado);
+          setStep((prev) => (prev === "encuestador" ? "cliente" : prev));
+        }
+      })
+      .catch((err) => {
+        if (err.message !== "Sesión expirada") setErrorCarga("No se pudo cargar la lista de encuestadores.");
+      });
+    fetchSesion("/api/cuestionarios/activo", undefined, sesionExpirada)
       .then((r) => r.json())
       .then((d) => setCuestionario(d.preguntas ? d : null))
+      .catch((err) => {
+        if (err.message !== "Sesión expirada") setErrorCarga("No se pudo cargar el cuestionario. Revisa tu conexión y recarga.");
+      })
       .finally(() => setCargandoCuestionario(false));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   useEffect(() => {
     if (query.trim().length < 3) {
       setResultados([]);
+      setErrorBusqueda("");
       return;
     }
     setBuscando(true);
+    // Cancela búsquedas anteriores: sin esto una respuesta lenta de una búsqueda
+    // vieja podía pisar los resultados de lo último que se tecleó.
+    const controller = new AbortController();
     const t = setTimeout(() => {
       const params = new URLSearchParams({ q: query.trim() });
-      fetch(`/api/clientes/search?${params.toString()}`)
-        .then((r) => r.json())
-        .then((d) => setResultados(d.results || []))
-        .finally(() => setBuscando(false));
+      fetchSesion(`/api/clientes/search?${params.toString()}`, { signal: controller.signal }, sesionExpirada)
+        .then(async (r) => {
+          const d = await r.json();
+          if (!r.ok) throw new Error(d.error || "Error en la búsqueda");
+          setResultados(d.results || []);
+          setTwentyCaido(d.twentyDisponible === false);
+          setErrorBusqueda("");
+        })
+        .catch((err) => {
+          if (err.name === "AbortError" || err.message === "Sesión expirada") return;
+          setResultados([]);
+          setErrorBusqueda("No se pudo buscar. Revisa tu conexión e intenta de nuevo.");
+        })
+        .finally(() => {
+          if (!controller.signal.aborted) setBuscando(false);
+        });
     }, 300);
-    return () => clearTimeout(t);
+    return () => {
+      clearTimeout(t);
+      controller.abort();
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [query]);
 
   // Cargar borradores cuando cambia el encuestador
@@ -260,11 +258,23 @@ export default function EncuestaPage() {
 
   const preguntaActual = cuestionario?.preguntas?.[indice];
 
+  const autoRespuestas = useMemo(
+    () => (cuestionario ? evaluarAutoRespuestas(cuestionario.preguntas, cliente) : {}),
+    [cuestionario, cliente]
+  );
+
   function elegirEncuestador(id) {
     setEncuestadorId(id);
+    recordarEncuestador(id);
     const list = getBorradoresFromStorage();
     setBorradores(list.filter((b) => b.encuestadorId === id));
     setStep("cliente");
+  }
+
+  function cambiarEncuestador() {
+    recordarEncuestador("");
+    setEncuestadorId("");
+    setStep("encuestador");
   }
 
   function elegirCliente(c) {
@@ -276,6 +286,7 @@ export default function EncuestaPage() {
     const newDraftId = `draft_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`;
     setActiveDraftId(newDraftId);
     setErroresValidacion([]);
+    setErrorEnvio(null);
     setStep("cuestionario");
 
     saveBorradorToStorage({
@@ -291,16 +302,23 @@ export default function EncuestaPage() {
   function continuarBorrador(b) {
     setCliente(b.cliente);
     setRespuestas(b.respuestas || {});
-    setIndice(b.indice || 0);
+    setIndice(Math.min(b.indice || 0, Math.max(0, (cuestionario?.preguntas?.length || 1) - 1)));
     setActiveDraftId(b.id);
     setErroresValidacion([]);
+    setErrorEnvio(null);
     setStep("cuestionario");
   }
 
   function eliminarBorradorHandler(e, bId) {
     e.stopPropagation();
+    if (!window.confirm("¿Descartar este borrador? Se perderán las respuestas guardadas.")) return;
     deleteBorradorFromStorage(bId);
     setBorradores((prev) => prev.filter((b) => b.id !== bId));
+  }
+
+  function descartarBorradorActivo() {
+    if (activeDraftId) deleteBorradorFromStorage(activeDraftId);
+    nuevaEncuesta();
   }
 
   function actualizarRespuesta(preguntaId, nuevoValor) {
@@ -312,25 +330,21 @@ export default function EncuestaPage() {
   }
 
   function manejarSubmit() {
-    if (!cuestionario || !cliente) return;
-    const resultadoVal = validarCuestionarioCompleto(cuestionario.preguntas, respuestas, cliente);
+    if (!cuestionario || !cliente || enviando) return;
+    const envio = prepararEnvio(cuestionario.preguntas, respuestas, cliente);
 
-    if (!resultadoVal.valido) {
-      setErroresValidacion(resultadoVal.errores);
+    if (!envio.valido) {
+      setErroresValidacion(envio.errores);
       return;
     }
 
     setErroresValidacion([]);
-    enviar(respuestas, !resultadoVal.cortada, resultadoVal.hasta);
+    enviar(envio);
   }
 
-  async function enviar(respuestasFinales, completada, hasta) {
+  async function enviar(envio) {
     setEnviando(true);
-    const preguntasRespondidas = cuestionario.preguntas.slice(0, hasta);
-    const payloadRespuestas = preguntasRespondidas.map((p) => ({
-      pregunta_id: p.id,
-      valor: respuestasFinales[p.id],
-    }));
+    setErrorEnvio(null);
 
     try {
       const res = await fetch("/api/encuestas", {
@@ -339,25 +353,54 @@ export default function EncuestaPage() {
         body: JSON.stringify({
           cuestionario_id: cuestionario.id,
           cliente_twenty_id: cliente.id_twenty,
-          codigo_cliente: cliente.codigo_cliente,
           encuestador_id: encuestadorId,
-          completada,
-          respuestas: payloadRespuestas,
+          // El id del borrador identifica este envío: si se reintenta (doble clic,
+          // corte de red), el servidor devuelve la misma encuesta sin duplicarla.
+          idempotency_key: activeDraftId,
+          respuestas: envio.respuestas,
         }),
       });
-      const data = await res.json();
-      setResultadoFinal({ completada, id: data.id, twentyError: data.twentyError });
+      const data = await res.json().catch(() => ({}));
 
-      // Al enviar con éxito, eliminar el borrador local
+      if (!res.ok) {
+        // El borrador NO se borra: el trabajo del encuestador se conserva para reintentar.
+        if (res.status === 401) {
+          setErrorEnvio({
+            tipo: "sesion",
+            mensaje: "Tu sesión expiró. Vuelve a iniciar sesión: el borrador quedó guardado en este dispositivo.",
+          });
+        } else if (data.code === "YA_ENCUESTADO") {
+          setErrorEnvio({ tipo: "duplicado", mensaje: data.error });
+        } else if (data.code === "CUESTIONARIO_DESACTUALIZADO" || data.code === "RESPUESTAS_INVALIDAS") {
+          setErrorEnvio({ tipo: "recargar", mensaje: data.error });
+        } else {
+          setErrorEnvio({ tipo: "reintentar", mensaje: data.error || `Error del servidor (${res.status}).` });
+        }
+        return;
+      }
+
+      const completada = data.completada ?? envio.completada;
+      setResultadoFinal({
+        completada,
+        id: data.id,
+        status: data.status,
+        twentyError: data.twentyError,
+        duplicada: data.duplicada,
+      });
+
+      // Solo con confirmación del servidor se elimina el borrador local.
       if (activeDraftId) {
         deleteBorradorFromStorage(activeDraftId);
         setActiveDraftId(null);
       }
-    } catch (err) {
-      setResultadoFinal({ completada, error: err.message });
+      setStep("fin");
+    } catch {
+      setErrorEnvio({
+        tipo: "reintentar",
+        mensaje: "No hubo conexión con el servidor. El borrador está guardado; vuelve a intentar el envío.",
+      });
     } finally {
       setEnviando(false);
-      setStep("fin");
     }
   }
 
@@ -370,6 +413,7 @@ export default function EncuestaPage() {
     setIndice(0);
     setActiveDraftId(null);
     setErroresValidacion([]);
+    setErrorEnvio(null);
     setResultadoFinal(null);
     setCopiado(false);
   }
@@ -390,26 +434,23 @@ export default function EncuestaPage() {
     setTimeout(() => setCopiado(false), 2000);
   }
 
-  const progreso = useMemo(() => {
-    if (!cuestionario) return 0;
-    const auto = evaluarAutoRespuestas(cuestionario.preguntas, cliente);
-    let respondidas = 0;
-    cuestionario.preguntas.forEach((p) => {
-      if (auto[p.id] === "N/A") return;
-      const v = respuestas[p.id];
-      if (p.tipo === "aceptacion_si_no" && typeof v === "boolean") respondidas++;
-      else if (p.tipo === "escala_1_10") {
-        const cal = typeof v === "object" ? v?.calificacion : v;
-        if (cal !== undefined && cal !== null) respondidas++;
-      } else if (p.tipo === "texto_abierto" && typeof v === "string" && v.trim()) respondidas++;
-    });
-    return Math.round((respondidas / cuestionario.preguntas.length) * 100);
-  }, [respuestas, cuestionario, cliente]);
-
   const corteInfoActual = useMemo(() => {
     if (!cuestionario) return { cortada: false };
     return evaluarCortePrematuro(cuestionario.preguntas, respuestas);
   }, [cuestionario, respuestas]);
+
+  // El progreso solo cuenta las preguntas que realmente hay que hacer: las N/A
+  // automáticas y las que quedan fuera por un corte no restan (antes nunca se
+  // llegaba al 100% si el cliente no tenía servicio de corte).
+  const progreso = useMemo(() => {
+    if (!cuestionario) return 0;
+    const aplicables = cuestionario.preguntas
+      .slice(0, corteInfoActual.cortada ? corteInfoActual.indiceCorte : undefined)
+      .filter((p) => autoRespuestas[p.id] !== NA);
+    if (aplicables.length === 0) return 100;
+    const respondidas = aplicables.filter((p) => respuestaCompleta(p, respuestas[p.id])).length;
+    return Math.round((respondidas / aplicables.length) * 100);
+  }, [respuestas, cuestionario, autoRespuestas, corteInfoActual]);
 
   const nombreEncuestador = encuestadores.find((e) => e.id === encuestadorId)?.nombre || "";
   const guionApertura = cuestionario
@@ -428,6 +469,12 @@ export default function EncuestaPage() {
       </p>
 
       {step !== "fin" && <Stepper paso={step} />}
+
+      {errorCarga && (
+        <div className="validation-box" style={{ marginBottom: 16 }}>
+          ⚠️ {errorCarga}
+        </div>
+      )}
 
       {step === "encuestador" && (
         <div className="card pad">
@@ -459,7 +506,12 @@ export default function EncuestaPage() {
                 {borradores.map((b) => (
                   <div key={b.id} className="draft-item" onClick={() => continuarBorrador(b)}>
                     <div className="draft-info">
-                      <div className="draft-title">{b.cliente?.nombre || "Cliente sin nombre"}</div>
+                      <div className="draft-title">
+                        {b.cliente?.nombre || "Cliente sin nombre"}
+                        {cuestionario && b.cuestionarioId && b.cuestionarioId !== cuestionario.id && (
+                          <span style={{ marginLeft: 8, fontSize: 11, color: "#b45309" }}>(cuestionario anterior)</span>
+                        )}
+                      </div>
                       <div className="draft-meta">
                         Código {b.cliente?.codigo_cliente || "—"} · {b.cliente?.pdv || "—"} ·{" "}
                         {b.updatedAt ? new Date(b.updatedAt).toLocaleString("es-EC") : "Reciente"}
@@ -484,7 +536,17 @@ export default function EncuestaPage() {
           )}
 
           <div className="card pad">
-            <h3 style={{ margin: "0 0 16px", fontSize: 16 }}>Iniciar nueva encuesta</h3>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 8, flexWrap: "wrap", marginBottom: 16 }}>
+              <h3 style={{ margin: 0, fontSize: 16 }}>Iniciar nueva encuesta</h3>
+              {nombreEncuestador && (
+                <span style={{ fontSize: 13, color: "#6b7280" }}>
+                  Encuestador: <strong>{nombreEncuestador}</strong>{" "}
+                  <button type="button" className="btn" style={{ fontSize: 12, padding: "2px 8px", marginLeft: 4 }} onClick={cambiarEncuestador}>
+                    Cambiar
+                  </button>
+                </span>
+              )}
+            </div>
 
             <label className="field-label" style={{ marginTop: 4 }}>
               Buscar cliente por nombre, código o teléfono:
@@ -497,6 +559,14 @@ export default function EncuestaPage() {
               autoFocus
             />
             {buscando && <div style={{ fontSize: 13, color: "#9ca3af", marginTop: 8 }}>Buscando…</div>}
+            {errorBusqueda && !buscando && (
+              <div style={{ fontSize: 13, color: "#b91c1c", marginTop: 8 }}>⚠️ {errorBusqueda}</div>
+            )}
+            {twentyCaido && !buscando && !errorBusqueda && (
+              <div style={{ fontSize: 12.5, color: "#92400e", marginTop: 8 }}>
+                Twenty CRM no respondió a tiempo: los resultados vienen de la copia local y pueden no incluir altas de los últimos minutos.
+              </div>
+            )}
             {resultados.length > 0 && (
               <div className="option-list" style={{ marginTop: 12 }}>
                 {resultados.map((r) => {
@@ -560,7 +630,7 @@ export default function EncuestaPage() {
                 })}
               </div>
             )}
-            {!buscando && query.trim().length >= 3 && resultados.length === 0 && (
+            {!buscando && !errorBusqueda && query.trim().length >= 3 && resultados.length === 0 && (
               <div className="empty-state">
                 No se encontraron clientes que coincidan con la búsqueda.
               </div>
@@ -619,19 +689,9 @@ export default function EncuestaPage() {
             {/* Selector directo de preguntas */}
             <div className="question-nav-bar">
               {cuestionario.preguntas.map((p, i) => {
-                const val = respuestas[p.id];
-                const auto = evaluarAutoRespuestas(cuestionario.preguntas, cliente)[p.id];
-                const esNA = auto === "N/A";
+                const esNA = autoRespuestas[p.id] === NA;
                 const numLabel = p.numero_reporte ?? (i + 1);
-                const cal = typeof val === "object" ? val?.calificacion : val;
-                const esCompleta =
-                  esNA ||
-                  (p.tipo === "aceptacion_si_no" && typeof val === "boolean") ||
-                  (p.tipo === "escala_1_10" &&
-                    cal !== undefined &&
-                    cal !== null &&
-                    (!p.requiere_justificacion || (val?.justificacion && val.justificacion.trim().length > 0))) ||
-                  (p.tipo === "texto_abierto" && typeof val === "string" && val.trim().length > 0);
+                const esCompleta = esNA || respuestaCompleta(p, respuestas[p.id]);
 
                 return (
                   <button
@@ -712,8 +772,7 @@ export default function EncuestaPage() {
             )}
 
             {!enviando && preguntaActual && (() => {
-              const auto = evaluarAutoRespuestas(cuestionario.preguntas, cliente)[preguntaActual.id];
-              const esNA = auto === "N/A";
+              const esNA = autoRespuestas[preguntaActual.id] === NA;
               const numReporte = preguntaActual.numero_reporte ?? (indice + 1);
 
               return (
@@ -880,10 +939,33 @@ export default function EncuestaPage() {
                       className="btn btn-primary"
                       style={{ marginLeft: "auto" }}
                       onClick={manejarSubmit}
+                      disabled={enviando}
                     >
-                      Finalizar y Enviar Encuesta ✓
+                      {enviando ? "Enviando…" : errorEnvio ? "Reintentar envío ✓" : "Finalizar y Enviar Encuesta ✓"}
                     </button>
                   </div>
+
+                  {errorEnvio && (
+                    <div className="validation-box" style={{ marginTop: 16 }}>
+                      <h4 style={{ margin: "0 0 6px", fontSize: 15, color: "#991b1b" }}>
+                        ⚠️ La encuesta no se guardó
+                      </h4>
+                      <p style={{ margin: "0 0 10px", fontSize: 13, color: "#7f1d1d" }}>{errorEnvio.mensaje}</p>
+                      <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+                        {errorEnvio.tipo === "sesion" && (
+                          <button className="btn btn-primary" onClick={sesionExpirada}>Iniciar sesión</button>
+                        )}
+                        {errorEnvio.tipo === "recargar" && (
+                          <button className="btn btn-primary" onClick={() => window.location.reload()}>Recargar página</button>
+                        )}
+                        {errorEnvio.tipo === "duplicado" && (
+                          <button className="btn btn-primary" onClick={descartarBorradorActivo}>
+                            Descartar borrador y buscar otro cliente
+                          </button>
+                        )}
+                      </div>
+                    </div>
+                  )}
                 </div>
               );
             })()}
@@ -901,8 +983,10 @@ export default function EncuestaPage() {
           </h2>
           <p style={{ color: "#6b7280", fontSize: 14 }}>
             {resultadoFinal.completada
-              ? "Se guardó la respuesta y se actualizó el estado del cliente en Twenty a EFECTIVA."
-              : "El cliente no continuó (no aceptó participar o no era quien compró). Se guardó lo respondido."}
+              ? "Se guardó la respuesta y el estado del cliente quedó como EFECTIVA."
+              : resultadoFinal.status === "NO_LLAMAR"
+                ? "El cliente no aceptó participar: se guardó lo respondido y quedó marcado como NO_LLAMAR."
+                : "El cliente no continuó (no era quien realizó la compra). Se guardó lo respondido."}
           </p>
           {cuestionario?.guion_cierre && (
             <div className="script-box" style={{ textAlign: "left" }}>
@@ -923,7 +1007,7 @@ export default function EncuestaPage() {
 
           {resultadoFinal.twentyError && (
             <p style={{ color: "#991b1b", fontSize: 13 }}>
-              Aviso: no se pudo actualizar el estado en Twenty ({resultadoFinal.twentyError}). La encuesta sí quedó guardada.
+              Aviso: Twenty CRM no respondió, el cambio de estado quedó en cola y se reintentará automáticamente. La encuesta sí quedó guardada.
             </p>
           )}
           <button className="btn btn-primary" style={{ marginTop: 16 }} onClick={nuevaEncuesta}>
