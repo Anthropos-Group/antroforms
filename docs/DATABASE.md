@@ -196,3 +196,10 @@ erDiagram
 
 La cola `pending_twenty_sync` (migración 0008) guarda los cambios de estado pendientes hacia Twenty; mientras un cliente tenga una entrada ahí, la sincronización no pisa su estado local.
 
+
+## 5. Cambios de la migración `0010_sync_detalle.sql`
+
+| Tabla | Cambio | Para qué |
+|---|---|---|
+| `sync_runs` | `detalle text` | Motivo de los errores de la corrida (error general y hasta 10 errores por registro). |
+| `sync_runs` | `actualizado_en timestamptz` | Latido por página procesada: avance en vivo en el panel y detección de corridas muertas (15 min sin latido). |

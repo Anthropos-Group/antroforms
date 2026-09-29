@@ -4,6 +4,8 @@ import { patchPerson, twentyConfigurado } from "../../../lib/twenty";
 import { obtenerReporte, obtenerResumen, leerFiltros } from "../../../lib/reportes";
 import { prepararEnvio } from "../../../lib/encuesta-logica";
 import { esUUID, errorJson, leerJson, conErrores } from "../../../lib/http";
+import { verifySessionToken, SESSION_COOKIE } from "../../../lib/auth";
+import { mesesPermitidosEncuestador, mesPermitidoEncuestador } from "../../../lib/fecha";
 
 export const dynamic = "force-dynamic";
 
@@ -100,6 +102,18 @@ export const POST = conErrores("POST /api/encuestas", async (request) => {
   if (!encRows[0]) return errorJson("El encuestador seleccionado no existe", 400);
   const cliente = cliRows[0];
   if (!cliente) return errorJson("El cliente no existe en la base de clientes", 404);
+
+  // El encuestador solo registra clientes del mes de gestión en curso o del anterior
+  // (p. ej. en septiembre: septiembre y agosto, no julio). El admin no tiene el límite.
+  const esAdmin = Boolean(verifySessionToken(request.cookies.get(SESSION_COOKIE)?.value));
+  if (!esAdmin && !mesPermitidoEncuestador(cliente.mes_gestion)) {
+    const [actual, anterior] = mesesPermitidosEncuestador();
+    return errorJson(
+      `Este cliente es del mes de gestión ${cliente.mes_gestion?.trim() || "(sin mes)"}; solo se pueden registrar encuestas de ${actual} y ${anterior}.`,
+      422,
+      { code: "MES_NO_PERMITIDO" }
+    );
+  }
 
   // 3. Validación con las mismas reglas que la UI y cálculo del estado final.
   const idsValidos = new Set(cuestionario.preguntas.map((p) => p.id));

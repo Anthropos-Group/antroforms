@@ -60,21 +60,47 @@ node scripts/migrate.js
 node scripts/create-admin.js --nombre="Tu Nombre" --email=tu@correo.com --password=unaClaveSegura
 ```
 
-## 6. Programar el cron diario de limpieza de Twenty
+## 6. Tareas programadas (sincronización con Twenty y keep-alive)
 
-Desde cualquier máquina con acceso al dominio público (no tiene que ser el servidor — puede ser tu propia PC, un servicio de cron externo, o un cronjob en el mismo servidor):
+No hace falta programar nada fuera del contenedor. Al arrancar, la app lanza su
+propio programador (`instrumentation.js` → `lib/programador.js`):
 
-```bash
-crontab -e
+| Tarea | Cuándo | Para qué |
+|---|---|---|
+| Sincronización incremental con Twenty | 07:00 y 13:00 hora de Ecuador | Trae altas y cambios de clientes (p. ej. la carga del mes nuevo), normaliza los datos en Twenty y reintenta la cola de estados pendientes. Si el contenedor estaba caído a esa hora, se recupera apenas vuelve a levantar (mismo día). |
+| Keep-alive de Supabase | cada 60 min | Consulta la base (y la API REST si `NEXT_PUBLIC_SUPABASE_URL` y la anon key están configuradas) para que el plan gratuito no pause el proyecto por inactividad. |
+
+En los logs del contenedor debe aparecer al arrancar:
+
+```
+[programador] Keep-alive cada 60 min; sincronización con Twenty a las 7:00 y 13:00 (Ecuador).
 ```
 
+Variables opcionales (ya declaradas en `docker-compose.yml` con estos valores por defecto):
+
+| Variable | Default | |
+|---|---|---|
+| `TAREAS_PROGRAMADAS` | `on` | `off` desactiva todo (si algún día se corre más de una réplica, dejarlo en `on` solo en una). |
+| `SYNC_HORAS_ECUADOR` | `7,13` | Horas de la sincronización, separadas por coma. Vacío = sin sincronización automática. |
+| `KEEPALIVE_MINUTOS` | `60` | Frecuencia del keep-alive. |
+
+Solo corre una sincronización a la vez: si ya hay una en curso (por ejemplo,
+alguien presionó el botón manual) otra llamada responde `409`. El botón del
+panel y `POST /api/cron/sync-twenty` responden de inmediato (`202`) y la corrida
+sigue en segundo plano; su avance se ve en **Historial Twenty**. Una corrida que
+pase 15 minutos sin avanzar (contenedor reiniciado a mitad) se marca como fallida
+automáticamente, y el motivo de cualquier error queda en el detalle de la corrida.
+
+**Cron externo (opcional, redundancia).** Si además quieres un disparador fuera
+del servidor, cualquier servicio de cron puede llamar:
+
 ```
-0 16 * * * curl -s -X POST https://encuestas.aiagentrevenue.online/api/cron/sync-twenty -H "Authorization: Bearer TU_CRON_SECRET" >> /var/log/sync-twenty.log 2>&1
+curl -s -X POST https://encuestas.aiagentrevenue.online/api/cron/sync-twenty -H "Authorization: Bearer TU_CRON_SECRET"
 ```
 
-(11:00 hora Ecuador = 16:00 UTC)
-
-Solo corre una sincronización a la vez: si ya hay una en curso (por ejemplo, alguien presionó el botón manual) la llamada responde `409`. Una corrida que quede colgada más de 15 minutos se marca como fallida automáticamente.
+**Monitor externo (recomendado).** Un monitor gratuito (UptimeRobot, Better Stack…)
+contra `https://<dominio>/api/health` cada 5 min avisa si la app o la base se caen,
+y es un segundo keep-alive independiente del programador.
 
 ## 7. Healthcheck y monitoreo
 

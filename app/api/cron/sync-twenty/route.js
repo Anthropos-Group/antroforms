@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { runSync, VALID_MODES } from "../../../../lib/sync";
+import { runSync, iniciarSync, VALID_MODES } from "../../../../lib/sync";
 import { verifySessionToken, SESSION_COOKIE, safeEqual, adminSigueActivo } from "../../../../lib/auth";
 import { getPool } from "../../../../lib/db";
 
@@ -34,7 +34,7 @@ async function estaAutorizado(request) {
   return false;
 }
 
-async function ejecutarSincronizacion(request, modeOverride, maxPagesOverride) {
+async function ejecutarSincronizacion(request, modeOverride, maxPagesOverride, esperarOverride) {
   if (!(await estaAutorizado(request))) {
     return NextResponse.json({ error: "No autorizado" }, { status: 401 });
   }
@@ -51,7 +51,20 @@ async function ejecutarSincronizacion(request, modeOverride, maxPagesOverride) {
     );
   }
 
+  // Por defecto la corrida sigue en segundo plano y se responde de inmediato con su
+  // id (202): una corrida grande tarda minutos y Cloudflare corta el request a los
+  // 100 s. `?esperar=1` mantiene el comportamiento anterior (esperar el resultado).
+  const esperar = esperarOverride ?? ["1", "true", "si"].includes(searchParams.get("esperar") || "");
+
   try {
+    if (!esperar) {
+      const { syncRunId } = await iniciarSync({ mode, maxPages });
+      return NextResponse.json(
+        { ok: true, sync_run_id: syncRunId, tipo: mode, estado: "en_progreso" },
+        { status: 202 }
+      );
+    }
+
     const result = await runSync({ mode, maxPages });
     return NextResponse.json({
       ok: true,
@@ -84,6 +97,11 @@ export async function POST(request) {
     // Sin body es válido
   }
 
-  return await ejecutarSincronizacion(request, body.modo, body.max_pages);
+  return await ejecutarSincronizacion(
+    request,
+    body.modo,
+    body.max_pages,
+    typeof body.esperar === "boolean" ? body.esperar : undefined
+  );
 }
 
