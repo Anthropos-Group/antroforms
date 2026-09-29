@@ -4,6 +4,8 @@
 // y queda registrado en la tabla _migrations, dentro de una transacción.
 //
 // Uso: SUPABASE_ACCESS_TOKEN=sbp_... SUPABASE_PROJECT_REF=abcd... node scripts/migrate-api.js [--dry-run]
+// SUPABASE_PROJECT_REF acepta el ref solo o una URL que lo contenga
+// (https://supabase.com/dashboard/project/<ref> o https://<ref>.supabase.co).
 try {
   require("dotenv").config();
 } catch {
@@ -13,8 +15,18 @@ const fs = require("fs");
 const path = require("path");
 
 const TOKEN = process.env.SUPABASE_ACCESS_TOKEN;
-const REF = process.env.SUPABASE_PROJECT_REF;
+const REF = normalizarRef(process.env.SUPABASE_PROJECT_REF);
 const DRY_RUN = process.argv.includes("--dry-run");
+
+function normalizarRef(valor) {
+  const v = (valor || "").trim().replace(/\/+$/, "");
+  if (!v) return "";
+  const m =
+    v.match(/\/project\/([a-z0-9]+)/i) || // URL del dashboard
+    v.match(/^(?:https?:\/\/)?([a-z0-9]+)\.supabase\.(?:co|in)\b/i) || // URL de la API
+    v.match(/^([a-z0-9]+)$/i); // ref solo
+  return m ? m[1].toLowerCase() : null;
+}
 
 async function query(sql) {
   const res = await fetch(`${process.env.SUPABASE_API_URL || "https://api.supabase.com"}/v1/projects/${REF}/database/query`, {
@@ -30,6 +42,12 @@ async function query(sql) {
 const literal = (s) => `'${String(s).replace(/'/g, "''")}'`;
 
 async function main() {
+  if (REF === null) {
+    console.error(
+      "SUPABASE_PROJECT_REF no es un ref válido. Usa el ref del proyecto o la URL del dashboard (https://supabase.com/dashboard/project/<ref>).",
+    );
+    process.exit(1);
+  }
   if (!TOKEN || !REF) {
     console.error("Faltan SUPABASE_ACCESS_TOKEN y/o SUPABASE_PROJECT_REF en el entorno.");
     process.exit(1);
