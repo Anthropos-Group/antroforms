@@ -10,6 +10,7 @@ import {
   respuestaCompleta,
   prepararEnvio,
 } from "../../lib/encuesta-logica";
+import { mesesPermitidosEncuestador } from "../../lib/fecha";
 
 function armarGuion(texto, valores) {
   if (!texto) return "";
@@ -154,6 +155,8 @@ export default function EncuestaPage() {
   const [buscando, setBuscando] = useState(false);
   const [errorBusqueda, setErrorBusqueda] = useState("");
   const [twentyCaido, setTwentyCaido] = useState(false);
+  // Mes de gestión en curso y el anterior (el servidor aplica la misma regla).
+  const mesesPermitidos = useMemo(() => mesesPermitidosEncuestador(), []);
   const [cliente, setCliente] = useState(null);
   const [respuestas, setRespuestas] = useState({});
   const [indice, setIndice] = useState(0);
@@ -369,7 +372,7 @@ export default function EncuestaPage() {
             tipo: "sesion",
             mensaje: "Tu sesión expiró. Vuelve a iniciar sesión: el borrador quedó guardado en este dispositivo.",
           });
-        } else if (data.code === "YA_ENCUESTADO") {
+        } else if (data.code === "YA_ENCUESTADO" || data.code === "MES_NO_PERMITIDO") {
           setErrorEnvio({ tipo: "duplicado", mensaje: data.error });
         } else if (data.code === "CUESTIONARIO_DESACTUALIZADO" || data.code === "RESPUESTAS_INVALIDAS") {
           setErrorEnvio({ tipo: "recargar", mensaje: data.error });
@@ -511,6 +514,11 @@ export default function EncuestaPage() {
                         {cuestionario && b.cuestionarioId && b.cuestionarioId !== cuestionario.id && (
                           <span style={{ marginLeft: 8, fontSize: 11, color: "#b45309" }}>(cuestionario anterior)</span>
                         )}
+                        {b.cliente?.mes_gestion && !mesesPermitidos.includes(String(b.cliente.mes_gestion).trim().toUpperCase()) && (
+                          <span style={{ marginLeft: 8, fontSize: 11, color: "#b91c1c" }}>
+                            (mes {b.cliente.mes_gestion} cerrado: ya no se puede enviar)
+                          </span>
+                        )}
                       </div>
                       <div className="draft-meta">
                         Código {b.cliente?.codigo_cliente || "—"} · {b.cliente?.pdv || "—"} ·{" "}
@@ -551,6 +559,9 @@ export default function EncuestaPage() {
             <label className="field-label" style={{ marginTop: 4 }}>
               Buscar cliente por nombre, código o teléfono:
             </label>
+            <p style={{ margin: "0 0 8px", fontSize: 12, color: "#6b7280" }}>
+              Se muestran clientes de los meses de gestión <strong>{mesesPermitidos.join(" y ")}</strong>.
+            </p>
             <input
               className="search-input"
               placeholder="Buscar cliente por nombre, código o teléfono (escribe al menos 3 caracteres)…"

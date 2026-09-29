@@ -82,7 +82,7 @@ npm run sync:twenty -- --mode=dry_run
 npm run sync:twenty -- --mode=backfill_completo
 ```
 
-En producción, la corrida diaria (`--mode=incremental`) se dispara vía `POST /api/cron/sync-twenty` con el header `Authorization: Bearer {CRON_SECRET}` — hay que programarla con un scheduler externo (Cloud Scheduler, cron del servidor, etc.), apuntando idealmente a un par de horas después de la carga diaria de datos.
+En producción, la corrida incremental la lanza el propio contenedor a las 07:00 y 13:00 (hora de Ecuador), junto con un keep-alive para que Supabase no pause el proyecto por inactividad — no hace falta un cron externo. Ver [docs/DEPLOY.md §6](./docs/DEPLOY.md#6-tareas-programadas-sincronización-con-twenty-y-keep-alive).
 
 ## Scripts disponibles
 

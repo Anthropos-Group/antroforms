@@ -7,7 +7,9 @@ Todas las rutas viven bajo `/api`. Autenticación de app: sesión compartida (ve
 ### `GET /api/clientes/search`
 Busca en `clientes_cache` (nunca en Twenty en vivo).
 
-**Query params:** `q` (texto, mínimo 3 caracteres) — busca por `nombre` normalizado.
+**Query params:** `q` (texto, mínimo 3 caracteres) — busca por nombre, código, teléfono o id EDIMCA.
+
+Solo devuelve clientes del **mes de gestión en curso y el anterior** (en septiembre: SEPTIEMBRE y AGOSTO), que además vienen en `mesesPermitidos`. `POST /api/encuestas` aplica la misma regla a los encuestadores (422 `MES_NO_PERMITIDO`); los administradores no tienen el límite.
 
 **Response 200:**
 ```json
@@ -154,29 +156,24 @@ Genera y descarga el Excel. Mismos filtros que el listado.
 ## Cron / Sync con Twenty
 
 ### `POST /api/cron/sync-twenty`
-Disparado por el scheduler (Vercel Cron / Supabase Scheduled Function) diariamente a las 16:00 UTC. Requiere `Authorization: Bearer {CRON_SECRET}`.
+La sincronización diaria la lanza el propio contenedor (ver `lib/programador.js` y `DEPLOY.md` §6); este endpoint queda para el botón manual del panel y para un cron externo opcional. Requiere `Authorization: Bearer {CRON_SECRET}` o sesión de administrador.
 
 **Body opcional:**
 ```json
-{ "modo": "incremental" }
+{ "modo": "incremental", "esperar": false }
 ```
 Valores de `modo`: `dry_run` | `incremental` (default) | `backfill_completo`.
 
-**Response 200:**
+**Response 202** (por defecto): la corrida sigue en segundo plano — una corrida grande tarda minutos y Cloudflare corta los requests a los 100 s.
 ```json
-{
-  "sync_run_id": "uuid",
-  "registros_escaneados": 412,
-  "registros_modificados": 37,
-  "errores": 0
-}
+{ "ok": true, "sync_run_id": "uuid", "tipo": "incremental", "estado": "en_progreso" }
 ```
+Con `?esperar=1` (o `"esperar": true`) responde 200 al terminar, con `registros_escaneados`, `registros_modificados`, `errores`, `estado` y `parcial`.
 
-### `GET /api/cron/sync-twenty/runs` (admin)
-Historial de corridas (`sync_runs`), paginado.
+**Response 409:** ya hay una sincronización en curso.
 
-### `GET /api/cron/sync-twenty/runs/:id/changes` (admin)
-Detalle de cambios de una corrida específica (`sync_changes`) — para auditar qué se modificó en Twenty.
+### `GET /api/admin/sync-runs/:id` (admin)
+Estado y avance de una corrida (`sync_runs`): `estado`, `registros_escaneados`, `registros_modificados`, `errores`, `parcial`, `detalle` (motivo de los errores). El botón manual la consulta cada 3 s.
 
 ## Configuración y operación (nuevo)
 

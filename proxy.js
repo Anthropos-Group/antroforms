@@ -14,6 +14,7 @@ import { getPool } from "./lib/db";
 const RULES = [
   { prefix: "/api/admin/import", methods: "all", auth: "admin" },
   { prefix: "/api/admin/twenty-pendientes", methods: "all", auth: "admin" },
+  { prefix: "/api/admin/sync-runs", methods: "all", auth: "admin" },
   { prefix: "/api/administradores", methods: "all", auth: "admin" },
   { prefix: "/api/encuestas/export", methods: "all", auth: "admin" },
   { prefix: "/api/encuestas", methods: ["GET"], auth: "admin" },
@@ -114,6 +115,7 @@ export const config = {
     "/encuesta/:path*",
     "/api/admin/import",
     "/api/admin/twenty-pendientes",
+    "/api/admin/sync-runs/:path*",
     "/api/administradores/:path*",
     "/api/preguntas/:path*",
     "/api/encuestadores/:path*",

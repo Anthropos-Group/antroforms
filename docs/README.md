@@ -13,12 +13,13 @@ Sistema interno para levantar encuestas de satisfacción de clientes, integrado 
 | [API.md](./API.md) | Contratos de los endpoints |
 | [DEPLOY.md](./DEPLOY.md) | Despliegue en servidor propio con Docker |
 | [PRODUCCION.md](./PRODUCCION.md) | Auditoría pre-producción, correcciones, nuevas funciones y checklist de salida |
+| [ARRANQUE-OCTUBRE.md](./ARRANQUE-OCTUBRE.md) | Checklist de arranque de octubre 2026: migración, despliegue, limpieza de la base y diagnóstico |
 
 ## Resumen rápido
 
 - **Stack:** Next.js + Supabase (Postgres) + integración vía API REST con Twenty CRM.
 - **Problema que resuelve:** identificación confiable del cliente encuestado (sin texto libre), cuestionario editable por un admin, y limpieza automática y recurrente de datos sucios en Twenty (espacios de relleno, `"NULL"` como texto).
-- **Pieza más sensible:** el cron diario (11:00 UTC-5) que escribe directamente sobre Twenty — corre primero en modo dry-run antes de dejarse autónomo, y deja auditoría completa de cada cambio.
+- **Pieza más sensible:** la sincronización diaria (07:00 y 13:00 UTC-5, lanzada por el propio contenedor) que escribe directamente sobre Twenty — corre primero en modo dry-run antes de dejarse autónomo, y deja auditoría completa de cada cambio.
 
 ## Cómo correr el proyecto
 

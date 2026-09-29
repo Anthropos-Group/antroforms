@@ -45,6 +45,15 @@ export default async function SyncRunDetailPage({ params }) {
         {changes.length === 500 && " (mostrando los primeros 500 cambios)"}
       </p>
 
+      {run.detalle && (
+        <div className="card pad" style={{ marginBottom: 16, borderColor: "#fecaca", background: "#fef2f2" }}>
+          <strong style={{ color: "#991b1b" }}>Detalle de errores</strong>
+          <pre className="mono" style={{ margin: "8px 0 0", whiteSpace: "pre-wrap", fontSize: 12, color: "#7f1d1d" }}>
+            {run.detalle}
+          </pre>
+        </div>
+      )}
+
       <div className="card">
         {changes.length === 0 ? (
           <div className="empty-state">Sin cambios detectados en esta corrida (todavía).</div>

@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { getPool } from "../../../../lib/db";
 import { fetchPeoplePage, twentyConfigurado } from "../../../../lib/twenty";
 import { filaCache, upsertClientes } from "../../../../lib/clientes";
+import { mesesPermitidosEncuestador } from "../../../../lib/fecha";
 
 export const dynamic = "force-dynamic";
 
@@ -24,10 +25,13 @@ export async function GET(request) {
   try {
     const { searchParams } = new URL(request.url);
     const q = (searchParams.get("q") || "").trim().slice(0, 100);
-    const mesGestion = (searchParams.get("mes_gestion") || "").trim();
+    const mesesPermitidos = mesesPermitidosEncuestador();
+    // Un filtro de mes explícito solo puede acotar dentro de los meses permitidos.
+    const mesPedido = (searchParams.get("mes_gestion") || "").trim().toUpperCase();
+    const meses = mesesPermitidos.includes(mesPedido) ? [mesPedido] : mesesPermitidos;
 
     if (q.length < 3) {
-      return NextResponse.json({ results: [] });
+      return NextResponse.json({ results: [], mesesPermitidos });
     }
 
     const pool = getPool();
@@ -45,11 +49,9 @@ export async function GET(request) {
           `telefono1[ilike]:%${qTwenty}%`,
           `idEdimca[ilike]:%${qTwenty}%`,
         ];
-        let filter = `or(${orConditions.join(",")})`;
-        const mesTwenty = terminoParaTwenty(mesGestion);
-        if (mesTwenty && mesTwenty !== "TODOS") {
-          filter = `and(${filter},mesGestion[ilike]:%${mesTwenty}%)`;
-        }
+        const condMeses = meses.map((m) => `mesGestion[ilike]:%${m}%`);
+        const filtroMeses = condMeses.length === 1 ? condMeses[0] : `or(${condMeses.join(",")})`;
+        const filter = `and(or(${orConditions.join(",")}),${filtroMeses})`;
 
         const { people } = await fetchPeoplePage({
           limit: 25,
@@ -71,10 +73,9 @@ export async function GET(request) {
       "(nombre ilike $1 or codigo_cliente ilike $1 or telefono1 ilike $1 or id_edimca ilike $1)",
     ];
 
-    if (mesGestion && mesGestion !== "TODOS") {
-      valores.push(mesGestion);
-      condiciones.push(`upper(trim(mes_gestion)) = upper($${valores.length})`);
-    }
+    // Solo el mes de gestión en curso y el anterior: el histórico no se encuesta.
+    valores.push(meses);
+    condiciones.push(`upper(trim(mes_gestion)) = any($${valores.length}::text[])`);
 
     // Excluir clientes ya gestionados (EFECTIVA) o que solicitaron no ser contactados (NO_LLAMAR)
     condiciones.push(`(
@@ -109,7 +110,7 @@ export async function GET(request) {
       }
     }
 
-    return NextResponse.json({ results: resultadosUnicos, twentyDisponible });
+    return NextResponse.json({ results: resultadosUnicos, twentyDisponible, mesesPermitidos });
   } catch (err) {
     console.error("Error en búsqueda de clientes:", err);
     return NextResponse.json({ error: "No se pudo completar la búsqueda", results: [] }, { status: 500 });
