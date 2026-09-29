@@ -7,6 +7,7 @@ export default function EncuestadoresPage() {
   const [cargando, setCargando] = useState(true);
   const [nombreNuevo, setNombreNuevo] = useState("");
   const [guardando, setGuardando] = useState(false);
+  const [error, setError] = useState("");
 
   // Estados para edición inline
   const [editandoId, setEditandoId] = useState(null);
@@ -28,14 +29,23 @@ export default function EncuestadoresPage() {
   async function agregar() {
     if (!nombreNuevo.trim()) return;
     setGuardando(true);
-    await fetch("/api/encuestadores", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ nombre: nombreNuevo.trim() }),
-    });
-    setNombreNuevo("");
-    setGuardando(false);
-    cargar();
+    setError("");
+    try {
+      const res = await fetch("/api/encuestadores", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ nombre: nombreNuevo.trim() }),
+      });
+      if (!res.ok) {
+        const d = await res.json().catch(() => ({}));
+        setError(d.error || "No se pudo agregar el encuestador");
+        return;
+      }
+      setNombreNuevo("");
+      cargar();
+    } finally {
+      setGuardando(false);
+    }
   }
 
   async function toggleActivo(e) {
@@ -60,12 +70,18 @@ export default function EncuestadoresPage() {
   async function guardarEdicion(id) {
     if (!nombreEditado.trim()) return;
     setGuardandoEdicion(true);
+    setError("");
     try {
-      await fetch(`/api/encuestadores/${id}`, {
+      const res = await fetch(`/api/encuestadores/${id}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ nombre: nombreEditado.trim() }),
       });
+      if (!res.ok) {
+        const d = await res.json().catch(() => ({}));
+        setError(d.error || "No se pudo guardar el nombre");
+        return;
+      }
       setEditandoId(null);
       setNombreEditado("");
       cargar();
@@ -93,6 +109,8 @@ export default function EncuestadoresPage() {
           {guardando ? "Agregando…" : "Agregar"}
         </button>
       </div>
+
+      {error && <div className="validation-box" style={{ marginTop: 12 }}>⚠️ {error}</div>}
 
       <div className="card" style={{ marginTop: 20 }}>
         {cargando ? (

@@ -183,3 +183,16 @@ erDiagram
 - Todas las FK hacia `clientes_cache` usan `id_twenty` (el id real de Twenty) como llave, no un id propio autogenerado — así no hay ambigüedad de mapeo entre sistemas.
 - `codigo_cliente` se duplica en `encuestas` (además de estar en `clientes_cache`) a propósito: si el cliente cambia de código más adelante en Twenty, la encuesta histórica conserva el valor real con el que se levantó.
 - `valor` en `respuestas` es `jsonb` en vez de columnas separadas por tipo, porque el tipo de pregunta es dinámico (definido en `preguntas.tipo`) y puede cambiar sin migrar el esquema.
+
+## 4. Cambios de la migración `0009_produccion.sql`
+
+| Tabla | Cambio | Para qué |
+|---|---|---|
+| `encuestas` | `idempotency_key text` + índice único parcial | Reintentos del mismo envío no duplican la encuesta. |
+| `encuestas` | Índices parciales `(cliente_twenty_id)` y `(codigo_cliente)` donde `completada` | Chequeo rápido de "cliente ya encuestado" y exclusión en el buscador. |
+| `respuestas` | Índice `(pregunta_id)` | Estadísticas por pregunta en reportes. |
+| `cuestionarios` | `meta_mensual_pdv int default 25` | Meta del monitoreo configurable desde el panel. |
+| `sync_runs` | `parcial boolean default false` | Corridas cortadas por `max_pages` no sirven de ancla para la siguiente incremental. |
+
+La cola `pending_twenty_sync` (migración 0008) guarda los cambios de estado pendientes hacia Twenty; mientras un cliente tenga una entrada ahí, la sincronización no pisa su estado local.
+

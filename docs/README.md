@@ -12,6 +12,7 @@ Sistema interno para levantar encuestas de satisfacción de clientes, integrado 
 | [DATABASE.md](./DATABASE.md) | Modelo de datos en Supabase + ERD |
 | [API.md](./API.md) | Contratos de los endpoints |
 | [DEPLOY.md](./DEPLOY.md) | Despliegue en servidor propio con Docker |
+| [PRODUCCION.md](./PRODUCCION.md) | Auditoría pre-producción, correcciones, nuevas funciones y checklist de salida |
 
 ## Resumen rápido
 
@@ -23,7 +24,7 @@ Sistema interno para levantar encuestas de satisfacción de clientes, integrado 
 
 Instalación local paso a paso (variables de entorno, migraciones, primer admin): ver el [README.md](../README.md) en la raíz del repo.
 
-Para desplegarlo en un servidor propio (Docker + Caddy con HTTPS automático): ver [DEPLOY.md](./DEPLOY.md).
+Para desplegarlo en un servidor propio (Portainer + Cloudflare Tunnel): ver [DEPLOY.md](./DEPLOY.md). Antes de la primera salida a producción, seguir el checklist de [PRODUCCION.md](./PRODUCCION.md).
 
 ## Estado del proyecto
 

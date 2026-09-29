@@ -1,6 +1,8 @@
 import Link from "next/link";
 import { getPool } from "../../../lib/db";
 import ManualSyncButton from "../../../components/ManualSyncButton";
+import TwentyPendientes from "../../../components/TwentyPendientes";
+import { formatFechaHoraEcuador } from "../../../lib/fecha";
 
 export const dynamic = "force-dynamic";
 
@@ -8,7 +10,7 @@ async function getRuns() {
   const pool = getPool();
   const { rows } = await pool.query(`
     select id, tipo, estado, iniciado_en, finalizado_en,
-           registros_escaneados, registros_modificados, errores
+           registros_escaneados, registros_modificados, errores, parcial
     from sync_runs
     order by iniciado_en desc
     limit 30
@@ -29,7 +31,7 @@ export default async function SyncHistoryPage() {
 
   return (
     <div className="container">
-      <Link href="/" className="back-link">← Inicio</Link>
+      <Link href="/admin/preguntas" className="back-link">← Panel admin</Link>
       <h1 className="page-title">Historial de limpieza de Twenty</h1>
       <p className="page-subtitle">
         Cada corrida revisa el objeto <code>people</code> de Twenty y corrige espacios y valores
@@ -37,6 +39,8 @@ export default async function SyncHistoryPage() {
       </p>
 
       <ManualSyncButton />
+
+      <TwentyPendientes />
 
       <div className="card">
         {runs.length === 0 ? (
@@ -58,9 +62,16 @@ export default async function SyncHistoryPage() {
             <tbody>
               {runs.map((r) => (
                 <tr key={r.id}>
-                  <td>{new Date(r.iniciado_en).toLocaleString("es-EC")}</td>
+                  <td>{formatFechaHoraEcuador(r.iniciado_en)}</td>
                   <td><span className={`badge badge-mode-${r.tipo}`}>{r.tipo}</span></td>
-                  <td><span className={`badge badge-${r.estado}`}>{r.estado}</span></td>
+                  <td>
+                    <span className={`badge badge-${r.estado}`}>{r.estado}</span>
+                    {r.parcial && (
+                      <span className="badge badge-mode-dry_run" style={{ marginLeft: 4 }} title="Se detuvo en el límite de páginas; la próxima corrida retoma los registros faltantes.">
+                        parcial
+                      </span>
+                    )}
+                  </td>
                   <td>{r.registros_escaneados}</td>
                   <td>{r.registros_modificados}</td>
                   <td>{r.errores}</td>

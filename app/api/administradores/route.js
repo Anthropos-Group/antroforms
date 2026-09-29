@@ -12,10 +12,15 @@ export async function GET() {
   return NextResponse.json({ administradores: rows });
 }
 
+const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+
 export async function POST(request) {
-  const { nombre, email, password } = await request.json();
-  if (!nombre || !email || !password) {
+  const { nombre, email, password } = (await request.json().catch(() => null)) || {};
+  if (typeof nombre !== "string" || typeof email !== "string" || typeof password !== "string" || !nombre.trim() || !email.trim() || !password) {
     return NextResponse.json({ error: "Faltan campos (nombre, email, password)" }, { status: 400 });
+  }
+  if (!EMAIL_REGEX.test(email.trim())) {
+    return NextResponse.json({ error: "Email inválido" }, { status: 400 });
   }
   if (password.length < 8) {
     return NextResponse.json({ error: "La contraseña debe tener al menos 8 caracteres" }, { status: 400 });
@@ -34,6 +39,7 @@ export async function POST(request) {
     if (err.code === "23505") {
       return NextResponse.json({ error: "Ya existe un administrador con ese email" }, { status: 409 });
     }
-    return NextResponse.json({ error: err.message }, { status: 500 });
+    console.error("Error creando administrador:", err);
+    return NextResponse.json({ error: "No se pudo crear el administrador" }, { status: 500 });
   }
 }

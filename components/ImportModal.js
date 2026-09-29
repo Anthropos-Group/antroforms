@@ -210,6 +210,7 @@ export default function ImportModal({ isOpen, onClose, onSuccess }) {
     let acumuladoImportadas = 0;
     let acumuladoDuplicados = 0;
     const acumuladoErrores = [];
+    const acumuladoAdvertencias = [];
 
     setBatchState({
       loteActual: 1,
@@ -247,9 +248,11 @@ export default function ImportModal({ isOpen, onClose, onSuccess }) {
 
         acumuladoImportadas += resLote.importadas || 0;
         acumuladoDuplicados += resLote.duplicados || 0;
-        if (resLote.errores?.length) {
-          acumuladoErrores.push(...resLote.errores);
-        }
+        // El servidor numera las filas dentro del lote: se ajustan a la fila real del archivo
+        // (+1 por la fila de encabezados).
+        const ajustar = (items) => (items || []).map((it) => ({ ...it, fila: start + it.fila + 1 }));
+        acumuladoErrores.push(...ajustar(resLote.errores));
+        acumuladoAdvertencias.push(...ajustar(resLote.advertencias));
 
         const progresoReal = Math.min(100, Math.round((end / total) * 100));
         setProgresoVal(progresoReal);
@@ -266,6 +269,7 @@ export default function ImportModal({ isOpen, onClose, onSuccess }) {
         importadas: acumuladoImportadas,
         duplicados: acumuladoDuplicados,
         errores: acumuladoErrores,
+        advertencias: acumuladoAdvertencias,
       });
       setStep(3);
       if (onSuccess) onSuccess();
@@ -498,6 +502,21 @@ export default function ImportModal({ isOpen, onClose, onSuccess }) {
                 </div>
               </div>
             </div>
+
+            {(resultado?.errores?.length > 0 || resultado?.advertencias?.length > 0) && (
+              <div style={{ textAlign: "left", maxHeight: 220, overflowY: "auto", border: "1px solid #e5e7eb", borderRadius: 8, padding: "8px 12px", marginBottom: 16, fontSize: 12.5 }}>
+                {resultado.errores.slice(0, 100).map((e, i) => (
+                  <div key={`e${i}`} style={{ color: "#b91c1c", padding: "3px 0" }}>
+                    ✕ Fila {e.fila} ({e.cliente}): {e.error}
+                  </div>
+                ))}
+                {(resultado.advertencias || []).slice(0, 100).map((a, i) => (
+                  <div key={`a${i}`} style={{ color: "#a16207", padding: "3px 0" }}>
+                    ⚠ Fila {a.fila} ({a.cliente}): {a.mensaje}
+                  </div>
+                ))}
+              </div>
+            )}
 
             <p style={{ fontSize: 13, color: "#6b7280", margin: "0 0 20px" }}>
               Las encuestas existentes previamente (por Submission Id o combinación de cliente y fecha) fueron omitidas para prevenir duplicaciones.

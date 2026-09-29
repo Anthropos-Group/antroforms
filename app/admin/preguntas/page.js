@@ -28,6 +28,95 @@ function estadoACondicion(estado) {
   return { pregunta_id: estado.pregunta_id, valor_esperado: estado.valor_esperado === "true" };
 }
 
+function ConfiguracionCuestionario() {
+  const [config, setConfig] = useState(null);
+  const [guardando, setGuardando] = useState(false);
+  const [mensaje, setMensaje] = useState(null);
+
+  useEffect(() => {
+    fetch("/api/cuestionarios/activo")
+      .then((r) => r.json())
+      .then((d) => {
+        if (d.id) {
+          setConfig({
+            nombre: d.nombre || "",
+            guion_apertura: d.guion_apertura || "",
+            guion_cierre: d.guion_cierre || "",
+            meta_mensual_pdv: d.meta_mensual_pdv ?? 25,
+          });
+        }
+      })
+      .catch(() => {});
+  }, []);
+
+  async function guardar() {
+    setGuardando(true);
+    setMensaje(null);
+    try {
+      const res = await fetch("/api/cuestionarios/activo", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ ...config, meta_mensual_pdv: Number(config.meta_mensual_pdv) }),
+      });
+      const d = await res.json().catch(() => ({}));
+      setMensaje(res.ok ? { ok: true, texto: "✓ Configuración guardada" } : { ok: false, texto: d.error || "No se pudo guardar" });
+    } finally {
+      setGuardando(false);
+    }
+  }
+
+  if (!config) return null;
+
+  return (
+    <div className="card pad" style={{ marginBottom: 20 }}>
+      <h2 style={{ fontSize: 16, margin: "0 0 4px" }}>Configuración del cuestionario</h2>
+      <p className="section-subtitle" style={{ marginBottom: 14 }}>
+        Guiones que lee el encuestador y meta mensual de encuestas efectivas por sucursal (monitoreo).
+      </p>
+      <div style={{ display: "flex", gap: 16, flexWrap: "wrap" }}>
+        <div style={{ flex: "1 1 280px" }}>
+          <label className="field-label">Nombre</label>
+          <input className="text-input" value={config.nombre} onChange={(e) => setConfig({ ...config, nombre: e.target.value })} />
+        </div>
+        <div>
+          <label className="field-label">Meta mensual por PDV</label>
+          <input
+            type="number"
+            min={1}
+            className="text-input"
+            style={{ width: 120 }}
+            value={config.meta_mensual_pdv}
+            onChange={(e) => setConfig({ ...config, meta_mensual_pdv: e.target.value })}
+          />
+        </div>
+      </div>
+      <label className="field-label" style={{ marginTop: 14 }}>Guion de apertura</label>
+      <textarea
+        className="text-input"
+        rows={5}
+        value={config.guion_apertura}
+        onChange={(e) => setConfig({ ...config, guion_apertura: e.target.value })}
+      />
+      <p style={{ fontSize: 12, color: "#6b7280", margin: "4px 0 0" }}>
+        Variables disponibles: <code>{"{{ENCUESTADOR}}"}</code>, <code>{"{{SUCURSAL}}"}</code>, <code>{"{{FECHA}}"}</code> (fecha de atención del cliente).
+      </p>
+      <label className="field-label" style={{ marginTop: 14 }}>Guion de cierre</label>
+      <textarea
+        className="text-input"
+        rows={2}
+        value={config.guion_cierre}
+        onChange={(e) => setConfig({ ...config, guion_cierre: e.target.value })}
+      />
+      <div style={{ display: "flex", alignItems: "center", gap: 12, marginTop: 14 }}>
+        <button className="btn btn-primary" onClick={guardar} disabled={guardando}>
+          {guardando ? "Guardando…" : "Guardar configuración"}
+        </button>
+        {mensaje && <span style={{ fontSize: 13, color: mensaje.ok ? "#15803d" : "#991b1b" }}>{mensaje.texto}</span>}
+      </div>
+    </div>
+  );
+}
+
 function describirCondicion(condicion, nombrePregunta) {
   if (!condicion) return "—";
   if (condicion.fuente === "cliente") {
@@ -57,7 +146,26 @@ export default function PreguntasPage() {
     fetch("/api/preguntas")
       .then((r) => r.json())
       .then((d) => setPreguntas(d.preguntas || []))
+      .catch(() => setError("No se pudieron cargar las preguntas"))
       .finally(() => setCargando(false));
+  }
+
+  async function mover(indice, delta) {
+    const destino = indice + delta;
+    if (destino < 0 || destino >= preguntas.length) return;
+    const ids = preguntas.map((p) => p.id);
+    [ids[indice], ids[destino]] = [ids[destino], ids[indice]];
+    setError("");
+    const res = await fetch("/api/preguntas/reordenar", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ ids }),
+    });
+    if (!res.ok) {
+      const d = await res.json().catch(() => ({}));
+      setError(d.error || "No se pudo cambiar el orden");
+    }
+    cargar();
   }
 
   useEffect(() => {
@@ -77,6 +185,18 @@ export default function PreguntasPage() {
 
   async function guardarEdicion(id) {
     const condicion = estadoACondicion(edit.condicion);
+    const original = preguntas.find((p) => p.id === id);
+    if (
+      original &&
+      original.tipo !== edit.tipo &&
+      original.total_respuestas > 0 &&
+      !window.confirm(
+        `Esta pregunta ya tiene ${original.total_respuestas} respuestas guardadas. Cambiar el tipo puede hacer que esas respuestas se vean mal en los reportes. ¿Continuar?`
+      )
+    ) {
+      return;
+    }
+    setError("");
 
     const res = await fetch(`/api/preguntas/${id}`, {
       method: "PATCH",
@@ -99,6 +219,9 @@ export default function PreguntasPage() {
   }
 
   async function toggleActiva(p) {
+    if (p.activa && !window.confirm(`¿Desactivar la pregunta ${p.numero_reporte ?? p.orden}? Dejará de aparecer en nuevas encuestas (el histórico se conserva).`)) {
+      return;
+    }
     await fetch(`/api/preguntas/${p.id}`, {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
@@ -149,7 +272,11 @@ export default function PreguntasPage() {
         Edita el texto, tipo o la lógica condicional. Desactivar una pregunta no borra el histórico de respuestas ya guardadas.
       </p>
 
-      <div className="card">
+      <ConfiguracionCuestionario />
+
+      {error && <div className="validation-box" style={{ marginBottom: 16 }}>⚠️ {error}</div>}
+
+      <div className="card" style={{ overflowX: "auto" }}>
         {cargando ? (
           <div className="empty-state">Cargando…</div>
         ) : (
@@ -167,7 +294,7 @@ export default function PreguntasPage() {
               </tr>
             </thead>
             <tbody>
-              {preguntas.map((p) => (
+              {preguntas.map((p, i) => (
                 <tr key={p.id}>
                   {editandoId === p.id ? (
                     <>
@@ -242,7 +369,29 @@ export default function PreguntasPage() {
                     </>
                   ) : (
                     <>
-                      <td>{p.orden}</td>
+                      <td style={{ whiteSpace: "nowrap" }}>
+                        <button
+                          className="btn"
+                          style={{ padding: "2px 7px", fontSize: 11 }}
+                          disabled={i === 0 || editandoId !== null}
+                          onClick={() => mover(i, -1)}
+                          title="Subir"
+                          aria-label="Subir"
+                        >
+                          ▲
+                        </button>{" "}
+                        <button
+                          className="btn"
+                          style={{ padding: "2px 7px", fontSize: 11 }}
+                          disabled={i === preguntas.length - 1 || editandoId !== null}
+                          onClick={() => mover(i, 1)}
+                          title="Bajar"
+                          aria-label="Bajar"
+                        >
+                          ▼
+                        </button>{" "}
+                        {p.orden}
+                      </td>
                       <td>P{p.numero_reporte ?? p.orden}</td>
                       <td>{p.texto}</td>
                       <td>{TIPOS.find((t) => t.value === p.tipo)?.label || p.tipo}</td>

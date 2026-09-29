@@ -1,4 +1,9 @@
-require("dotenv").config();
+// dotenv es opcional: dentro del contenedor las variables ya vienen del entorno.
+try {
+  require("dotenv").config();
+} catch {
+  // sin dotenv instalado (imagen de producción)
+}
 const { runSync } = require("../lib/sync");
 const { getPool } = require("../lib/db");
 
