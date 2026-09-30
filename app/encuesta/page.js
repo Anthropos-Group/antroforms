@@ -1,11 +1,12 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import {
   NA,
   tieneDatoCliente,
   evaluarAutoRespuestas,
+  reconciliarAutoRespuestas,
   evaluarCortePrematuro,
   respuestaCompleta,
   prepararEnvio,
@@ -158,6 +159,9 @@ export default function EncuestaPage() {
   // Mes de gestión en curso y el anterior (el servidor aplica la misma regla).
   const mesesPermitidos = useMemo(() => mesesPermitidosEncuestador(), []);
   const [cliente, setCliente] = useState(null);
+  // Id del cliente abierto, para descartar respuestas de un refresco que llegue
+  // cuando el encuestador ya cambió de cliente.
+  const clienteAbiertoRef = useRef(null);
   const [respuestas, setRespuestas] = useState({});
   const [indice, setIndice] = useState(0);
   const [activeDraftId, setActiveDraftId] = useState(null);
@@ -280,8 +284,27 @@ export default function EncuestaPage() {
     setStep("encuestador");
   }
 
+  // Trae los datos vigentes del cliente (Twenty en ese momento, o la copia local)
+  // y reajusta las preguntas que dependen de ellos: si el TOTAL apareció después
+  // de la búsqueda o del borrador, la pregunta de corte y laminado vuelve a quedar
+  // habilitada en vez de seguir omitida.
+  async function refrescarCliente(id) {
+    clienteAbiertoRef.current = id;
+    try {
+      const res = await fetchSesion(`/api/clientes/${id}`, {}, sesionExpirada);
+      if (!res.ok) return;
+      const { cliente: vigente } = await res.json();
+      if (!vigente || clienteAbiertoRef.current !== id) return;
+      setCliente((actual) => (actual?.id_twenty === id ? { ...actual, ...vigente } : actual));
+      setRespuestas((prev) => reconciliarAutoRespuestas(cuestionario?.preguntas, vigente, prev));
+    } catch {
+      // Sin conexión o sesión expirada: se sigue con los datos que ya había.
+    }
+  }
+
   function elegirCliente(c) {
     setCliente(c);
+    refrescarCliente(c.id_twenty);
     const auto = evaluarAutoRespuestas(cuestionario?.preguntas, c);
     const iniciales = { ...auto };
     setRespuestas(iniciales);
@@ -304,7 +327,10 @@ export default function EncuestaPage() {
 
   function continuarBorrador(b) {
     setCliente(b.cliente);
-    setRespuestas(b.respuestas || {});
+    // El borrador guarda la foto del cliente de cuando se abrió: se reajusta ya
+    // con esa foto y luego con los datos vigentes.
+    setRespuestas(reconciliarAutoRespuestas(cuestionario?.preguntas, b.cliente, b.respuestas || {}));
+    if (b.cliente?.id_twenty) refrescarCliente(b.cliente.id_twenty);
     setIndice(Math.min(b.indice || 0, Math.max(0, (cuestionario?.preguntas?.length || 1) - 1)));
     setActiveDraftId(b.id);
     setErroresValidacion([]);
@@ -374,7 +400,13 @@ export default function EncuestaPage() {
           });
         } else if (data.code === "YA_ENCUESTADO" || data.code === "MES_NO_PERMITIDO") {
           setErrorEnvio({ tipo: "duplicado", mensaje: data.error });
-        } else if (data.code === "CUESTIONARIO_DESACTUALIZADO" || data.code === "RESPUESTAS_INVALIDAS") {
+        } else if (data.code === "RESPUESTAS_INVALIDAS") {
+          // P. ej. la pregunta de corte y laminado quedó omitida con datos viejos del
+          // cliente: se traen los vigentes (la reactiva) y se dice qué falta.
+          refrescarCliente(cliente.id_twenty);
+          const faltan = (data.errores || []).map((e) => e.mensaje).join(" ");
+          setErrorEnvio({ tipo: "revisar", mensaje: faltan || data.error });
+        } else if (data.code === "CUESTIONARIO_DESACTUALIZADO") {
           setErrorEnvio({ tipo: "recargar", mensaje: data.error });
         } else {
           setErrorEnvio({ tipo: "reintentar", mensaje: data.error || `Error del servidor (${res.status}).` });
@@ -408,6 +440,7 @@ export default function EncuestaPage() {
   }
 
   function nuevaEncuesta() {
+    clienteAbiertoRef.current = null;
     setStep("cliente");
     setCliente(null);
     setQuery("");
@@ -451,7 +484,7 @@ export default function EncuestaPage() {
       .slice(0, corteInfoActual.cortada ? corteInfoActual.indiceCorte : undefined)
       .filter((p) => autoRespuestas[p.id] !== NA);
     if (aplicables.length === 0) return 100;
-    const respondidas = aplicables.filter((p) => respuestaCompleta(p, respuestas[p.id])).length;
+    const respondidas = aplicables.filter((p) => respuestaCompleta(p, respuestas[p.id], cliente)).length;
     return Math.round((respondidas / aplicables.length) * 100);
   }, [respuestas, cuestionario, autoRespuestas, corteInfoActual]);
 
@@ -705,7 +738,7 @@ export default function EncuestaPage() {
               {cuestionario.preguntas.map((p, i) => {
                 const esNA = autoRespuestas[p.id] === NA;
                 const numLabel = p.numero_reporte ?? (i + 1);
-                const esCompleta = esNA || respuestaCompleta(p, respuestas[p.id]);
+                const esCompleta = esNA || respuestaCompleta(p, respuestas[p.id], cliente);
 
                 return (
                   <button

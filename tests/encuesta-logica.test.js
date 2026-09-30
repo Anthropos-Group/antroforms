@@ -4,6 +4,7 @@ const {
   NA,
   tieneDatoCliente,
   evaluarAutoRespuestas,
+  reconciliarAutoRespuestas,
   evaluarCortePrematuro,
   respuestaCompleta,
   prepararEnvio,
@@ -22,12 +23,32 @@ const sinCorte = { total: "NULL" };
 const r = (cal, just = "ok") => ({ calificacion: cal, justificacion: just });
 const todas = { q1: true, q2: true, q5: r(9), q6: r(8), q7: r(10), q8: r(7), q9: r(6) };
 
-test("tieneDatoCliente trata NULL, N/A, vacío y montos <= 0 como sin dato", () => {
-  assert.equal(tieneDatoCliente({ total: "150" }, "total"), true);
-  assert.equal(tieneDatoCliente({ total: "$ 12,50" }, "total"), true);
-  for (const v of [null, undefined, "", "  ", "NULL", "n/a", "NA", "0", "-5", "abc"]) {
+test("tieneDatoCliente: cualquier dato en TOTAL cuenta; solo vacío o marcadores de vacío no", () => {
+  for (const v of ["150", "$ 12,50", "11", 11, "0", "-5", "abc", "SI", "NO", "corte"]) {
+    assert.equal(tieneDatoCliente({ total: v }, "total"), true, `valor ${v}`);
+  }
+  for (const v of [null, undefined, "", "  ", "NULL", "n/a", "NA", " none "]) {
     assert.equal(tieneDatoCliente({ total: v }, "total"), false, `valor ${v}`);
   }
+});
+
+test("un N/A viejo en P7 no vale si el cliente sí tiene TOTAL (caso DELGADO MONICA)", () => {
+  const q7 = PREGUNTAS[4];
+  assert.equal(respuestaCompleta(q7, NA, { total: "11" }), false);
+  assert.equal(respuestaCompleta(q7, NA, { total: "" }), true);
+  // El borrador se abrió cuando la copia local aún no tenía el TOTAL: P7 quedó en N/A.
+  const envio = prepararEnvio(PREGUNTAS, { ...todas, q7: NA }, { total: "11" });
+  assert.equal(envio.valido, false);
+  assert.equal(envio.errores[0].preguntaId, "q7");
+});
+
+test("reconciliarAutoRespuestas reactiva u omite P7 según los datos vigentes del cliente", () => {
+  const conNA = { q1: true, q7: NA };
+  assert.deepEqual(reconciliarAutoRespuestas(PREGUNTAS, { total: "11" }, conNA), { q1: true });
+  assert.deepEqual(reconciliarAutoRespuestas(PREGUNTAS, { total: "" }, { q1: true }), { q1: true, q7: NA });
+  // Sin cambios devuelve el mismo objeto (no dispara re-render ni pisa lo respondido).
+  const respondida = { q1: true, q7: r(9) };
+  assert.equal(reconciliarAutoRespuestas(PREGUNTAS, { total: "11" }, respondida), respondida);
 });
 
 test("evaluarAutoRespuestas marca N/A solo si falta el dato del cliente", () => {
