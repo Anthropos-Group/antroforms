@@ -5,7 +5,7 @@ import {
   verifySessionToken,
   SESSION_COOKIE,
 } from "../../../../lib/auth";
-import { mesesPermitidosEncuestador } from "../../../../lib/fecha";
+import { mesGestionActivo } from "../../../../lib/gestion";
 
 export const dynamic = "force-dynamic";
 
@@ -52,6 +52,9 @@ async function procesarLote(rows, mapping) {
       { status: 500 }
     );
   }
+
+  // Mes de gestión para filas que no lo traen: el activo en este momento.
+  const { nombre: mesActivoPorDefecto } = await mesGestionActivo(pool);
 
   let client;
   try {
@@ -163,7 +166,7 @@ async function procesarLote(rows, mapping) {
         // Sin PDV en el archivo se deja vacío: antes se inventaba "MATRIZ" y esa
         // sucursal ficticia aparecía en el monitoreo.
         let pdv = null;
-        let mesGestion = mesesPermitidosEncuestador()[0];
+        let mesGestion = mesActivoPorDefecto;
 
         const respuestasDict = {};
         const justificativoDict = {};

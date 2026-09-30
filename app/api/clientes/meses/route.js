@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { getPool } from "../../../../lib/db";
-import { MESES_ES, mesesPermitidosEncuestador } from "../../../../lib/fecha";
+import { MESES_ES } from "../../../../lib/fecha";
+import { mesGestionActivo } from "../../../../lib/gestion";
 
 export const dynamic = "force-dynamic";
 
@@ -23,11 +24,11 @@ export async function GET() {
       return ia - ib;
     });
 
-  // Meses de gestión (con la semana de anticipación), no de calendario.
-  const [mesActual, mesAnterior] = mesesPermitidosEncuestador();
+  // Mes de gestión activo (el único que ve el encuestador).
+  const activo = await mesGestionActivo(pool);
   return NextResponse.json({
-    mesActual,
-    mesAnterior,
+    mesActivo: activo.nombre,
+    periodoActivo: activo.periodo,
     meses,
   });
 }

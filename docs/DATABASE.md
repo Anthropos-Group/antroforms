@@ -209,3 +209,9 @@ La cola `pending_twenty_sync` (migración 0008) guarda los cambios de estado pen
 | Tabla | Cambio | Para qué |
 |---|---|---|
 | `sync_control` | Tabla nueva (`clave`, `valor`, `detalle`, `actualizado_en`) | Estado del refresco periódico de la copia local: desde cuándo volver a leer de Twenty (`valor`) y el resultado de la última pasada (`detalle`, JSON). Sin la migración, el refresco guarda ese estado en memoria. |
+
+## 7. Cambios de la migración `0012_configuracion.sql`
+
+| Tabla | Cambio | Para qué |
+|---|---|---|
+| `configuracion` | Tabla nueva (`clave`, `valor jsonb`, `actualizado_en`) | Parámetros editables desde el panel. `mes_gestion`: cómo se decide el mes de gestión activo de los encuestadores (automático con umbral, o manual con mes y fecha). |

@@ -5,7 +5,7 @@ import { obtenerReporte, obtenerResumen, leerFiltros } from "../../../lib/report
 import { prepararEnvio } from "../../../lib/encuesta-logica";
 import { esUUID, errorJson, leerJson, conErrores } from "../../../lib/http";
 import { verifySessionToken, SESSION_COOKIE } from "../../../lib/auth";
-import { mesesPermitidosEncuestador, mesPermitidoEncuestador } from "../../../lib/fecha";
+import { mesGestionActivo, esMesActivo } from "../../../lib/gestion";
 
 export const dynamic = "force-dynamic";
 
@@ -103,16 +103,19 @@ export const POST = conErrores("POST /api/encuestas", async (request) => {
   const cliente = cliRows[0];
   if (!cliente) return errorJson("El cliente no existe en la base de clientes", 404);
 
-  // El encuestador solo registra clientes del mes de gestión en curso o del anterior
-  // (p. ej. en septiembre: septiembre y agosto, no julio). El admin no tiene el límite.
+  // El encuestador solo registra clientes del mes de gestión activo (un solo mes:
+  // así un cliente repetido en dos meses no se encuesta en el registro equivocado).
+  // El admin no tiene el límite.
   const esAdmin = Boolean(verifySessionToken(request.cookies.get(SESSION_COOKIE)?.value));
-  if (!esAdmin && !mesPermitidoEncuestador(cliente.mes_gestion)) {
-    const [actual, anterior] = mesesPermitidosEncuestador();
-    return errorJson(
-      `Este cliente es del mes de gestión ${cliente.mes_gestion?.trim() || "(sin mes)"}; solo se pueden registrar encuestas de ${actual} y ${anterior}.`,
-      422,
-      { code: "MES_NO_PERMITIDO" }
-    );
+  if (!esAdmin) {
+    const { nombre: mesActivo } = await mesGestionActivo(pool);
+    if (!esMesActivo(cliente.mes_gestion, mesActivo)) {
+      return errorJson(
+        `Este cliente es del mes de gestión ${cliente.mes_gestion?.trim() || "(sin mes)"}; ahora solo se registran encuestas de ${mesActivo}.`,
+        422,
+        { code: "MES_NO_PERMITIDO" }
+      );
+    }
   }
 
   // 3. Validación con las mismas reglas que la UI y cálculo del estado final.

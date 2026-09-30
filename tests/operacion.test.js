@@ -1,32 +1,57 @@
 const test = require("node:test");
 const assert = require("node:assert/strict");
-const {
-  mesesPermitidosEncuestador,
-  mesPermitidoEncuestador,
-  periodoGestionActual,
-  periodoDeMesGestion,
-  relojEcuador,
-} = require("../lib/fecha");
+const { periodoDeMesGestion, relojEcuador } = require("../lib/fecha");
+const { resolverPeriodo, validarConfig, esMesActivo } = require("../lib/gestion");
 const { parsearHoras, turnoVigente } = require("../lib/programador");
 
-test("mes de gestión: una semana de anticipación al cambio de mes", () => {
-  // 23-sep: todavía rige septiembre.
-  const sep23 = new Date("2026-09-23T17:00:00Z");
-  assert.equal(periodoGestionActual(sep23), "2026-09");
-  assert.deepEqual(mesesPermitidosEncuestador(sep23), ["SEPTIEMBRE", "AGOSTO"]);
-  // 24-sep 00:00 en Ecuador: ya rige octubre y agosto queda fuera.
-  const sep24 = new Date("2026-09-24T05:00:00Z");
-  assert.equal(periodoGestionActual(sep24), "2026-10");
-  assert.deepEqual(mesesPermitidosEncuestador(sep24), ["OCTUBRE", "SEPTIEMBRE"]);
-  assert.equal(mesPermitidoEncuestador("octubre ", sep24), true);
-  assert.equal(mesPermitidoEncuestador("AGOSTO", sep24), false);
-  assert.equal(mesPermitidoEncuestador(null, sep24), false);
-  // Durante octubre sigue OCTUBRE + SEPTIEMBRE; el 25-oct pasa a NOVIEMBRE + OCTUBRE.
-  assert.deepEqual(mesesPermitidosEncuestador(new Date("2026-10-24T17:00:00Z")), ["OCTUBRE", "SEPTIEMBRE"]);
-  assert.deepEqual(mesesPermitidosEncuestador(new Date("2026-10-25T17:00:00Z")), ["NOVIEMBRE", "OCTUBRE"]);
+test("mes activo automático: el mes siguiente se activa al cargarse su base", () => {
+  const config = { modo: "automatico", umbral: 100 };
+  // 30-sep con la base de octubre cargada (1 348 clientes): ya rige OCTUBRE.
+  assert.deepEqual(resolverPeriodo({ config, calendario: "2026-09", cargadosSiguiente: 1348 }), {
+    periodo: "2026-10",
+    origen: "automatico",
+  });
+  // Sin base del mes siguiente (o por debajo del umbral): sigue el mes calendario.
+  assert.deepEqual(resolverPeriodo({ config, calendario: "2026-10", cargadosSiguiente: 12 }), {
+    periodo: "2026-10",
+    origen: "calendario",
+  });
   // Cambio de año.
-  assert.equal(periodoGestionActual(new Date("2026-12-26T17:00:00Z")), "2027-01");
-  assert.deepEqual(mesesPermitidosEncuestador(new Date("2026-12-26T17:00:00Z")), ["ENERO", "DICIEMBRE"]);
+  assert.equal(resolverPeriodo({ config, calendario: "2026-12", cargadosSiguiente: 500 }).periodo, "2027-01");
+});
+
+test("mes activo manual: fijo o programado, nunca anterior al mes calendario", () => {
+  const ahora = new Date("2026-10-26T12:00:00Z");
+  const manual = (periodo, desde = null) => ({ modo: "manual", periodo, desde });
+  assert.equal(resolverPeriodo({ config: manual("2026-11"), calendario: "2026-10", cargadosSiguiente: 0, ahora }).periodo, "2026-11");
+  // Programado para más tarde: todavía no.
+  assert.equal(
+    resolverPeriodo({ config: manual("2026-11", "2026-10-26T13:00:00Z"), calendario: "2026-10", cargadosSiguiente: 0, ahora }).periodo,
+    "2026-10"
+  );
+  assert.equal(
+    resolverPeriodo({ config: manual("2026-11", "2026-10-26T11:00:00Z"), calendario: "2026-10", cargadosSiguiente: 0, ahora }).periodo,
+    "2026-11"
+  );
+  // Un mes manual ya pasado no retrocede: el día 1 manda el calendario.
+  assert.deepEqual(resolverPeriodo({ config: manual("2026-10"), calendario: "2026-11", cargadosSiguiente: 0, ahora }), {
+    periodo: "2026-11",
+    origen: "calendario",
+  });
+});
+
+test("configuración del mes de gestión: validación", () => {
+  assert.deepEqual(validarConfig({}).config, { modo: "automatico", umbral: 100 });
+  assert.ok(validarConfig({ modo: "automatico", umbral: 0 }).error);
+  assert.ok(validarConfig({ modo: "manual", periodo: "2026-13" }).error);
+  assert.deepEqual(validarConfig({ modo: "manual", periodo: "2026-11", desde: "2026-10-26T13:00:00Z" }).config, {
+    modo: "manual",
+    periodo: "2026-11",
+    desde: "2026-10-26T13:00:00.000Z",
+  });
+  assert.equal(esMesActivo(" octubre ", "OCTUBRE"), true);
+  assert.equal(esMesActivo("SEPTIEMBRE", "OCTUBRE"), false);
+  assert.equal(esMesActivo(null, "OCTUBRE"), false);
 });
 
 test("período de gestión de una encuesta según el mes del cliente", () => {
@@ -34,9 +59,9 @@ test("período de gestión de una encuesta según el mes del cliente", () => {
   assert.equal(periodoDeMesGestion("septiembre ", "2026-10-02T17:00:00Z"), "2026-09");
   assert.equal(periodoDeMesGestion("ENERO", "2026-12-28T17:00:00Z"), "2027-01");
   assert.equal(periodoDeMesGestion("DICIEMBRE", "2027-01-03T17:00:00Z"), "2026-12");
-  // Sin mes reconocible: el período de gestión vigente ese día.
-  assert.equal(periodoDeMesGestion(null, "2026-09-29T17:00:00Z"), "2026-10");
-  assert.equal(periodoDeMesGestion("", "2026-09-10T17:00:00Z"), "2026-09");
+  // Sin mes reconocible: el mes calendario de la encuesta.
+  assert.equal(periodoDeMesGestion(null, "2026-09-29T17:00:00Z"), "2026-09");
+  assert.equal(periodoDeMesGestion("", "2026-10-01T17:00:00Z"), "2026-10");
 });
 
 test("relojEcuador: fecha y hora locales (UTC-5)", () => {

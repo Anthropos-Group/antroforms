@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { getPool } from "../../../lib/db";
+import { mesGestionActivo } from "../../../lib/gestion";
 import {
   verifySessionToken,
   SESSION_COOKIE,
@@ -7,11 +8,9 @@ import {
 import {
   MESES_ES,
   rangoMesEcuador,
-  periodoGestionActual,
   periodoAnterior,
   nombreMesDePeriodo,
   periodoDeMesGestion,
-  DIAS_ANTICIPACION_GESTION,
 } from "../../../lib/fecha";
 
 export const dynamic = "force-dynamic";
@@ -36,18 +35,22 @@ export async function GET(request) {
     // Mes de gestión (no de calendario): una encuesta cuenta para el mes de gestión
     // de su cliente. Una de un cliente de OCTUBRE hecha el 28/09 cuenta en octubre, y
     // una de SEPTIEMBRE hecha el 2/10 cuenta en septiembre.
+    // El proxy ya garantiza que hay una sesión válida; aquí solo se distingue el rol.
+    const rol = verifySessionToken(request.cookies.get(SESSION_COOKIE)?.value) ? "admin" : "encuestador";
+    const pool = getPool();
+    // Por defecto, el mes de gestión activo. El encuestador solo ve ese mes; el admin
+    // puede consultar cualquiera.
+    const activo = await mesGestionActivo(pool);
     const pedido = searchParams.get("mes");
-    const mes = /^\d{4}-(0[1-9]|1[0-2])$/.test(pedido || "") ? pedido : periodoGestionActual();
+    const mes = rol === "admin" && /^\d{4}-(0[1-9]|1[0-2])$/.test(pedido || "") ? pedido : activo.periodo;
     const nombreMes = nombreMesDePeriodo(mes);
     const siguiente = rangoMesEcuador(rangoMesEcuador(mes).fin.slice(0, 7)).mes;
     // Ventana amplia para distinguir el año (el mes de gestión del cliente no lo trae):
     // desde el mes anterior hasta el siguiente.
     const ventanaInicio = rangoMesEcuador(periodoAnterior(mes)).inicio;
     const ventanaFin = rangoMesEcuador(siguiente).fin;
-    // Clientes sin mes reconocible: cuentan en el mes de gestión vigente el día de la encuesta.
-    const corrimiento = DIAS_ANTICIPACION_GESTION * 24 * 60 * 60 * 1000;
-    const sinMesInicio = new Date(new Date(rangoMesEcuador(mes).inicio).getTime() - corrimiento).toISOString();
-    const sinMesFin = new Date(new Date(rangoMesEcuador(mes).fin).getTime() - corrimiento).toISOString();
+    // Clientes sin mes reconocible: cuentan en el mes calendario de la encuesta.
+    const { inicio: sinMesInicio, fin: sinMesFin } = rangoMesEcuador(mes);
     const filtroMes = `e.completada = true
       and (
         (upper(trim(cc.mes_gestion)) = $1 and e.created_at >= $2 and e.created_at < $3)
@@ -55,19 +58,20 @@ export async function GET(request) {
       )`;
     const valoresMes = [nombreMes, ventanaInicio, ventanaFin, MESES_ES, sinMesInicio, sinMesFin];
 
-    // El proxy ya garantiza que hay una sesión válida; aquí solo se distingue el rol.
-    const rol = verifySessionToken(request.cookies.get(SESSION_COOKIE)?.value) ? "admin" : "encuestador";
-
-    const pool = getPool();
     const meta = await metaMensual(pool);
 
-    // 1. Todas las sucursales (PDVs) del catálogo de clientes cruzadas con las encuestas
-    // completadas del mes de gestión: así se ven también las que tienen 0 avance.
+    // 1. Sucursales (PDVs) con clientes en la base de ese mes de gestión, cruzadas con
+    // las encuestas completadas: así se ven también las que tienen 0 avance.
     const { rows: pdvs } = await pool.query(
       `with catalogo as (
          select distinct trim(pdv) as pdv
          from clientes_cache
-         where pdv is not null and trim(pdv) != ''
+         where pdv is not null and trim(pdv) != '' and upper(trim(mes_gestion)) = $1
+         union
+         select distinct trim(cc.pdv)
+         from encuestas e
+         join clientes_cache cc on cc.id_twenty = e.cliente_twenty_id
+         where cc.pdv is not null and trim(cc.pdv) != '' and ${filtroMes}
        ),
        completadas_mes as (
          select trim(cc.pdv) as pdv, count(*)::int as completadas
@@ -131,6 +135,7 @@ export async function GET(request) {
       historico,
       entrevistadores,
       rol,
+      mes_activo: activo.periodo,
     });
   } catch (err) {
     console.error("Error en /api/monitoreo:", err);

@@ -6,7 +6,10 @@ el resto se puede hacer en cualquier momento.
 ## 1. Aplicar las migraciones
 
 - **0010** (aplicada el 29/09): columnas `detalle` y `actualizado_en` en `sync_runs`.
-- **0011**: tabla `sync_control` para el refresco de la copia local de clientes.
+- **0011** (aplicada el 29/09): tabla `sync_control` para el refresco de la copia local.
+- **0012**: tabla `configuracion` para el mes de gestión activo. Sin ella, el mes activo
+  funciona en modo automático con los valores por defecto, pero no se puede guardar un
+  cambio desde el panel.
 
 Las dos solo agregan estructura y no tocan datos. El código funciona aunque todavía
 no estén aplicadas, pero con menos información en el panel. Desde cualquier máquina
@@ -96,18 +99,18 @@ Los clientes de la gestión de octubre deben tener `mesGestion` = `OCTUBRE` en T
   clientes ahora** justo después de subirlos;
 - y además en vivo: cada búsqueda del encuestador consulta Twenty antes de buscar en la caché.
 
-## 5. Mes de gestión con una semana de anticipación (automático)
+## 5. Mes de gestión activo: solo octubre
 
-Desde el **24/09** la gestión en curso es **octubre** (ver [SINCRONIZACION.md](./SINCRONIZACION.md#mes-de-gestión)):
+Los encuestadores ven y encuestan **solo el mes de gestión activo** (ver
+[SINCRONIZACION.md](./SINCRONIZACION.md#mes-de-gestión-activo)). Con la base de octubre
+cargada (1 348 clientes el 29/09), el modo automático ya activa **OCTUBRE**, y
+septiembre deja de aparecer en el buscador y en su monitoreo.
 
-- El encuestador ve y puede registrar clientes de **OCTUBRE y SEPTIEMBRE**. Agosto deja
-  de aparecer. Si alguien intenta enviar una encuesta de agosto, el servidor la rechaza
-  con un mensaje claro, y los borradores de meses cerrados se marcan "mes cerrado".
-- El monitoreo cuenta cada encuesta en el **mes de gestión de su cliente**: las de octubre
-  hechas desde el 24/09 suman a octubre, y las de septiembre hechas en octubre suman a
-  septiembre. Septiembre sigue disponible en el monitoreo (selector de mes), en Reportes y
-  en el Excel.
-- El 25/10 pasa sola a NOVIEMBRE + OCTUBRE, y así cada mes.
+- Se configura en **Admin → Monitoreo → Mes de gestión activo**: automático (se activa al
+  cargar la base del mes siguiente, el lunes previo) o manual (mes y fecha del cambio).
+- El día 1 de cada mes cambia solo aunque nadie haga nada.
+- El monitoreo cuenta cada encuesta en el mes de gestión de su cliente. Septiembre sigue
+  disponible para el admin en el monitoreo (selector de mes), en Reportes y en el Excel.
 - Revisar en **Admin → Preguntas** la **meta mensual por PDV** (hoy 25).
 
 ## Diagnóstico al 29/09 (para referencia)
