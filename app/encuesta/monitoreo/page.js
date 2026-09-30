@@ -2,10 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
-import { periodoGestionActual } from "../../../lib/fecha";
 
-// Mes de gestión en curso (hora de Ecuador, con la semana de anticipación).
-const mesActualISO = () => periodoGestionActual();
 
 function nombreMesLargo(yyyyMm) {
   const [anio, mes] = yyyyMm.split("-").map(Number);
@@ -22,14 +19,15 @@ function estadoPdv(completadas, meta) {
 
 export default function EncuestadorMonitoreoPage() {
   const router = useRouter();
-  const [mes] = useState(mesActualISO());
+
   const [data, setData] = useState(null);
   const [cargando, setCargando] = useState(false);
 
   async function cargar() {
     setCargando(true);
     try {
-      const res = await fetch(`/api/monitoreo?mes=${mes}`);
+      // El servidor responde siempre con el mes de gestión activo.
+      const res = await fetch("/api/monitoreo");
       if (res.status === 401) {
         router.replace("/login?next=/encuesta/monitoreo");
         return;
@@ -62,7 +60,7 @@ export default function EncuestadorMonitoreoPage() {
     <div className="container">
       <h1 className="page-title">Monitoreo por PDV</h1>
       <p className="page-subtitle">
-        {data ? nombreMesLargo(mes) : "Cargando…"} · meta de {meta} encuestas completadas por sucursal.
+        {data ? nombreMesLargo(data.mes) : "Cargando…"} · meta de {meta} encuestas completadas por sucursal.
       </p>
 
       {/* Avance por Sucursal para Encuestador */}

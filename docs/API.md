@@ -9,7 +9,7 @@ Busca en `clientes_cache` (nunca en Twenty en vivo).
 
 **Query params:** `q` (texto, mínimo 3 caracteres) — busca por nombre, código, teléfono o id EDIMCA.
 
-Solo devuelve clientes del **mes de gestión en curso y el anterior**, con una semana de anticipación al cambio de mes (del 24/09 al 24/10: OCTUBRE y SEPTIEMBRE), que además vienen en `mesesPermitidos`. Si Twenty no respondió, `twentyDisponible: false` y `twentyMotivo: "lento" | "error"`. `POST /api/encuestas` aplica la misma regla a los encuestadores (422 `MES_NO_PERMITIDO`); los administradores no tienen el límite.
+Solo devuelve clientes del **mes de gestión activo** (ver `SINCRONIZACION.md`), que además viene en `mesesPermitidos`. Si Twenty no respondió, `twentyDisponible: false` y `twentyMotivo: "lento" | "error"`. `POST /api/encuestas` aplica la misma regla a los encuestadores (422 `MES_NO_PERMITIDO`); los administradores no tienen el límite.
 
 **Response 200:**
 ```json
@@ -171,6 +171,9 @@ Valores de `modo`: `dry_run` | `incremental` (default) | `backfill_completo`.
 Con `?esperar=1` (o `"esperar": true`) responde 200 al terminar, con `registros_escaneados`, `registros_modificados`, `errores`, `estado` y `parcial`.
 
 **Response 409:** ya hay una sincronización en curso.
+
+### `GET` / `PUT /api/admin/mes-gestion` (admin)
+Mes de gestión activo para los encuestadores. `GET` devuelve `periodo`, `nombre`, `origen` (`automatico` | `manual` | `calendario`), `calendario`, `siguiente` (`periodo`, `nombre`, `cargados`) y `config`. `PUT` guarda `{ "modo": "automatico", "umbral": 100 }` o `{ "modo": "manual", "periodo": "2026-11", "desde": "2026-10-26T13:00:00Z" | null }`.
 
 ### `GET` / `POST /api/admin/refrescar-clientes` (admin)
 `POST` lanza ya un refresco de la copia local de clientes (solo lectura en Twenty) y responde `202`. `GET` devuelve el estado: `enCurso`, `actualizado_en` y `ultimo` (`leidos`, `segundos`, `completo`, o `error`).

@@ -43,27 +43,35 @@ refresco aplica las mismas reglas de normalización al guardar.
 La búsqueda en vivo complementa la copia local para cubrir los minutos entre dos
 refrescos.
 
-## Mes de gestión
+## Mes de gestión activo
 
-La operación trabaja con **una semana de anticipación**: en los últimos 7 días de cada
-mes ya rige el mes siguiente (`DIAS_ANTICIPACION_GESTION` en `lib/fecha.js`).
+El encuestador ve y encuesta **un solo mes de gestión a la vez**: el mes activo. Una
+misma persona puede estar en la base de dos meses con códigos distintos (al 30/09, 35
+clientes de octubre comparten teléfono con uno de septiembre). Si se vieran los dos
+meses, se podría encuestar el registro viejo, dejar vacío el nuevo y luego duplicar
+la encuesta.
 
-| Fechas | Mes de gestión en curso | El encuestador ve y registra |
-|---|---|---|
-| 24/08 – 23/09 | SEPTIEMBRE | SEPTIEMBRE y AGOSTO |
-| 24/09 – 24/10 | OCTUBRE | OCTUBRE y SEPTIEMBRE |
-| 25/10 – 23/11 | NOVIEMBRE | NOVIEMBRE y OCTUBRE |
+Cómo se decide (`lib/gestion.js`), en **Admin → Monitoreo → Mes de gestión activo**:
 
-- El buscador y el envío de encuestas aplican esta regla. El servidor rechaza un
-  cliente fuera de esos meses (`MES_NO_PERMITIDO`). Los administradores no tienen el límite.
+| Modo | Cómo cambia de mes |
+|---|---|
+| **Automático** (por defecto) | El mes siguiente se activa solo en cuanto su base está cargada: cuando la copia local tiene al menos N clientes (100 por defecto) de ese mes creados en Twenty desde unos días antes del mes en curso. Como la base se sube el lunes previo, el cambio ocurre ese mismo lunes, a los ~10 minutos de subirla. |
+| **Manual** | El admin elige el mes y, si quiere, la fecha y hora exactas del cambio. |
+
+En ambos modos el día 1 de cada mes se pasa al mes nuevo aunque nadie haga nada: el
+mes activo nunca es anterior al mes calendario.
+
+- El buscador, el envío de encuestas (`MES_NO_PERMITIDO`) y el monitoreo del encuestador
+  usan solo el mes activo. Los borradores de otro mes se marcan "mes cerrado". Los
+  administradores no tienen el límite: el monitoreo del admin permite elegir cualquier
+  mes, y Reportes y el Excel tienen todo el histórico.
 - El **monitoreo cuenta cada encuesta en el mes de gestión de su cliente**, no en el mes
-  de la fecha. Una encuesta a un cliente de OCTUBRE hecha el 28/09 cuenta para octubre.
-  Una a un cliente de SEPTIEMBRE hecha el 2/10 cuenta para septiembre.
+  de la fecha. Una encuesta a un cliente de OCTUBRE hecha el 30/09 cuenta para octubre.
 
 ## Qué mirar si "no aparece" un cliente
 
-1. **Mes de gestión.** ¿El `MES_GESTION` del cliente en Twenty es el de gestión en curso
-   o el anterior (tabla de arriba)?
+1. **Mes de gestión.** ¿El `MES_GESTION` del cliente en Twenty es el mes activo (Admin →
+   Monitoreo)?
 2. **Estado.** Los clientes en `EFECTIVA`, `NO_LLAMAR` o `YA_LE_REALIZARON_LA_ENCUESTA`, o
    con una encuesta efectiva en la app, no se muestran.
 3. **Copia local.** En Admin → Historial Twenty, "Copia local de clientes" dice cuándo fue

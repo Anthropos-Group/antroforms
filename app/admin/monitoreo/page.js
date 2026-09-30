@@ -1,11 +1,9 @@
 "use client";
 
 import { useEffect, useState, useMemo } from "react";
-import { periodoGestionActual } from "../../../lib/fecha";
+import MesGestionConfig from "../../../components/MesGestionConfig";
 
 // Mes en curso según la hora de Ecuador (no la del navegador ni UTC).
-// Mes de gestión en curso (con la semana de anticipación), no el de calendario.
-const mesActualISO = () => periodoGestionActual();
 
 function nombreMesCorto(yyyyMm) {
   const [anio, mes] = yyyyMm.split("-").map(Number);
@@ -130,7 +128,8 @@ function ReporteEntrevistadoresChart({ entrevistadores = [] }) {
 }
 
 export default function AdminMonitoreoPage() {
-  const [mes, setMes] = useState(mesActualISO());
+  // Vacío = el mes de gestión activo (lo decide el servidor, ver lib/gestion.js).
+  const [mes, setMes] = useState("");
   const [data, setData] = useState(null);
   const [cargando, setCargando] = useState(false);
   const [ultimaActualizacion, setUltimaActualizacion] = useState(null);
@@ -142,10 +141,10 @@ export default function AdminMonitoreoPage() {
   const [error, setError] = useState("");
 
   async function cargar({ silencioso = false } = {}) {
-    if (!/^\d{4}-\d{2}$/.test(mes)) return;
+    if (mes && !/^\d{4}-\d{2}$/.test(mes)) return;
     if (!silencioso) setCargando(true);
     try {
-      const res = await fetch(`/api/monitoreo?mes=${mes}`);
+      const res = await fetch(mes ? `/api/monitoreo?mes=${mes}` : "/api/monitoreo");
       const d = await res.json();
       if (!res.ok) throw new Error(d.error || "Error al cargar");
       setData(d);
@@ -205,13 +204,15 @@ export default function AdminMonitoreoPage() {
     <div className="container">
       <h1 className="page-title">Monitoreo por PDV (Administrador)</h1>
       <p className="page-subtitle">
-        {data ? nombreMesLargo(mes) : "Cargando…"} · meta de {meta} encuestas completadas por sucursal.
+        {data ? nombreMesLargo(data.mes) : "Cargando…"} · meta de {meta} encuestas completadas por sucursal.
       </p>
+
+      <MesGestionConfig />
 
       <div className="card pad" style={{ display: "flex", gap: 12, alignItems: "flex-end", flexWrap: "wrap", marginBottom: 20 }}>
         <div>
           <label className="field-label">Mes a consultar</label>
-          <input type="month" className="text-input" value={mes} onChange={(e) => setMes(e.target.value)} />
+          <input type="month" className="text-input" value={mes || data?.mes || ""} onChange={(e) => setMes(e.target.value)} />
         </div>
         <button className="btn btn-primary" onClick={() => cargar()} disabled={cargando}>
           {cargando ? "Actualizando…" : "Consultar"}
@@ -323,7 +324,7 @@ export default function AdminMonitoreoPage() {
 
       <div className="card pad" style={{ marginBottom: 20 }}>
         <h2 className="section-title">Reporte por entrevistador</h2>
-        <p className="section-subtitle">Distribución del total de encuestas completadas por el equipo de encuestadores en {nombreMesLargo(mes)}.</p>
+        <p className="section-subtitle">Distribución del total de encuestas completadas por el equipo de encuestadores en {data ? nombreMesLargo(data.mes) : "el mes"}.</p>
         <ReporteEntrevistadoresChart entrevistadores={data?.entrevistadores || []} />
       </div>
 

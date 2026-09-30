@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { getPool } from "../../../../lib/db";
 import { fetchPeoplePage, twentyConfigurado } from "../../../../lib/twenty";
 import { filaCache, upsertClientes } from "../../../../lib/clientes";
-import { mesesPermitidosEncuestador } from "../../../../lib/fecha";
+import { mesGestionActivo } from "../../../../lib/gestion";
 
 export const dynamic = "force-dynamic";
 
@@ -26,16 +26,17 @@ export async function GET(request) {
   try {
     const { searchParams } = new URL(request.url);
     const q = (searchParams.get("q") || "").trim().slice(0, 100);
-    const mesesPermitidos = mesesPermitidosEncuestador();
-    // Un filtro de mes explícito solo puede acotar dentro de los meses permitidos.
-    const mesPedido = (searchParams.get("mes_gestion") || "").trim().toUpperCase();
-    const meses = mesesPermitidos.includes(mesPedido) ? [mesPedido] : mesesPermitidos;
+    const pool = getPool();
+    // Solo el mes de gestión activo (ver lib/gestion.js): con un cliente repetido en
+    // dos meses, el encuestador solo ve el registro del mes que se está trabajando.
+    const { nombre: mesActivo } = await mesGestionActivo(pool);
+    const mesesPermitidos = [mesActivo];
+    const meses = mesesPermitidos;
 
     if (q.length < 3) {
       return NextResponse.json({ results: [], mesesPermitidos });
     }
 
-    const pool = getPool();
     let twentyDisponible = null;
     let twentyMotivo = null;
 
@@ -81,7 +82,7 @@ export async function GET(request) {
       "(nombre ilike $1 or codigo_cliente ilike $1 or telefono1 ilike $1 or id_edimca ilike $1)",
     ];
 
-    // Solo el mes de gestión en curso y el anterior: el histórico no se encuesta.
+    // Solo el mes de gestión activo: el histórico no se encuesta.
     valores.push(meses);
     condiciones.push(`upper(trim(mes_gestion)) = any($${valores.length}::text[])`);
 

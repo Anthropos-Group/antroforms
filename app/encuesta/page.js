@@ -11,7 +11,6 @@ import {
   respuestaCompleta,
   prepararEnvio,
 } from "../../lib/encuesta-logica";
-import { mesesPermitidosEncuestador } from "../../lib/fecha";
 
 function armarGuion(texto, valores) {
   if (!texto) return "";
@@ -156,8 +155,9 @@ export default function EncuestaPage() {
   const [buscando, setBuscando] = useState(false);
   const [errorBusqueda, setErrorBusqueda] = useState("");
   const [twentyCaido, setTwentyCaido] = useState(false);
-  // Mes de gestión en curso y el anterior (el servidor aplica la misma regla).
-  const mesesPermitidos = useMemo(() => mesesPermitidosEncuestador(), []);
+  // Mes de gestión activo (lo decide el servidor, ver lib/gestion.js): el único
+  // cuyos clientes se buscan y se pueden encuestar.
+  const [mesesPermitidos, setMesesPermitidos] = useState([]);
   const [cliente, setCliente] = useState(null);
   // Id del cliente abierto, para descartar respuestas de un refresco que llegue
   // cuando el encuestador ya cambió de cliente.
@@ -193,6 +193,10 @@ export default function EncuestaPage() {
       .catch((err) => {
         if (err.message !== "Sesión expirada") setErrorCarga("No se pudo cargar la lista de encuestadores.");
       });
+    fetchSesion("/api/clientes/meses", undefined, sesionExpirada)
+      .then((r) => r.json())
+      .then((d) => d.mesActivo && setMesesPermitidos([d.mesActivo]))
+      .catch(() => {});
     fetchSesion("/api/cuestionarios/activo", undefined, sesionExpirada)
       .then((r) => r.json())
       .then((d) => setCuestionario(d.preguntas ? d : null))
@@ -220,6 +224,7 @@ export default function EncuestaPage() {
           const d = await r.json();
           if (!r.ok) throw new Error(d.error || "Error en la búsqueda");
           setResultados(d.results || []);
+          if (Array.isArray(d.mesesPermitidos) && d.mesesPermitidos.length) setMesesPermitidos(d.mesesPermitidos);
           setTwentyCaido(d.twentyDisponible === false ? d.twentyMotivo || "error" : false);
           setErrorBusqueda("");
         })
@@ -547,7 +552,7 @@ export default function EncuestaPage() {
                         {cuestionario && b.cuestionarioId && b.cuestionarioId !== cuestionario.id && (
                           <span style={{ marginLeft: 8, fontSize: 11, color: "#b45309" }}>(cuestionario anterior)</span>
                         )}
-                        {b.cliente?.mes_gestion && !mesesPermitidos.includes(String(b.cliente.mes_gestion).trim().toUpperCase()) && (
+                        {mesesPermitidos.length > 0 && b.cliente?.mes_gestion && !mesesPermitidos.includes(String(b.cliente.mes_gestion).trim().toUpperCase()) && (
                           <span style={{ marginLeft: 8, fontSize: 11, color: "#b91c1c" }}>
                             (mes {b.cliente.mes_gestion} cerrado: ya no se puede enviar)
                           </span>
@@ -592,9 +597,11 @@ export default function EncuestaPage() {
             <label className="field-label" style={{ marginTop: 4 }}>
               Buscar cliente por nombre, código o teléfono:
             </label>
-            <p style={{ margin: "0 0 8px", fontSize: 12, color: "#6b7280" }}>
-              Se muestran clientes de los meses de gestión <strong>{mesesPermitidos.join(" y ")}</strong>.
-            </p>
+            {mesesPermitidos.length > 0 && (
+              <p style={{ margin: "0 0 8px", fontSize: 12, color: "#6b7280" }}>
+                Se muestran solo clientes del mes de gestión <strong>{mesesPermitidos.join(" y ")}</strong>.
+              </p>
+            )}
             <input
               className="search-input"
               placeholder="Buscar cliente por nombre, código o teléfono (escribe al menos 3 caracteres)…"
