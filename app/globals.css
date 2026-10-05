@@ -1094,6 +1094,39 @@ textarea {
 .pdv-bar-fill.completo { background: var(--color-success); }
 .pdv-count { text-align: right; font-size: 13px; font-variant-numeric: tabular-nums; color: var(--color-text-muted); font-weight: 500; }
 
+/* Monitoreo del admin: columna con interruptor y PDVs con meta improbable (naranja). */
+.pdv-table-head.con-switch,
+.pdv-row.con-switch { grid-template-columns: 1fr 2fr 90px 120px 110px; }
+.pdv-row.improbable { background: #fff7ed; }
+.pdv-row.improbable:hover { background: #ffedd5; }
+.pdv-bar-fill.improbable { background: #f97316; }
+.badge-improbable {
+  display: inline-block;
+  margin-left: 8px;
+  padding: 1px 8px;
+  border-radius: var(--radius-pill);
+  background: #ffedd5;
+  color: #9a3412;
+  border: 1px solid #fdba74;
+  font-size: 11px;
+  font-weight: 600;
+  vertical-align: middle;
+}
+.pdv-base { font-size: 11px; font-weight: 400; color: var(--color-text-muted); margin-top: 2px; }
+.switch { position: relative; display: inline-block; width: 38px; height: 22px; }
+.switch input { opacity: 0; width: 0; height: 0; }
+.switch-slider {
+  position: absolute; inset: 0; cursor: pointer;
+  background: #d1d5db; border-radius: 22px; transition: background 150ms ease;
+}
+.switch-slider::before {
+  content: ""; position: absolute; left: 3px; top: 3px; width: 16px; height: 16px;
+  background: #fff; border-radius: 50%; transition: transform 150ms ease;
+}
+.switch input:checked + .switch-slider { background: #f97316; }
+.switch input:checked + .switch-slider::before { transform: translateX(16px); }
+.switch input:focus-visible + .switch-slider { outline: 2px solid #fdba74; outline-offset: 2px; }
+
 .chart-bars {
   display: flex;
   align-items: flex-end;

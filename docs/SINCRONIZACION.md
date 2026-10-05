@@ -68,6 +68,29 @@ mes activo nunca es anterior al mes calendario.
 - El **monitoreo cuenta cada encuesta en el mes de gestión de su cliente**, no en el mes
   de la fecha. Una encuesta a un cliente de OCTUBRE hecha el 30/09 cuenta para octubre.
 
+## Cliente "en gestión" y resultado de la llamada
+
+- **En gestión.** Cuando un encuestador abre la encuesta de un cliente, el cliente queda
+  reservado para él (`clientes_bloqueo`) y en Twenty pasa a **EN_GESTION**. Los demás lo ven
+  en el buscador como "🔒 En gestión por …" y no pueden abrirlo ni enviarle una encuesta
+  (`EN_GESTION_POR_OTRO`). La reserva se renueva cada 4 minutos mientras la encuesta está
+  abierta y se suelta:
+  - al enviar la encuesta: EFECTIVA o NO_LLAMAR (si es cortada, vuelve a su estado anterior);
+  - al registrar el resultado de la llamada;
+  - al descartar el borrador, cambiar de cliente o cerrar la página: vuelve a su estado anterior;
+  - a los 20 minutos sin uso (el programador la libera): vuelve a su estado anterior.
+
+  Al volver a su estado anterior se consulta antes a Twenty: si alguien le puso otro estado
+  a mano mientras tanto, ese estado se respeta.
+- **Resultado de la llamada.** Dentro de la encuesta, el botón "Registrar resultado de la
+  llamada" cambia el estado directamente en Twenty, sin entrar al CRM: No contesta,
+  Volver a llamar (con fecha), No disponible, Número incorrecto o No desea ser contactado.
+  Suma un intento de llamada (`intentoDeLlamada`), guarda la próxima llamada
+  (`proximaLlamada`) y agrega la observación con fecha y encuestador (`observaciones`).
+  Queda registrado en la tabla `gestiones`.
+- **EFECTIVA puesto a mano en Twenty** no oculta al cliente si no tiene encuesta en la app:
+  aparece como "EFECTIVA en Twenty · falta registrar".
+
 ## Qué mirar si "no aparece" un cliente
 
 1. **Mes de gestión.** ¿El `MES_GESTION` del cliente en Twenty es el mes activo (Admin →

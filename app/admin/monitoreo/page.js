@@ -172,6 +172,33 @@ export default function AdminMonitoreoPage() {
   const totalMeta = totalSucursales * meta;
   const avancePct = totalMeta > 0 ? Math.round((totalCompletadas / totalMeta) * 100) : 0;
   const sucursalesCumplidas = pdvs.filter((p) => p.completadas >= meta).length;
+  // Avance sin contar los PDVs marcados como "meta improbable".
+  const pdvsAlcanzables = pdvs.filter((p) => !p.meta_improbable);
+  const totalImprobables = pdvs.length - pdvsAlcanzables.length;
+  const metaAlcanzable = pdvsAlcanzables.length * meta;
+  const avanceAlcanzablePct =
+    metaAlcanzable > 0
+      ? Math.round((pdvsAlcanzables.reduce((acc, p) => acc + p.completadas, 0) / metaAlcanzable) * 100)
+      : 0;
+
+  // Marca/desmarca un PDV como "meta improbable" (se guarda en el servidor).
+  async function cambiarImprobable(pdv, valor) {
+    const aplicar = (v) =>
+      setData((d) => (d ? { ...d, pdvs: d.pdvs.map((p) => (p.pdv === pdv ? { ...p, meta_improbable: v } : p)) } : d));
+    aplicar(valor);
+    try {
+      const res = await fetch("/api/admin/pdv-config", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ pdv, meta_improbable: valor }),
+      });
+      const d = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(d.error || `Error ${res.status}`);
+    } catch (err) {
+      aplicar(!valor);
+      setError(`No se pudo guardar el PDV ${pdv}: ${err.message}`);
+    }
+  }
   const sucursalesSinAvance = pdvs.filter((p) => p.completadas === 0).length;
   const maxHistorico = Math.max(1, ...(data?.historico?.map((h) => h.completadas) || [1]));
 
@@ -186,6 +213,8 @@ export default function AdminMonitoreoPage() {
       list = list.filter((p) => p.completadas > 0 && p.completadas < meta);
     } else if (filtroEstado === "cumplidas") {
       list = list.filter((p) => p.completadas >= meta);
+    } else if (filtroEstado === "improbables") {
+      list = list.filter((p) => p.meta_improbable);
     }
 
     // Orden
@@ -243,6 +272,14 @@ export default function AdminMonitoreoPage() {
           <div className="kpi-label">Avance global del mes</div>
           <div className={`kpi-value ${avancePct >= 100 ? "kpi-good" : "kpi-accent"}`}>{avancePct}%</div>
         </div>
+        {totalImprobables > 0 && (
+          <div className="kpi-card" style={{ borderLeft: "4px solid #f97316" }}>
+            <div className="kpi-label" style={{ color: "#9a3412" }}>Avance sin PDVs de meta improbable</div>
+            <div className="kpi-value" style={{ color: "#ea580c" }}>
+              {avanceAlcanzablePct}% <span className="kpi-sub">({totalImprobables} excluidos)</span>
+            </div>
+          </div>
+        )}
         <div className="kpi-card good">
           <div className="kpi-label">Metas cumplidas</div>
           <div className="kpi-value kpi-good">
@@ -289,6 +326,7 @@ export default function AdminMonitoreoPage() {
               <option value="sin_avance">Solo: Sin avance (0)</option>
               <option value="en_progreso">Solo: En progreso</option>
               <option value="cumplidas">Solo: Meta cumplida</option>
+              <option value="improbables">Solo: Meta improbable</option>
             </select>
           </div>
         </div>
@@ -297,24 +335,44 @@ export default function AdminMonitoreoPage() {
           <div className="empty-state">No existen sucursales con el filtro seleccionado.</div>
         ) : (
           <>
-            <div className="pdv-table-head">
+            <div className="pdv-table-head con-switch">
               <div>Sucursal</div>
               <div>Progreso</div>
               <div>Completadas</div>
               <div>Estado</div>
+              <div title="Marca los PDVs donde probablemente no se llegue a la meta del mes">Meta improbable</div>
             </div>
             {pdvsProcesados.map((p) => {
               const pct = Math.min(100, Math.round((p.completadas / meta) * 100));
               const completo = p.completadas >= meta;
               const estado = estadoPdv(p.completadas, meta);
               return (
-                <div key={p.pdv} className="pdv-row">
-                  <div className="pdv-name">{p.pdv}</div>
+                <div key={p.pdv} className={`pdv-row con-switch${p.meta_improbable ? " improbable" : ""}`}>
+                  <div className="pdv-name">
+                    {p.pdv}
+                    {p.meta_improbable && <span className="badge-improbable">Meta improbable</span>}
+                    <div className="pdv-base" title="Clientes de este PDV en la base del mes">
+                      {p.clientes_base ?? 0} clientes en la base
+                    </div>
+                  </div>
                   <div className="pdv-bar-track">
-                    <div className={`pdv-bar-fill${completo ? " completo" : ""}`} style={{ width: `${pct}%` }} />
+                    <div
+                      className={`pdv-bar-fill${completo ? " completo" : p.meta_improbable ? " improbable" : ""}`}
+                      style={{ width: `${pct}%` }}
+                    />
                   </div>
                   <div className="pdv-count">{p.completadas} / {meta}</div>
                   <div><span className={`badge ${estado.clase}`}>{estado.label}</span></div>
+                  <div>
+                    <label className="switch" title={p.meta_improbable ? "Quitar marca" : "Marcar como meta improbable"}>
+                      <input
+                        type="checkbox"
+                        checked={Boolean(p.meta_improbable)}
+                        onChange={(e) => cambiarImprobable(p.pdv, e.target.checked)}
+                      />
+                      <span className="switch-slider" />
+                    </label>
+                  </div>
                 </div>
               );
             })}

@@ -80,12 +80,26 @@ export async function GET(request) {
          where ${filtroMes}
          group by trim(cc.pdv)
        )
-       select cat.pdv, coalesce(c.completadas, 0) as completadas
+       select cat.pdv, coalesce(c.completadas, 0) as completadas,
+              (select count(*)::int from clientes_cache b
+               where trim(b.pdv) = cat.pdv and upper(trim(b.mes_gestion)) = $1) as clientes_base
        from catalogo cat
        left join completadas_mes c on c.pdv = cat.pdv
        order by completadas desc, cat.pdv asc`,
       valoresMes
     );
+
+    // PDVs marcados en el panel como "meta improbable" (migración 0013).
+    const improbables = new Set();
+    try {
+      const { rows } = await pool.query(`select pdv from pdv_config where meta_improbable`);
+      rows.forEach((r) => improbables.add(r.pdv.trim()));
+    } catch (err) {
+      if (err.code !== "42P01") throw err;
+    }
+    pdvs.forEach((p) => {
+      p.meta_improbable = improbables.has(p.pdv);
+    });
 
     // 2. Histórico por mes de gestión (últimos 12). Se agrupa en SQL por mes del
     // cliente y día de la encuesta, y el período se resuelve con la misma regla.

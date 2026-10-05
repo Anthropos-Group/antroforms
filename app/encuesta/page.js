@@ -12,6 +12,16 @@ import {
   prepararEnvio,
 } from "../../lib/encuesta-logica";
 
+// Resultados de llamada que se registran desde la app sin hacer la encuesta: cambian
+// el estado del cliente directamente en Twenty.
+const RESULTADOS_LLAMADA = [
+  { valor: "NO_CONTESTA", etiqueta: "No contesta" },
+  { valor: "VOLVER_A_LLAMAR", etiqueta: "Volver a llamar" },
+  { valor: "NO_DISPONIBLE", etiqueta: "No disponible" },
+  { valor: "INCORRECTO", etiqueta: "Número incorrecto" },
+  { valor: "NO_LLAMAR", etiqueta: "No desea ser contactado" },
+];
+
 function armarGuion(texto, valores) {
   if (!texto) return "";
   return texto
@@ -154,6 +164,10 @@ export default function EncuestaPage() {
   const [resultados, setResultados] = useState([]);
   const [buscando, setBuscando] = useState(false);
   const [errorBusqueda, setErrorBusqueda] = useState("");
+  // Aviso en el buscador: cliente tomado por otro encuestador, o resultado de
+  // llamada registrado en Twenty.
+  const [aviso, setAviso] = useState(null);
+  const [gestion, setGestion] = useState({ abierta: false, resultado: "", proxima: "", observacion: "", enviando: false, error: "" });
   const [twentyCaido, setTwentyCaido] = useState(false);
   // Mes de gestión activo (lo decide el servidor, ver lib/gestion.js): el único
   // cuyos clientes se buscan y se pueden encuestar.
@@ -268,6 +282,28 @@ export default function EncuestaPage() {
     }
   }, [respuestas, indice, step, activeDraftId, cliente, cuestionario, encuestadorId]);
 
+  // Mientras la encuesta está abierta, el cliente sigue reservado para este
+  // encuestador (el bloqueo vence a los 20 min sin renovar). Al cerrar la página se
+  // suelta, para que otro pueda tomarlo; al volver al borrador se toma de nuevo.
+  useEffect(() => {
+    const id = cliente?.id_twenty;
+    if (step !== "cuestionario" || !id || !encuestadorId) return;
+    const renovar = setInterval(async () => {
+      const r = await bloqueo(id, "tomar");
+      if (r.status === 409) setAviso({ tipo: "error", texto: r.error });
+    }, 4 * 60 * 1000);
+    const alSalir = () => {
+      const datos = new Blob([JSON.stringify({ encuestador_id: encuestadorId, accion: "liberar" })], { type: "application/json" });
+      navigator.sendBeacon?.(`/api/clientes/${id}/bloqueo`, datos);
+    };
+    window.addEventListener("pagehide", alSalir);
+    return () => {
+      clearInterval(renovar);
+      window.removeEventListener("pagehide", alSalir);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [step, cliente?.id_twenty, encuestadorId]);
+
   const preguntaActual = cuestionario?.preguntas?.[indice];
 
   const autoRespuestas = useMemo(
@@ -307,7 +343,41 @@ export default function EncuestaPage() {
     }
   }
 
-  function elegirCliente(c) {
+  // Reserva el cliente para este encuestador mientras tiene abierta su encuesta
+  // (en Twenty pasa a EN_GESTION) o lo suelta. → { ok, status, error }
+  async function bloqueo(id, accion) {
+    try {
+      const res = await fetchSesion(
+        `/api/clientes/${id}/bloqueo`,
+        { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ encuestador_id: encuestadorId, accion }) },
+        sesionExpirada
+      );
+      const d = await res.json().catch(() => ({}));
+      return { ok: res.ok, status: res.status, error: d.error };
+    } catch {
+      // Sin conexión: se deja seguir; el servidor vuelve a validar al enviar.
+      return { ok: true, status: 0 };
+    }
+  }
+
+  function liberarClienteAbierto() {
+    if (cliente?.id_twenty && encuestadorId) bloqueo(cliente.id_twenty, "liberar");
+  }
+
+  const bloqueadoPorOtro = (r) => Boolean(r.bloqueado_por_id && r.bloqueado_por_id !== encuestadorId);
+
+  async function elegirCliente(c) {
+    setAviso(null);
+    const r = await bloqueo(c.id_twenty, "tomar");
+    if (r.status === 409) {
+      setAviso({ tipo: "error", texto: r.error });
+      return;
+    }
+    abrirCliente(c);
+  }
+
+  function abrirCliente(c) {
+    setGestion({ abierta: false, resultado: "", proxima: "", observacion: "", enviando: false, error: "" });
     setCliente(c);
     refrescarCliente(c.id_twenty);
     const auto = evaluarAutoRespuestas(cuestionario?.preguntas, c);
@@ -330,7 +400,16 @@ export default function EncuestaPage() {
     });
   }
 
-  function continuarBorrador(b) {
+  async function continuarBorrador(b) {
+    setAviso(null);
+    if (b.cliente?.id_twenty) {
+      const r = await bloqueo(b.cliente.id_twenty, "tomar");
+      if (r.status === 409) {
+        setAviso({ tipo: "error", texto: r.error });
+        return;
+      }
+    }
+    setGestion({ abierta: false, resultado: "", proxima: "", observacion: "", enviando: false, error: "" });
     setCliente(b.cliente);
     // El borrador guarda la foto del cliente de cuando se abrió: se reajusta ya
     // con esa foto y luego con los datos vigentes.
@@ -444,7 +523,50 @@ export default function EncuestaPage() {
     }
   }
 
+  async function registrarGestion() {
+    if (!cliente || gestion.enviando) return;
+    if (!gestion.resultado) return setGestion((g) => ({ ...g, error: "Elige el resultado de la llamada." }));
+    if (gestion.resultado === "VOLVER_A_LLAMAR" && !gestion.proxima) {
+      return setGestion((g) => ({ ...g, error: "Indica cuándo volver a llamar." }));
+    }
+    setGestion((g) => ({ ...g, enviando: true, error: "" }));
+    try {
+      const res = await fetchSesion(
+        `/api/clientes/${cliente.id_twenty}/gestion`,
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            encuestador_id: encuestadorId,
+            resultado: gestion.resultado,
+            proxima_llamada: gestion.proxima ? new Date(gestion.proxima).toISOString() : null,
+            observacion: gestion.observacion,
+          }),
+        },
+        sesionExpirada
+      );
+      const d = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(d.error || `Error del servidor (${res.status})`);
+      const etiqueta = RESULTADOS_LLAMADA.find((r) => r.valor === gestion.resultado)?.etiqueta || gestion.resultado;
+      const nombre = cliente.nombre;
+      if (activeDraftId) deleteBorradorFromStorage(activeDraftId);
+      nuevaEncuesta();
+      setAviso({
+        tipo: d.twentyError ? "error" : "ok",
+        texto: d.twentyError
+          ? `${nombre}: "${etiqueta}" guardado. Twenty no respondió; se reintentará solo.`
+          : `✓ ${nombre}: "${etiqueta}" registrado en Twenty.`,
+      });
+    } catch (err) {
+      if (err.message === "Sesión expirada") return;
+      setGestion((g) => ({ ...g, enviando: false, error: err.message }));
+    }
+  }
+
   function nuevaEncuesta() {
+    // Si el cliente quedó sin estado final (encuesta descartada o abandonada), vuelve
+    // a su estado anterior y queda libre para otros. Tras un envío no hace nada.
+    liberarClienteAbierto();
     clienteAbiertoRef.current = null;
     setStep("cliente");
     setCliente(null);
@@ -594,6 +716,21 @@ export default function EncuestaPage() {
               )}
             </div>
 
+            {aviso && (
+              <div
+                style={{
+                  margin: "0 0 12px",
+                  padding: "8px 12px",
+                  borderRadius: 6,
+                  fontSize: 13,
+                  background: aviso.tipo === "ok" ? "#ecfdf5" : "#fef2f2",
+                  color: aviso.tipo === "ok" ? "#065f46" : "#991b1b",
+                  border: `1px solid ${aviso.tipo === "ok" ? "#a7f3d0" : "#fecaca"}`,
+                }}
+              >
+                {aviso.texto}
+              </div>
+            )}
             <label className="field-label" style={{ marginTop: 4 }}>
               Buscar cliente por nombre, código o teléfono:
             </label>
@@ -626,7 +763,16 @@ export default function EncuestaPage() {
                 {resultados.map((r) => {
                   const tieneCorte = tieneDatoCliente(r, "total");
                   return (
-                    <div key={r.id_twenty} className="option-item" onClick={() => elegirCliente(r)}>
+                    <div
+                      key={r.id_twenty}
+                      className="option-item"
+                      style={bloqueadoPorOtro(r) ? { opacity: 0.55, cursor: "not-allowed" } : undefined}
+                      onClick={() =>
+                        bloqueadoPorOtro(r)
+                          ? setAviso({ tipo: "error", texto: `${r.bloqueado_por} ya está gestionando a este cliente.` })
+                          : elegirCliente(r)
+                      }
+                    >
                       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 8 }}>
                         <div className="nombre">{r.nombre}</div>
                         <div style={{ display: "flex", gap: 6, alignItems: "center" }}>
@@ -659,7 +805,15 @@ export default function EncuestaPage() {
                               Sin corte · P7 N/A
                             </span>
                           )}
-                          {r.status === "EFECTIVA" ? (
+                          {bloqueadoPorOtro(r) ? (
+                            <span
+                              className="badge"
+                              style={{ fontSize: 11, padding: "2px 8px", background: "#eff6ff", color: "#1e40af", border: "1px solid #bfdbfe" }}
+                            >
+                              🔒 En gestión por {r.bloqueado_por}
+                              {r.bloqueado_desde ? ` · desde ${new Date(r.bloqueado_desde).toLocaleTimeString("es-EC", { hour: "2-digit", minute: "2-digit" })}` : ""}
+                            </span>
+                          ) : r.status === "EFECTIVA" ? (
                             // En el buscador solo aparecen clientes SIN encuesta en la app: un
                             // EFECTIVA aquí se marcó a mano en Twenty y falta registrar la encuesta.
                             <span
@@ -725,11 +879,83 @@ export default function EncuestaPage() {
               <button
                 className="btn"
                 style={{ fontSize: 12, padding: "4px 10px" }}
-                onClick={() => setStep("cliente")}
+                onClick={() => {
+                  liberarClienteAbierto();
+                  setStep("cliente");
+                }}
               >
                 Cambiar cliente
               </button>
             </div>
+          </div>
+
+          {aviso?.tipo === "error" && (
+            <div className="pad" style={{ paddingBottom: 0 }}>
+              <div className="validation-box">⚠️ {aviso.texto}</div>
+            </div>
+          )}
+
+          <div className="pad" style={{ borderBottom: "1px solid #f0f1f3", paddingTop: 10, paddingBottom: 10 }}>
+            {!gestion.abierta ? (
+              <button
+                className="btn"
+                style={{ fontSize: 13 }}
+                onClick={() => setGestion((g) => ({ ...g, abierta: true }))}
+              >
+                📞 ¿No se pudo hacer la encuesta? Registrar resultado de la llamada
+              </button>
+            ) : (
+              <div>
+                <div style={{ fontSize: 13, fontWeight: 700, marginBottom: 8 }}>
+                  Resultado de la llamada (se guarda directo en Twenty)
+                </div>
+                <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginBottom: 10 }}>
+                  {RESULTADOS_LLAMADA.map((r) => (
+                    <button
+                      key={r.valor}
+                      className={`btn${gestion.resultado === r.valor ? " btn-primary" : ""}`}
+                      style={{ fontSize: 13 }}
+                      onClick={() => setGestion((g) => ({ ...g, resultado: r.valor, error: "" }))}
+                    >
+                      {r.etiqueta}
+                    </button>
+                  ))}
+                </div>
+                {(gestion.resultado === "VOLVER_A_LLAMAR" || gestion.resultado === "NO_CONTESTA") && (
+                  <label style={{ display: "block", fontSize: 13, marginBottom: 8 }}>
+                    Próxima llamada{gestion.resultado === "NO_CONTESTA" ? " (opcional)" : ""}:{" "}
+                    <input
+                      type="datetime-local"
+                      className="text-input"
+                      style={{ width: "auto", display: "inline-block", padding: "4px 8px" }}
+                      value={gestion.proxima}
+                      onChange={(e) => setGestion((g) => ({ ...g, proxima: e.target.value }))}
+                    />
+                  </label>
+                )}
+                <textarea
+                  className="text-input"
+                  rows={2}
+                  placeholder="Observación (opcional)"
+                  value={gestion.observacion}
+                  onChange={(e) => setGestion((g) => ({ ...g, observacion: e.target.value }))}
+                  style={{ marginBottom: 8 }}
+                />
+                {gestion.error && <div style={{ color: "#991b1b", fontSize: 13, marginBottom: 8 }}>{gestion.error}</div>}
+                <div style={{ display: "flex", gap: 8 }}>
+                  <button className="btn btn-primary" disabled={gestion.enviando} onClick={registrarGestion}>
+                    {gestion.enviando ? "Guardando…" : "Guardar resultado"}
+                  </button>
+                  <button
+                    className="btn"
+                    disabled={gestion.enviando}
+                    onClick={() => setGestion({ abierta: false, resultado: "", proxima: "", observacion: "", enviando: false, error: "" })}
+                  >
+                    Cancelar
+                  </button>
+                </div>
+              </div>
+            )}
           </div>
 
           <div className="pad">
