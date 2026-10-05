@@ -86,10 +86,14 @@ export async function GET(request) {
     valores.push(meses);
     condiciones.push(`upper(trim(mes_gestion)) = any($${valores.length}::text[])`);
 
-    // Excluir clientes ya gestionados (EFECTIVA) o que solicitaron no ser contactados (NO_LLAMAR)
+    // Excluir a quienes pidieron no ser contactados (NO_LLAMAR) o dicen que ya los
+    // encuestaron (YA_LE_REALIZARON_LA_ENCUESTA). EFECTIVA en Twenty NO excluye: el
+    // encuestador a veces lo marca a mano en Twenty al terminar la llamada y recién
+    // después registra la encuesta aquí; si se ocultara, no podría registrarla. Lo que
+    // decide "ya encuestado" es la encuesta guardada en la app (condición de abajo).
     condiciones.push(`(
       status is null
-      or upper(replace(trim(status), ' ', '_')) not in ('EFECTIVA', 'NO_LLAMAR', 'YA_LE_REALIZARON_LA_ENCUESTA')
+      or upper(replace(trim(status), ' ', '_')) not in ('NO_LLAMAR', 'YA_LE_REALIZARON_LA_ENCUESTA')
     )`);
 
     // Excluir de raíz cualquier cliente que ya tenga una encuesta completada en el sistema
