@@ -660,7 +660,15 @@ export default function EncuestaPage() {
                             </span>
                           )}
                           {r.status === "EFECTIVA" ? (
-                            <span className="badge badge-completado" style={{ fontSize: 11, padding: "2px 8px" }}>✓ Ya encuestado</span>
+                            // En el buscador solo aparecen clientes SIN encuesta en la app: un
+                            // EFECTIVA aquí se marcó a mano en Twenty y falta registrar la encuesta.
+                            <span
+                              className="badge"
+                              style={{ fontSize: 11, padding: "2px 8px", background: "#fffbeb", color: "#92400e", border: "1px solid #fcd34d" }}
+                              title="Marcado EFECTIVA en Twenty, pero la encuesta todavía no está registrada en el sistema."
+                            >
+                              EFECTIVA en Twenty · falta registrar
+                            </span>
                           ) : r.status ? (
                             <span className="badge badge-mode-incremental" style={{ fontSize: 11, padding: "2px 8px" }}>{r.status}</span>
                           ) : null}

@@ -172,6 +172,9 @@ Con `?esperar=1` (o `"esperar": true`) responde 200 al terminar, con `registros_
 
 **Response 409:** ya hay una sincronización en curso.
 
+### `PUT /api/admin/pdv-config` (admin)
+`{ "pdv": "SHOWROOM GRANADOS", "meta_improbable": true }`: marca o desmarca un PDV como "meta improbable" en el monitoreo.
+
 ### `GET` / `PUT /api/admin/mes-gestion` (admin)
 Mes de gestión activo para los encuestadores. `GET` devuelve `periodo`, `nombre`, `origen` (`automatico` | `manual` | `calendario`), `calendario`, `siguiente` (`periodo`, `nombre`, `cargados`) y `config`. `PUT` guarda `{ "modo": "automatico", "umbral": 100 }` o `{ "modo": "manual", "periodo": "2026-11", "desde": "2026-10-26T13:00:00Z" | null }`.
 
