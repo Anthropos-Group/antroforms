@@ -3,7 +3,6 @@ import { getPool } from "../../../../lib/db";
 import { fetchPeoplePage, twentyConfigurado } from "../../../../lib/twenty";
 import { filaCache, upsertClientes } from "../../../../lib/clientes";
 import { mesGestionActivo } from "../../../../lib/gestion";
-import { bloqueosDisponibles } from "../../../../lib/bloqueos";
 
 export const dynamic = "force-dynamic";
 
@@ -104,22 +103,9 @@ export async function GET(request) {
         and e.completada = true
     )`);
 
-    // Quién lo tiene "en gestión" ahora (bloqueo vigente): la UI lo muestra y no
-    // deja que otro encuestador lo abra.
-    const conBloqueos = await bloqueosDisponibles(pool);
     const { rows } = await pool.query(
-      `select id_twenty, nombre, codigo_cliente, pdv, mes_gestion, id_edimca, status, telefono1, total, fecha_atencion, etiqueta,
-              ${
-                conBloqueos
-                  ? "b.encuestador_id as bloqueado_por_id, (select e2.nombre from encuestadores e2 where e2.id = b.encuestador_id) as bloqueado_por, b.tomado_en as bloqueado_desde"
-                  : "null as bloqueado_por_id, null as bloqueado_por, null as bloqueado_desde"
-              }
+      `select id_twenty, nombre, codigo_cliente, pdv, mes_gestion, id_edimca, status, telefono1, total, fecha_atencion, etiqueta
        from clientes_cache
-       ${
-         conBloqueos
-           ? "left join clientes_bloqueo b on b.cliente_twenty_id = clientes_cache.id_twenty and b.expira_en > now()"
-           : ""
-       }
        where ${condiciones.join(" and ")}
        order by nombre asc
        limit 15`,

@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { getPool } from "../../../lib/db";
-import { bloqueosDisponibles, restaurarYLiberar, actualizarEnTwenty } from "../../../lib/bloqueos";
+import { patchPerson, twentyConfigurado } from "../../../lib/twenty";
 import { obtenerReporte, obtenerResumen, leerFiltros } from "../../../lib/reportes";
 import { prepararEnvio } from "../../../lib/encuesta-logica";
 import { esUUID, errorJson, leerJson, conErrores } from "../../../lib/http";
@@ -137,32 +137,11 @@ export const POST = conErrores("POST /api/encuestas", async (request) => {
 
   // 4. Transacción con candado por cliente: dos encuestadores (o dos pestañas)
   //    no pueden registrar a la vez una encuesta efectiva del mismo cliente.
-  const conBloqueos = await bloqueosDisponibles(pool);
   const client = await pool.connect();
   let encuestaId;
-  let bloqueo = null;
   try {
     await client.query("begin");
     await client.query(`select pg_advisory_xact_lock(hashtext($1))`, [cliente_twenty_id]);
-
-    // Cliente en gestión por otro encuestador (lo tiene abierto ahora mismo).
-    if (conBloqueos) {
-      const { rows: bl } = await client.query(
-        `select b.encuestador_id, b.status_previo, b.expira_en > now() as activo, enc.nombre as encuestador
-         from clientes_bloqueo b left join encuestadores enc on enc.id = b.encuestador_id
-         where b.cliente_twenty_id = $1`,
-        [cliente_twenty_id]
-      );
-      bloqueo = bl[0] || null;
-      if (bloqueo?.activo && bloqueo.encuestador_id !== encuestador_id) {
-        await client.query("rollback");
-        return errorJson(
-          `${bloqueo.encuestador || "Otro encuestador"} está gestionando a este cliente; no se guardó la encuesta.`,
-          409,
-          { code: "EN_GESTION_POR_OTRO" }
-        );
-      }
-    }
 
     const { rows: previas } = await client.query(
       `select e.id, e.created_at, enc.nombre as encuestador
@@ -222,8 +201,6 @@ export const POST = conErrores("POST /api/encuestas", async (request) => {
         `update clientes_cache set status = $1, synced_at = now() where id_twenty = $2`,
         [targetStatus, cliente_twenty_id]
       );
-      // Con estado final, el bloqueo "en gestión" ya no hace falta.
-      if (conBloqueos) await client.query(`delete from clientes_bloqueo where cliente_twenty_id = $1`, [cliente_twenty_id]);
     }
 
     await client.query("commit");
@@ -241,15 +218,22 @@ export const POST = conErrores("POST /api/encuestas", async (request) => {
 
   // 5. Cierre del ciclo con Twenty (fuera de la transacción). Timeout corto para
   //    no dejar esperando al encuestador; si falla, queda en la cola de reintentos.
-  //    Una encuesta cortada (sin estado final) devuelve al cliente al estado que
-  //    tenía antes de quedar EN_GESTION.
   let twentyError = null;
-  if (targetStatus) {
-    twentyError = await actualizarEnTwenty(pool, cliente_twenty_id, { status: targetStatus });
-  } else if (bloqueo) {
-    await restaurarYLiberar(pool, cliente_twenty_id, bloqueo.status_previo).catch((err) =>
-      console.error(`No se pudo liberar ${cliente_twenty_id} tras una encuesta cortada:`, err.message)
-    );
+  if (targetStatus && twentyConfigurado()) {
+    try {
+      await patchPerson(cliente_twenty_id, { status: targetStatus }, { timeoutMs: 8000, reintentos: 0 });
+    } catch (err) {
+      twentyError = err.message;
+      console.error(`Twenty CRM no respondió para ${cliente_twenty_id}. Encolando reintento:`, err.message);
+      try {
+        await pool.query(
+          `insert into pending_twenty_sync (cliente_twenty_id, status_target, ultimo_error) values ($1, $2, $3)`,
+          [cliente_twenty_id, targetStatus, err.message.slice(0, 1000)]
+        );
+      } catch (qErr) {
+        console.warn("No se pudo registrar en pending_twenty_sync:", qErr.message);
+      }
+    }
   }
 
   return NextResponse.json(

@@ -172,12 +172,6 @@ Con `?esperar=1` (o `"esperar": true`) responde 200 al terminar, con `registros_
 
 **Response 409:** ya hay una sincronización en curso.
 
-### `POST /api/clientes/:id/bloqueo`
-`{ "encuestador_id": "uuid", "accion": "tomar" | "liberar" }`. "tomar" reserva el cliente para el encuestador (en Twenty pasa a EN_GESTION) o renueva la reserva; responde 409 `EN_GESTION_POR_OTRO` si otro lo tiene. "liberar" lo suelta y lo devuelve a su estado anterior.
-
-### `POST /api/clientes/:id/gestion`
-`{ "encuestador_id": "uuid", "resultado": "NO_CONTESTA" | "VOLVER_A_LLAMAR" | "NO_DISPONIBLE" | "INCORRECTO" | "NO_LLAMAR", "proxima_llamada": "ISO" | null, "observacion": "texto" }`. Cambia el estado en Twenty (más `intentoDeLlamada`, `proximaLlamada` y `observaciones`), suelta la reserva y lo registra en `gestiones`. `VOLVER_A_LLAMAR` exige `proxima_llamada`.
-
 ### `PUT /api/admin/pdv-config` (admin)
 `{ "pdv": "SHOWROOM GRANADOS", "meta_improbable": true }`: marca o desmarca un PDV como "meta improbable" en el monitoreo.
 
