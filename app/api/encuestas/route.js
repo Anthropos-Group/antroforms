@@ -144,12 +144,20 @@ export const POST = conErrores("POST /api/encuestas", async (request) => {
     await client.query(`select pg_advisory_xact_lock(hashtext($1))`, [cliente_twenty_id]);
 
     const { rows: previas } = await client.query(
+      // Mismo registro, o mismo código en el mismo mes de gestión (una encuesta de
+      // un mes anterior no impide encuestar la nueva compra del mes en curso).
       `select e.id, e.created_at, enc.nombre as encuestador
-       from encuestas e left join encuestadores enc on enc.id = e.encuestador_id
+       from encuestas e
+       left join encuestadores enc on enc.id = e.encuestador_id
+       left join clientes_cache ce on ce.id_twenty = e.cliente_twenty_id
        where e.completada = true
-         and (e.cliente_twenty_id = $1 or ($2::text is not null and e.codigo_cliente = $2))
+         and (
+           e.cliente_twenty_id = $1
+           or ($2::text is not null and e.codigo_cliente = $2
+               and (ce.id_twenty is null or upper(trim(ce.mes_gestion)) = upper(trim($3::text))))
+         )
        order by e.created_at desc limit 1`,
-      [cliente_twenty_id, cliente.codigo_cliente]
+      [cliente_twenty_id, cliente.codigo_cliente, cliente.mes_gestion ?? ""]
     );
     if (previas[0]) {
       await client.query("rollback");

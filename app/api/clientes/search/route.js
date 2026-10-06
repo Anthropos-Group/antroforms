@@ -96,11 +96,22 @@ export async function GET(request) {
       or upper(replace(trim(status), ' ', '_')) not in ('NO_LLAMAR', 'YA_LE_REALIZARON_LA_ENCUESTA')
     )`);
 
-    // Excluir de raíz cualquier cliente que ya tenga una encuesta completada en el sistema
+    // Excluir a quien ya tiene encuesta efectiva: en este mismo registro, o con el
+    // mismo código en el MISMO mes de gestión. Un cliente que vuelve a comprar entra
+    // otra vez en la base del mes siguiente (mismo código, registro nuevo) y debe
+    // poder encuestarse aunque tenga encuesta de un mes anterior.
     condiciones.push(`not exists (
       select 1 from encuestas e
-      where (e.cliente_twenty_id = clientes_cache.id_twenty or (e.codigo_cliente = clientes_cache.codigo_cliente and clientes_cache.codigo_cliente is not null))
-        and e.completada = true
+      left join clientes_cache ce on ce.id_twenty = e.cliente_twenty_id
+      where e.completada = true
+        and (
+          e.cliente_twenty_id = clientes_cache.id_twenty
+          or (
+            clientes_cache.codigo_cliente is not null
+            and e.codigo_cliente = clientes_cache.codigo_cliente
+            and (ce.id_twenty is null or upper(trim(ce.mes_gestion)) = upper(trim(clientes_cache.mes_gestion)))
+          )
+        )
     )`);
 
     const { rows } = await pool.query(
