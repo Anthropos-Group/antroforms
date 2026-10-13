@@ -43,6 +43,8 @@ const ENCUESTADOR_KEY = "antroforms_encuestador";
 // Borradores más viejos que esto se descartan solos (el cliente seguramente ya
 // fue gestionado y la lista crecería sin límite en el navegador).
 const DRAFT_TTL_MS = 14 * 24 * 60 * 60 * 1000;
+// Tiempo máximo de espera al enviar una encuesta antes de ofrecer reintentar.
+const ENVIO_TIMEOUT_MS = 30_000;
 
 function getBorradoresFromStorage() {
   if (typeof window === "undefined") return [];
@@ -379,10 +381,15 @@ export default function EncuestaPage() {
   async function enviar(envio) {
     setEnviando(true);
     setErrorEnvio(null);
+    // Sin límite, un servidor lento dejaba "Guardando respuesta…" para siempre y había
+    // que salir y volver a entrar. Reintentar es seguro: el idempotency_key evita duplicados.
+    const controller = new AbortController();
+    const limite = setTimeout(() => controller.abort(), ENVIO_TIMEOUT_MS);
 
     try {
       const res = await fetch("/api/encuestas", {
         method: "POST",
+        signal: controller.signal,
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           cuestionario_id: cuestionario.id,
@@ -424,7 +431,6 @@ export default function EncuestaPage() {
         completada,
         id: data.id,
         status: data.status,
-        twentyError: data.twentyError,
         duplicada: data.duplicada,
       });
 
@@ -434,12 +440,16 @@ export default function EncuestaPage() {
         setActiveDraftId(null);
       }
       setStep("fin");
-    } catch {
+    } catch (err) {
       setErrorEnvio({
         tipo: "reintentar",
-        mensaje: "No hubo conexión con el servidor. El borrador está guardado; vuelve a intentar el envío.",
+        mensaje:
+          err.name === "AbortError"
+            ? "El servidor tardó demasiado en responder. El borrador está guardado; vuelve a intentar el envío (no se duplicará)."
+            : "No hubo conexión con el servidor. El borrador está guardado; vuelve a intentar el envío.",
       });
     } finally {
+      clearTimeout(limite);
       setEnviando(false);
     }
   }
@@ -1067,11 +1077,6 @@ export default function EncuestaPage() {
             </div>
           )}
 
-          {resultadoFinal.twentyError && (
-            <p style={{ color: "#991b1b", fontSize: 13 }}>
-              Aviso: Twenty CRM no respondió, el cambio de estado quedó en cola y se reintentará automáticamente. La encuesta sí quedó guardada.
-            </p>
-          )}
           <button className="btn btn-primary" style={{ marginTop: 16 }} onClick={nuevaEncuesta}>
             Levantar otra encuesta
           </button>

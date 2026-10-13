@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { getPool } from "../../../../lib/db";
-import { fetchPerson, twentyConfigurado } from "../../../../lib/twenty";
+import { fetchPerson, twentyConfigurado, twentyEnVivoDisponible, registrarFalloEnVivo } from "../../../../lib/twenty";
 import { filaCache, upsertClientes } from "../../../../lib/clientes";
 import { esUUID, errorJson, conErrores } from "../../../../lib/http";
 
@@ -18,13 +18,16 @@ export const GET = conErrores("GET /api/clientes/[id]", async (_request, { param
 
   const pool = getPool();
   let twentyDisponible = null;
-  if (twentyConfigurado()) {
+  if (twentyConfigurado() && !twentyEnVivoDisponible()) {
+    twentyDisponible = false;
+  } else if (twentyConfigurado()) {
     try {
       const person = await fetchPerson(id, { timeoutMs: TIMEOUT_TWENTY_MS, reintentos: 0 });
       // Solo un registro completo reemplaza la copia local.
       if (person?.id && (person.name || person.codigoCliente)) await upsertClientes(pool, [filaCache(person)]);
       twentyDisponible = true;
     } catch (err) {
+      registrarFalloEnVivo(err);
       twentyDisponible = false;
       console.warn(`Aviso: no se pudo traer de Twenty el cliente ${id}:`, err.message);
     }

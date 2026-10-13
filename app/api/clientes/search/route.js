@@ -1,6 +1,11 @@
 import { NextResponse } from "next/server";
 import { getPool } from "../../../../lib/db";
-import { fetchPeoplePage, twentyConfigurado } from "../../../../lib/twenty";
+import {
+  fetchPeoplePage,
+  twentyConfigurado,
+  twentyEnVivoDisponible,
+  registrarFalloEnVivo,
+} from "../../../../lib/twenty";
 import { filaCache, upsertClientes } from "../../../../lib/clientes";
 import { mesGestionActivo } from "../../../../lib/gestion";
 
@@ -43,7 +48,11 @@ export async function GET(request) {
     // Sincronización en vivo con Twenty CRM: trae altas y cambios de estado en
     // tiempo real antes de buscar en la caché.
     const qTwenty = terminoParaTwenty(q);
-    if (twentyConfigurado() && qTwenty.length >= 3) {
+    if (twentyConfigurado() && qTwenty.length >= 3 && !twentyEnVivoDisponible()) {
+      // Twenty no respondió hace poco: se busca directo en la copia local.
+      twentyDisponible = false;
+      twentyMotivo = "lento";
+    } else if (twentyConfigurado() && qTwenty.length >= 3) {
       try {
         // Si se tecleó un número (código de cliente, id EDIMCA o teléfono) no hace
         // falta buscar en los nombres, y el código se busca exacto: consulta más liviana.
@@ -70,6 +79,7 @@ export async function GET(request) {
         await upsertClientes(pool, people.map((p) => filaCache(p)));
         twentyDisponible = true;
       } catch (twentyErr) {
+        registrarFalloEnVivo(twentyErr);
         twentyDisponible = false;
         twentyMotivo = /no respondió/.test(twentyErr.message) ? "lento" : "error";
         console.warn("Aviso en live sync con Twenty CRM:", twentyErr.message);

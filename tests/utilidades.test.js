@@ -79,3 +79,12 @@ test("filaCache normaliza nombre, teléfono y total del registro de Twenty", () 
   assert.equal(fila[7], "0991234567");
   assert.equal(fila[8], "");
 });
+
+test("Twenty en vivo: un 4xx no pausa, la lentitud o un 5xx sí", () => {
+  const { twentyEnVivoDisponible, registrarFalloEnVivo } = require("../lib/twenty");
+  assert.equal(twentyEnVivoDisponible(), true);
+  registrarFalloEnVivo(Object.assign(new Error("Twenty GET /people fallo: 400"), { status: 400 }));
+  assert.equal(twentyEnVivoDisponible(), true);
+  registrarFalloEnVivo(new Error("Twenty GET /people no respondió en 6s"));
+  assert.equal(twentyEnVivoDisponible(), false);
+});
