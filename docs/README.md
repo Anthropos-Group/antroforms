@@ -14,6 +14,7 @@ Sistema interno para levantar encuestas de satisfacción de clientes, integrado 
 | [DEPLOY.md](./DEPLOY.md) | Despliegue en servidor propio con Docker |
 | [PRODUCCION.md](./PRODUCCION.md) | Auditoría pre-producción, correcciones, nuevas funciones y checklist de salida |
 | [SINCRONIZACION.md](./SINCRONIZACION.md) | Cómo se sincroniza con Twenty, por qué hay copia local, y la regla del mes de gestión |
+| [RENDIMIENTO.md](./RENDIMIENTO.md) | Auditoría de octubre 2026: lentitud, concurrencia, red y sincronización; correcciones y qué vigilar |
 | [ARRANQUE-OCTUBRE.md](./ARRANQUE-OCTUBRE.md) | Checklist de arranque de octubre 2026: migración, despliegue, limpieza de la base y diagnóstico |
 
 ## Resumen rápido

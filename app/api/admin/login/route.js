@@ -4,7 +4,7 @@ import {
   verifyPassword,
   createSessionToken,
   SESSION_COOKIE,
-  SESSION_TTL_MS,
+  cookieSesionOpciones,
   ipDe,
   loginBloqueado,
   registrarLoginFallido,
@@ -52,13 +52,7 @@ export async function POST(request) {
     limpiarLoginFallido(clave);
     const token = createSessionToken(admin.id);
     const res = NextResponse.json({ ok: true });
-    res.cookies.set(SESSION_COOKIE, token, {
-      httpOnly: true,
-      sameSite: "lax",
-      secure: process.env.NODE_ENV === "production",
-      maxAge: SESSION_TTL_MS / 1000,
-      path: "/",
-    });
+    res.cookies.set(SESSION_COOKIE, token, cookieSesionOpciones());
     return res;
   } catch (err) {
     console.error("Error en login de administrador:", err);

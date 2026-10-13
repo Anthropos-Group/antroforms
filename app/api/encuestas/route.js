@@ -1,6 +1,6 @@
-import { NextResponse } from "next/server";
+import { NextResponse, after } from "next/server";
 import { getPool } from "../../../lib/db";
-import { patchPerson, twentyConfigurado } from "../../../lib/twenty";
+import { patchPerson, twentyConfigurado, twentyEnVivoDisponible, registrarFalloEnVivo } from "../../../lib/twenty";
 import { obtenerReporte, obtenerResumen, leerFiltros } from "../../../lib/reportes";
 import { prepararEnvio } from "../../../lib/encuesta-logica";
 import { esUUID, errorJson, leerJson, conErrores } from "../../../lib/http";
@@ -136,12 +136,20 @@ export const POST = conErrores("POST /api/encuestas", async (request) => {
   const targetStatus = envio.completada ? "EFECTIVA" : envio.rechazo ? "NO_LLAMAR" : null;
 
   // 4. Transacción con candado por cliente: dos encuestadores (o dos pestañas)
-  //    no pueden registrar a la vez una encuesta efectiva del mismo cliente.
+  //    no pueden registrar a la vez una encuesta efectiva del mismo cliente. El
+  //    candado va por código de cliente cuando lo hay, porque el chequeo de abajo
+  //    también cuenta como "ya encuestado" otro registro con el mismo código.
   const client = await pool.connect();
   let encuestaId;
+  let pendienteId = null;
   try {
     await client.query("begin");
-    await client.query(`select pg_advisory_xact_lock(hashtext($1))`, [cliente_twenty_id]);
+    // Tope a cada consulta (incluida la espera del candado): si la base está lenta,
+    // el encuestador recibe un error para reintentar en vez de quedarse esperando.
+    await client.query(`set local statement_timeout = '15s'`);
+    await client.query(`select pg_advisory_xact_lock(hashtext($1))`, [
+      cliente.codigo_cliente ? `codigo:${cliente.codigo_cliente}` : cliente_twenty_id,
+    ]);
 
     const { rows: previas } = await client.query(
       // Mismo registro, o mismo código en el mismo mes de gestión (una encuesta de
@@ -209,6 +217,16 @@ export const POST = conErrores("POST /api/encuestas", async (request) => {
         `update clientes_cache set status = $1, synced_at = now() where id_twenty = $2`,
         [targetStatus, cliente_twenty_id]
       );
+      // El cambio hacia Twenty queda registrado como pendiente junto con la encuesta:
+      // si el contenedor se reinicia antes de enviarlo, lo envía el refresco; y
+      // mientras esté pendiente, el refresco no pisa el estado local con el viejo.
+      if (twentyConfigurado()) {
+        const { rows: pend } = await client.query(
+          `insert into pending_twenty_sync (cliente_twenty_id, status_target) values ($1, $2) returning id`,
+          [cliente_twenty_id, targetStatus]
+        );
+        pendienteId = pend[0].id;
+      }
     }
 
     await client.query("commit");
@@ -224,28 +242,30 @@ export const POST = conErrores("POST /api/encuestas", async (request) => {
     client.release();
   }
 
-  // 5. Cierre del ciclo con Twenty (fuera de la transacción). Timeout corto para
-  //    no dejar esperando al encuestador; si falla, queda en la cola de reintentos.
-  let twentyError = null;
-  if (targetStatus && twentyConfigurado()) {
-    try {
-      await patchPerson(cliente_twenty_id, { status: targetStatus }, { timeoutMs: 8000, reintentos: 0 });
-    } catch (err) {
-      twentyError = err.message;
-      console.error(`Twenty CRM no respondió para ${cliente_twenty_id}. Encolando reintento:`, err.message);
+  // 5. Cierre del ciclo con Twenty, después de responder: la encuesta ya quedó
+  //    guardada y el encuestador no espera a Twenty. Si Twenty falla o está en
+  //    pausa, el pendiente sigue en la cola y lo reintenta el refresco.
+  if (pendienteId) {
+    after(async () => {
+      if (!twentyEnVivoDisponible()) return;
       try {
-        await pool.query(
-          `insert into pending_twenty_sync (cliente_twenty_id, status_target, ultimo_error) values ($1, $2, $3)`,
-          [cliente_twenty_id, targetStatus, err.message.slice(0, 1000)]
-        );
-      } catch (qErr) {
-        console.warn("No se pudo registrar en pending_twenty_sync:", qErr.message);
+        await patchPerson(cliente_twenty_id, { status: targetStatus }, { timeoutMs: 8000, reintentos: 0 });
+        await pool.query(`delete from pending_twenty_sync where id = $1`, [pendienteId]);
+      } catch (err) {
+        registrarFalloEnVivo(err);
+        console.error(`Twenty CRM no respondió para ${cliente_twenty_id}; queda en la cola de reintentos:`, err.message);
+        await pool
+          .query(
+            `update pending_twenty_sync set intentos = intentos + 1, ultimo_error = $2, actualizado_en = now() where id = $1`,
+            [pendienteId, err.message.slice(0, 1000)]
+          )
+          .catch((qErr) => console.warn("No se pudo actualizar pending_twenty_sync:", qErr.message));
       }
-    }
+    });
   }
 
   return NextResponse.json(
-    { id: encuestaId, completada: envio.completada, status: targetStatus, twentyError },
+    { id: encuestaId, completada: envio.completada, status: targetStatus },
     { status: 201 }
   );
 });

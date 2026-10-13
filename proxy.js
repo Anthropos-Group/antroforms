@@ -5,6 +5,10 @@ import {
   verifyEncuestadorSessionToken,
   ENCUESTADOR_SESSION_COOKIE,
   adminSigueActivo,
+  createSessionToken,
+  createEncuestadorSessionToken,
+  cookieSesionOpciones,
+  tokenPorRenovar,
 } from "./lib/auth";
 import { getPool } from "./lib/db";
 
@@ -57,6 +61,23 @@ async function sesionActual(request) {
   return null;
 }
 
+// Con actividad, la sesión se extiende sola (ver tokenPorRenovar en lib/auth.js):
+// así no vence a mitad de turno mientras el encuestador está trabajando.
+function continuarConSesion(request, sesion) {
+  const res = NextResponse.next();
+  if (sesion === "admin") {
+    const token = request.cookies.get(SESSION_COOKIE)?.value;
+    if (tokenPorRenovar(token)) {
+      res.cookies.set(SESSION_COOKIE, createSessionToken(verifySessionToken(token)), cookieSesionOpciones());
+    }
+  } else if (sesion === "encuestador") {
+    if (tokenPorRenovar(request.cookies.get(ENCUESTADOR_SESSION_COOKIE)?.value)) {
+      res.cookies.set(ENCUESTADOR_SESSION_COOKIE, createEncuestadorSessionToken(), cookieSesionOpciones());
+    }
+  }
+  return res;
+}
+
 function irALogin(request, pathname) {
   const loginUrl = new URL("/login", request.url);
   loginUrl.searchParams.set("next", pathname);
@@ -96,14 +117,14 @@ export async function proxy(request) {
   if (esHome) {
     if (!sesion) return irALogin(request, pathname);
     if (sesion === "encuestador") return NextResponse.redirect(new URL("/encuesta", request.url));
-    return NextResponse.next(); // admin ve el directorio normal
+    return continuarConSesion(request, sesion); // admin ve el directorio normal
   }
 
   const requiereAdmin = esPaginaAdmin || regla?.auth === "admin";
   const requiereCualquiera = esPaginaEncuesta || regla?.auth === "any";
   const autorizado = requiereAdmin ? sesion === "admin" : requiereCualquiera ? sesion !== null : true;
 
-  if (autorizado) return NextResponse.next();
+  if (autorizado) return continuarConSesion(request, sesion);
 
   if (regla) {
     return NextResponse.json({ error: "No autorizado" }, { status: 401 });

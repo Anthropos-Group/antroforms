@@ -6,9 +6,9 @@ los reportes y el monitoreo leen la copia local, y las encuestas se guardan en
 Supabase.
 
 ```
-                 ┌── refresco cada 10 min (solo lectura) ──┐
-Twenty CRM ──────┼── búsqueda en vivo (cada búsqueda) ─────┼──► copia local ──► buscador, reportes, monitoreo
-    ▲            └── limpieza nocturna 22:00 (lee y corrige)┘
+                 ┌── refresco cada 3 min (solo lectura) ───────────┐
+Twenty CRM ──────┼── al abrir un cliente / búsqueda sin resultados ─┼──► copia local ──► buscador, reportes, monitoreo
+    ▲            └── limpieza nocturna 22:00 (lee y corrige) ───────┘
     │
     └── estado EFECTIVA / NO_LLAMAR al cerrar cada encuesta (con cola de reintentos)
 ```
@@ -17,10 +17,10 @@ Twenty CRM ──────┼── búsqueda en vivo (cada búsqueda) ──
 
 | Mecanismo | Cuándo | Qué hace | Escribe en Twenty |
 |---|---|---|---|
-| **Refresco de la copia local** (`lib/refresco.js`) | Cada 10 min, y con el botón "Actualizar clientes ahora" en Admin → Historial Twenty | Lee de Twenty los clientes modificados desde la pasada anterior y los guarda ya normalizados. Una carga de miles de clientes entra en 1–2 min. También reintenta los estados de encuesta pendientes. | Solo la cola de estados |
-| **Búsqueda en vivo** (`/api/clientes/search`) | En cada búsqueda del encuestador | Consulta Twenty (máx. 6 s) con lo tecleado y guarda lo encontrado antes de buscar en la copia local. Si Twenty está lento, busca solo en la copia local. | No |
+| **Refresco de la copia local** (`lib/refresco.js`) | Cada 3 min, y con el botón "Actualizar clientes ahora" en Admin → Historial Twenty | Lee de Twenty los clientes modificados desde la pasada anterior y los guarda ya normalizados. Una carga de miles de clientes entra en 1–2 min. También reintenta los estados de encuesta pendientes. | Solo la cola de estados |
+| **Consulta en vivo** (`/api/clientes/search`, `/api/clientes/[id]`) | Al abrir un cliente, y en una búsqueda sin resultados en la copia local | Al abrir un cliente trae de Twenty sus datos vigentes. El buscador responde desde la copia local y solo consulta Twenty (máx. 6 s) si no encontró nada: un cliente cargado hace instantes. Si Twenty falla, durante 60 s se usa solo la copia local. | No |
 | **Limpieza de datos** (`lib/sync.js`) | 22:00 hora de Ecuador, y con el botón "Ejecutar Limpieza Incremental" | Corrige en Twenty espacios, teléfonos, totales y nombres sucios: un `PATCH` por registro, unos 100 por minuto. Deja auditoría en `sync_changes`. | Sí |
-| **Cierre de encuesta** (`POST /api/encuestas`) | Al enviar cada encuesta | Envía el estado `EFECTIVA` o `NO_LLAMAR`. Si Twenty falla, queda en `pending_twenty_sync` y lo reintenta el refresco. | Sí |
+| **Cierre de encuesta** (`POST /api/encuestas`) | Al enviar cada encuesta | Registra el estado `EFECTIVA` o `NO_LLAMAR` en `pending_twenty_sync` junto con la encuesta y lo envía a Twenty después de responder al encuestador. Si Twenty falla, lo reintenta el refresco. | Sí |
 
 Antes, el refresco de la copia local iba atado a la limpieza, que es lenta. Una carga
 nueva de ~1 350 clientes tardaba casi una hora en aparecer y dejaba a Twenty cargado
@@ -40,8 +40,10 @@ refresco aplica las mismas reglas de normalización al guardar.
 4. **Límites de la API de Twenty.** Cada tecla de tres encuestadores más los reportes
    serían muchas consultas por minuto.
 
-La búsqueda en vivo complementa la copia local para cubrir los minutos entre dos
-refrescos.
+Las consultas en vivo cubren los minutos entre dos refrescos sin depender de Twenty
+en cada tecla: el cliente elegido se trae de Twenty al abrirlo (y la pantalla avisa si
+figura como `NO_LLAMAR`), y el buscador pregunta a Twenty solo cuando la copia local
+no tiene coincidencias. Detalle y mediciones en [RENDIMIENTO.md](./RENDIMIENTO.md).
 
 ## Mes de gestión activo
 
@@ -55,7 +57,7 @@ Cómo se decide (`lib/gestion.js`), en **Admin → Monitoreo → Mes de gestión
 
 | Modo | Cómo cambia de mes |
 |---|---|
-| **Automático** (por defecto) | El mes siguiente se activa solo en cuanto su base está cargada: cuando la copia local tiene al menos N clientes (100 por defecto) de ese mes creados en Twenty desde unos días antes del mes en curso. Como la base se sube el lunes previo, el cambio ocurre ese mismo lunes, a los ~10 minutos de subirla. |
+| **Automático** (por defecto) | El mes siguiente se activa solo en cuanto su base está cargada: cuando la copia local tiene al menos N clientes (100 por defecto) de ese mes creados en Twenty desde unos días antes del mes en curso. Como la base se sube el lunes previo, el cambio ocurre ese mismo lunes, a los pocos minutos de subirla. |
 | **Manual** | El admin elige el mes y, si quiere, la fecha y hora exactas del cambio. |
 
 En ambos modos el día 1 de cada mes se pasa al mes nuevo aunque nadie haga nada: el
