@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { getPool } from "../../../../lib/db";
 import { verifySessionToken, SESSION_COOKIE } from "../../../../lib/auth";
 import { errorJson, leerJson, conErrores } from "../../../../lib/http";
+import { invalidar } from "../../../../lib/cache";
 
 export const dynamic = "force-dynamic";
 
@@ -18,5 +19,6 @@ export const PUT = conErrores("PUT /api/admin/pdv-config", async (request) => {
      on conflict (pdv) do update set meta_improbable = excluded.meta_improbable, actualizado_en = now()`,
     [pdv, body.meta_improbable]
   );
+  invalidar("monitoreo:");
   return NextResponse.json({ ok: true, pdv, meta_improbable: body.meta_improbable });
 });

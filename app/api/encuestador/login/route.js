@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import {
   createEncuestadorSessionToken,
   ENCUESTADOR_SESSION_COOKIE,
-  SESSION_TTL_MS,
+  cookieSesionOpciones,
   safeEqual,
   ipDe,
   loginBloqueado,
@@ -41,12 +41,6 @@ export async function POST(request) {
   limpiarLoginFallido(clave);
   const token = createEncuestadorSessionToken();
   const res = NextResponse.json({ ok: true });
-  res.cookies.set(ENCUESTADOR_SESSION_COOKIE, token, {
-    httpOnly: true,
-    sameSite: "lax",
-    secure: process.env.NODE_ENV === "production",
-    maxAge: SESSION_TTL_MS / 1000,
-    path: "/",
-  });
+  res.cookies.set(ENCUESTADOR_SESSION_COOKIE, token, cookieSesionOpciones());
   return res;
 }

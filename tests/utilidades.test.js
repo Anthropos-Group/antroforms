@@ -88,3 +88,33 @@ test("Twenty en vivo: un 4xx no pausa, la lentitud o un 5xx sí", () => {
   registrarFalloEnVivo(new Error("Twenty GET /people no respondió en 6s"));
   assert.equal(twentyEnVivoDisponible(), false);
 });
+
+test("esFalloDeTwenty: lentitud, red, 429 y 5xx sí; otros 4xx no", () => {
+  const { esFalloDeTwenty } = require("../lib/twenty");
+  assert.equal(esFalloDeTwenty(new Error("no respondió en 6s")), true);
+  assert.equal(esFalloDeTwenty(Object.assign(new Error("429"), { status: 429 })), true);
+  assert.equal(esFalloDeTwenty(Object.assign(new Error("502"), { status: 502 })), true);
+  assert.equal(esFalloDeTwenty(Object.assign(new Error("404"), { status: 404 })), false);
+});
+
+test("memo comparte un cálculo en curso, vence, no guarda errores y se invalida", async () => {
+  const { memo, invalidar } = require("../lib/cache");
+  let llamadas = 0;
+  const calcular = async () => ++llamadas;
+  const [a, b] = await Promise.all([memo("t:x", 1000, calcular), memo("t:x", 1000, calcular)]);
+  assert.equal(a, 1);
+  assert.equal(b, 1);
+  invalidar("t:");
+  assert.equal(await memo("t:x", 1000, calcular), 2);
+  assert.equal(await memo("t:corto", 0, calcular), 3);
+  assert.equal(await memo("t:corto", 0, calcular), 4);
+
+  let fallar = true;
+  const inestable = async () => {
+    if (fallar) throw new Error("caída");
+    return "ok";
+  };
+  await assert.rejects(memo("t:err", 60_000, inestable));
+  fallar = false;
+  assert.equal(await memo("t:err", 60_000, inestable), "ok");
+});

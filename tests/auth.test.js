@@ -47,3 +47,12 @@ test("rate limit de login bloquea tras N fallos y se limpia al acertar", () => {
   auth.limpiarLoginFallido(clave);
   assert.equal(auth.loginBloqueado(clave, 3), 0);
 });
+
+test("tokenPorRenovar: solo cuando queda menos de la mitad de la sesión", () => {
+  const ahora = Date.now();
+  const token = auth.createEncuestadorSessionToken();
+  assert.equal(auth.tokenPorRenovar(token, ahora), false);
+  assert.equal(auth.tokenPorRenovar(token, ahora + auth.SESSION_TTL_MS * 0.6), true);
+  assert.equal(auth.tokenPorRenovar(undefined, ahora), false);
+  assert.equal(auth.tokenPorRenovar("basura", ahora), false);
+});

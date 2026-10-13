@@ -2,6 +2,7 @@
 
 import { useEffect, useState, useMemo } from "react";
 import MesGestionConfig from "../../../components/MesGestionConfig";
+import { useRefrescoVisible } from "../../../components/useRefrescoVisible";
 
 // Mes en curso según la hora de Ecuador (no la del navegador ni UTC).
 
@@ -160,10 +161,9 @@ export default function AdminMonitoreoPage() {
   // Recarga al cambiar de mes y refresca sola cada minuto (tablero en vivo).
   useEffect(() => {
     cargar();
-    const intervalo = setInterval(() => cargar({ silencioso: true }), 60_000);
-    return () => clearInterval(intervalo);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [mes]);
+  useRefrescoVisible(() => cargar({ silencioso: true }), 60_000, [mes]);
 
   const pdvs = data?.pdvs || [];
   const meta = data?.meta_por_pdv || 25;

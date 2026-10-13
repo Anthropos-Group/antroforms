@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { useRefrescoVisible } from "./useRefrescoVisible";
 
 function haceCuanto(iso) {
   if (!iso) return "nunca";
@@ -33,9 +34,9 @@ export default function RefrescoClientes() {
 
   useEffect(() => {
     cargar();
-    const t = setInterval(cargar, 30_000);
-    return () => clearInterval(t);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+  useRefrescoVisible(cargar, 30_000);
 
   async function refrescarAhora() {
     setError("");
@@ -60,7 +61,7 @@ export default function RefrescoClientes() {
         <div>
           <strong>Copia local de clientes</strong>
           <div style={{ fontSize: 13, color: "#6b7280", marginTop: 4 }}>
-            Se actualiza sola cada 10 minutos leyendo de Twenty lo que cambió (altas, estados, mes de gestión).
+            Se actualiza sola cada pocos minutos leyendo de Twenty lo que cambió (altas, estados, mes de gestión).
             {estado && (
               <>
                 {" "}Última actualización: <strong>{haceCuanto(estado.actualizado_en)}</strong>

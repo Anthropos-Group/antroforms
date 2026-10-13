@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { getPool } from "../../../../lib/db";
 import { errorJson, leerJson, conErrores } from "../../../../lib/http";
+import { invalidar } from "../../../../lib/cache";
 
 export const dynamic = "force-dynamic";
 
@@ -70,5 +71,6 @@ export const PATCH = conErrores("PATCH /api/cuestionarios/activo", async (reques
     valores
   );
   if (!rows[0]) return errorJson("No hay cuestionario activo", 404);
+  invalidar("monitoreo:");
   return NextResponse.json(rows[0]);
 });

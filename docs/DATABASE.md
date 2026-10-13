@@ -222,3 +222,11 @@ La cola `pending_twenty_sync` (migración 0008) guarda los cambios de estado pen
 |---|---|---|
 | `pdv_config` | Tabla nueva + 7 PDVs marcados | PDVs con meta mensual improbable (naranja en el monitoreo), editable con el interruptor del panel. |
 | `clientes_bloqueo`, `gestiones` | Creadas en 0013 y eliminadas en 0014 | Se descartó el bloqueo "en gestión" y el registro de llamadas desde la app: el equipo gestiona las llamadas y los estados en Twenty. |
+
+## 9. Cambios de la migración `0015_indice_mes_gestion.sql`
+
+| Tabla | Cambio | Para qué |
+|---|---|---|
+| `clientes_cache` | Índice de expresión `(upper(trim(mes_gestion)))` | El buscador, el mes activo y el monitoreo filtran por mes de gestión normalizado: con el índice solo se lee la base del mes activo y no la copia local completa. Mediciones en [RENDIMIENTO.md](./RENDIMIENTO.md). |
+
+Desde esta versión, cada encuesta que cambia el estado del cliente deja su entrada en `pending_twenty_sync` dentro de la misma transacción; el envío en segundo plano la borra cuando Twenty confirma.

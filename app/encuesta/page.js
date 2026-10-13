@@ -79,14 +79,50 @@ function recordarEncuestador(id) {
   }
 }
 
-// fetch que manda al login si la sesión expiró (12 h) en vez de mostrar listas vacías.
-async function fetchSesion(url, options, onExpirada) {
-  const res = await fetch(url, options);
-  if (res.status === 401) {
-    onExpirada();
-    throw new Error("Sesión expirada");
+// Espera máxima de una lectura (búsqueda, cliente, listas) antes de darla por fallida.
+const LECTURA_TIMEOUT_MS = 15_000;
+
+// fetch que manda al login si la sesión expiró en vez de mostrar listas vacías. Con
+// límite de espera (una red o un servidor lento no deja la pantalla colgada) y, si se
+// piden, reintentos ante cortes de red o errores del servidor. Una cancelación del
+// llamador (options.signal) llega como AbortError; el límite, como TimeoutError.
+async function fetchSesion(url, options = {}, onExpirada, { timeoutMs = LECTURA_TIMEOUT_MS, reintentos = 0 } = {}) {
+  const externo = options.signal;
+  for (let intento = 0; ; intento++) {
+    const controller = new AbortController();
+    const cortar = () => controller.abort();
+    if (externo?.aborted) controller.abort();
+    else externo?.addEventListener("abort", cortar, { once: true });
+    const limite = setTimeout(cortar, timeoutMs);
+    try {
+      const res = await fetch(url, { ...options, signal: controller.signal });
+      if (res.status === 401) {
+        onExpirada();
+        throw new Error("Sesión expirada");
+      }
+      if (res.status < 500 || intento >= reintentos) return res;
+    } catch (err) {
+      if (externo?.aborted || err.message === "Sesión expirada") throw err;
+      if (intento >= reintentos) {
+        if (controller.signal.aborted) {
+          const timeout = new Error("El servidor tardó demasiado en responder");
+          timeout.name = "TimeoutError";
+          throw timeout;
+        }
+        throw err;
+      }
+    } finally {
+      clearTimeout(limite);
+      externo?.removeEventListener("abort", cortar);
+    }
+    await new Promise((r) => setTimeout(r, 1000 * 2 ** intento));
   }
-  return res;
+}
+
+// Estados de Twenty con los que no se debe encuestar (mismos que excluye el buscador).
+function estadoNoContactar(status) {
+  const s = String(status || "").trim().toUpperCase().replace(/ /g, "_");
+  return s === "NO_LLAMAR" || s === "YA_LE_REALIZARON_LA_ENCUESTA" ? s : null;
 }
 
 function saveBorradorToStorage(borrador) {
@@ -174,13 +210,27 @@ export default function EncuestaPage() {
   const [resultadoFinal, setResultadoFinal] = useState(null);
   const [copiado, setCopiado] = useState(false);
   const [mostrarGuion, setMostrarGuion] = useState(true);
+  const [sinConexion, setSinConexion] = useState(false);
 
   function sesionExpirada() {
     router.replace("/login?next=/encuesta");
   }
 
+  // Aviso de conexión: el encuestador sabe que el problema es su red y que puede
+  // seguir llenando (el borrador se guarda en el dispositivo).
   useEffect(() => {
-    fetchSesion("/api/encuestadores", undefined, sesionExpirada)
+    const actualizar = () => setSinConexion(!navigator.onLine);
+    actualizar();
+    window.addEventListener("online", actualizar);
+    window.addEventListener("offline", actualizar);
+    return () => {
+      window.removeEventListener("online", actualizar);
+      window.removeEventListener("offline", actualizar);
+    };
+  }, []);
+
+  useEffect(() => {
+    fetchSesion("/api/encuestadores", undefined, sesionExpirada, { reintentos: 2 })
       .then((r) => r.json())
       .then((d) => {
         const activos = (d.encuestadores || []).filter((e) => e.activo);
@@ -195,11 +245,11 @@ export default function EncuestaPage() {
       .catch((err) => {
         if (err.message !== "Sesión expirada") setErrorCarga("No se pudo cargar la lista de encuestadores.");
       });
-    fetchSesion("/api/clientes/meses", undefined, sesionExpirada)
+    fetchSesion("/api/clientes/meses", undefined, sesionExpirada, { reintentos: 2 })
       .then((r) => r.json())
       .then((d) => d.mesActivo && setMesesPermitidos([d.mesActivo]))
       .catch(() => {});
-    fetchSesion("/api/cuestionarios/activo", undefined, sesionExpirada)
+    fetchSesion("/api/cuestionarios/activo", undefined, sesionExpirada, { reintentos: 2 })
       .then((r) => r.json())
       .then((d) => setCuestionario(d.preguntas ? d : null))
       .catch((err) => {
@@ -233,7 +283,11 @@ export default function EncuestaPage() {
         .catch((err) => {
           if (err.name === "AbortError" || err.message === "Sesión expirada") return;
           setResultados([]);
-          setErrorBusqueda("No se pudo buscar. Revisa tu conexión e intenta de nuevo.");
+          setErrorBusqueda(
+            err.name === "TimeoutError"
+              ? "La búsqueda tardó demasiado. Intenta de nuevo."
+              : "No se pudo buscar. Revisa tu conexión e intenta de nuevo."
+          );
         })
         .finally(() => {
           if (!controller.signal.aborted) setBuscando(false);
@@ -521,6 +575,13 @@ export default function EncuestaPage() {
 
       {step !== "fin" && <Stepper paso={step} />}
 
+      {sinConexion && (
+        <div className="validation-box" style={{ marginBottom: 16 }}>
+          📡 Sin conexión a internet. Puedes seguir llenando la encuesta: el borrador se guarda en este
+          dispositivo. Envíala cuando vuelva la conexión.
+        </div>
+      )}
+
       {errorCarga && (
         <div className="validation-box" style={{ marginBottom: 16 }}>
           ⚠️ {errorCarga}
@@ -628,7 +689,7 @@ export default function EncuestaPage() {
                 {twentyCaido === "lento"
                   ? "Twenty CRM está lento y no respondió a tiempo"
                   : "No se pudo consultar Twenty CRM en este momento"}
-                : los resultados vienen de la copia local, que se actualiza cada 10 minutos.
+                : los resultados vienen de la copia local, que se actualiza cada pocos minutos.
               </div>
             )}
             {resultados.length > 0 && (
@@ -743,6 +804,12 @@ export default function EncuestaPage() {
           </div>
 
           <div className="pad">
+            {estadoNoContactar(cliente?.status) && (
+              <div className="validation-box" style={{ marginBottom: 12 }}>
+                ⚠️ En Twenty este cliente figura como <strong>{estadoNoContactar(cliente.status)}</strong>. Verifica
+                antes de continuar con la encuesta.
+              </div>
+            )}
             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8 }}>
               <div style={{ fontSize: 12, color: "#6b7280", fontWeight: 600 }}>
                 Progreso general ({progreso}%)

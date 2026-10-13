@@ -42,7 +42,7 @@ cp .env.example .env
 
 **Nunca subas `.env` a git** — ya está en `.gitignore`.
 
-Para usar un Postgres local o interno sin SSL (desarrollo), agrega `?sslmode=disable` al final de `SUPABASE_DB_URL`. Opcional: `PG_POOL_MAX` (conexiones máximas del pool, por defecto 10).
+Para usar un Postgres local o interno sin SSL (desarrollo), agrega `?sslmode=disable` al final de `SUPABASE_DB_URL`. Opcional: `PG_POOL_MAX` (conexiones máximas del pool, por defecto 10) y `PG_STATEMENT_TIMEOUT_MS` (tope por consulta, por defecto 60000; `0` lo desactiva).
 
 ## 3. Aplicar el esquema de base de datos
 
@@ -82,7 +82,7 @@ npm run sync:twenty -- --mode=dry_run
 npm run sync:twenty -- --mode=backfill_completo
 ```
 
-En producción el propio contenedor refresca la copia local de clientes cada 10 minutos, corre la limpieza de datos en Twenty a las 22:00 (hora de Ecuador) y mantiene activa la base de Supabase — no hace falta un cron externo. Cómo funciona: [docs/SINCRONIZACION.md](./docs/SINCRONIZACION.md). Ver [docs/DEPLOY.md §6](./docs/DEPLOY.md#6-tareas-programadas-sincronización-con-twenty-y-keep-alive).
+En producción el propio contenedor refresca la copia local de clientes cada 3 minutos, corre la limpieza de datos en Twenty a las 22:00 (hora de Ecuador) y mantiene activa la base de Supabase — no hace falta un cron externo. Cómo funciona: [docs/SINCRONIZACION.md](./docs/SINCRONIZACION.md). Ver [docs/DEPLOY.md §6](./docs/DEPLOY.md#6-tareas-programadas-sincronización-con-twenty-y-keep-alive).
 
 ## Scripts disponibles
 

@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { getPool } from "../../../../lib/db";
-import { procesarReintentosTwenty, MAX_INTENTOS_TWENTY } from "../../../../lib/sync";
+import { procesarReintentosTwenty, MAX_INTENTOS_TWENTY, PENDIENTE_EN_ENVIO } from "../../../../lib/sync";
 import { twentyConfigurado } from "../../../../lib/twenty";
 import { conErrores, errorJson } from "../../../../lib/http";
 
@@ -16,6 +16,7 @@ export const GET = conErrores("GET /api/admin/twenty-pendientes", async () => {
             cc.nombre as cliente_nombre, cc.codigo_cliente
      from pending_twenty_sync p
      left join clientes_cache cc on cc.id_twenty = p.cliente_twenty_id
+     where not ${PENDIENTE_EN_ENVIO}
      order by p.creado_en asc
      limit 200`
   );

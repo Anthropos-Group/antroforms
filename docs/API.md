@@ -5,7 +5,7 @@ Todas las rutas viven bajo `/api`. Autenticación de app: sesión compartida (ve
 ## Clientes
 
 ### `GET /api/clientes/search`
-Busca en `clientes_cache` (nunca en Twenty en vivo).
+Busca en `clientes_cache`. Solo si no hay coincidencias consulta Twenty (máx. 6 s) y guarda lo encontrado.
 
 **Query params:** `q` (texto, mínimo 3 caracteres) — busca por nombre, código, teléfono o id EDIMCA.
 

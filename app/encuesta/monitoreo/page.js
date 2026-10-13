@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
+import { useRefrescoVisible } from "../../../components/useRefrescoVisible";
 
 
 function nombreMesLargo(yyyyMm) {
@@ -32,6 +33,9 @@ export default function EncuestadorMonitoreoPage() {
         router.replace("/login?next=/encuesta/monitoreo");
         return;
       }
+      // Un error pasajero no borra el tablero: se conserva lo último y se reintenta
+      // en el próximo refresco.
+      if (!res.ok) return;
       const d = await res.json();
 
       // Si quien accede es un administrador, redirigir inmediatamente a la vista de administración
@@ -41,6 +45,8 @@ export default function EncuestadorMonitoreoPage() {
       }
 
       setData(d);
+    } catch {
+      // Sin conexión: se conserva lo último mostrado.
     } finally {
       setCargando(false);
     }
@@ -48,10 +54,9 @@ export default function EncuestadorMonitoreoPage() {
 
   useEffect(() => {
     cargar();
-    const intervalo = setInterval(cargar, 60_000);
-    return () => clearInterval(intervalo);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+  useRefrescoVisible(cargar, 60_000);
 
   const pdvs = data?.pdvs || [];
   const meta = data?.meta_por_pdv || 25;
