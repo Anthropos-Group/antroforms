@@ -86,3 +86,22 @@ test("programador: turno vigente de sincronización", () => {
   assert.equal(t13.clave, "2026-10-01 13:00");
   assert.equal(t13.desde.toISOString(), "2026-10-01T18:00:00.000Z");
 });
+
+test("meta por PDV: los clientes de un PDV que cumplió la meta quedan marcados", () => {
+  const { marcarMetaAlcanzada, filtroEncuestasDelMes } = require("../lib/meta");
+  const clientes = [
+    { id_twenty: "1", pdv: "SHOWROOM GRANADOS" },
+    { id_twenty: "2", pdv: " SHOWROOM CARAPUNGO " },
+    { id_twenty: "3", pdv: null },
+  ];
+  const marcados = marcarMetaAlcanzada(clientes, new Set(["SHOWROOM GRANADOS", "SHOWROOM CARAPUNGO"]));
+  assert.deepEqual(marcados.map((c) => c.meta_alcanzada), [true, true, false]);
+  // Sin PDVs en meta nadie queda bloqueado.
+  assert.ok(marcarMetaAlcanzada(clientes, new Set()).every((c) => c.meta_alcanzada === false));
+
+  // El filtro cuenta las encuestas completadas del mes de gestión pedido.
+  const { sql, valores } = filtroEncuestasDelMes("2026-10");
+  assert.match(sql, /e\.completada = true/);
+  assert.equal(valores[0], "OCTUBRE");
+  assert.equal(valores.length, 6);
+});

@@ -11,6 +11,8 @@ Busca en `clientes_cache`. Solo si no hay coincidencias consulta Twenty (máx. 6
 
 Solo devuelve clientes del **mes de gestión activo** (ver `SINCRONIZACION.md`), que además viene en `mesesPermitidos`. Si Twenty no respondió, `twentyDisponible: false` y `twentyMotivo: "lento" | "error"`. `POST /api/encuestas` aplica la misma regla a los encuestadores (422 `MES_NO_PERMITIDO`); los administradores no tienen el límite.
 
+**Meta mensual por PDV** (`meta_mensual_pdv`, 25 por defecto): cada cliente de `results` trae `meta_alcanzada`. Es `true` cuando su PDV ya completó la meta de encuestas efectivas del mes activo (mismo conteo que el monitoreo); la UI lo muestra con la etiqueta "Meta alcanzada" y no deja encuestarlo. `GET /api/clientes/[id]` devuelve el mismo campo, y `POST /api/encuestas` rechaza con 409 `META_ALCANZADA` (el conteo se hace dentro de la transacción, con candado por PDV, así que dos guardados simultáneos no pueden pasarse de la meta). Los administradores no tienen el límite.
+
 **Response 200:**
 ```json
 {
@@ -142,7 +144,7 @@ Registra una encuesta completa (o parcial si se cortó por condición). El servi
 | `200` | Reintento de un envío ya guardado: `{ "id", "completada", "duplicada": true }` |
 | `400` | Campos faltantes / ids inválidos / encuestador inexistente |
 | `404` | Cliente no existe en `clientes_cache` |
-| `409` | `code: "YA_ENCUESTADO"` (el cliente ya tiene una encuesta efectiva) o `code: "CUESTIONARIO_DESACTUALIZADO"` |
+| `409` | `code: "YA_ENCUESTADO"` (el cliente ya tiene una encuesta efectiva) `code: "META_ALCANZADA"` (el PDV del cliente ya cumplió la meta mensual) o `code: "CUESTIONARIO_DESACTUALIZADO"` |
 | `422` | `code: "RESPUESTAS_INVALIDAS"`, con `errores: [{ preguntaId, mensaje }]` |
 
 ### `GET /api/encuestas` (admin)

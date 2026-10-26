@@ -6,48 +6,17 @@ import {
   verifySessionToken,
   SESSION_COOKIE,
 } from "../../../lib/auth";
-import {
-  MESES_ES,
-  rangoMesEcuador,
-  periodoAnterior,
-  nombreMesDePeriodo,
-  periodoDeMesGestion,
-} from "../../../lib/fecha";
+import { metaMensual, filtroEncuestasDelMes } from "../../../lib/meta";
+import { periodoDeMesGestion } from "../../../lib/fecha";
 
 export const dynamic = "force-dynamic";
 
-// Valor por defecto si la migración 0009 (meta configurable) aún no se aplicó.
-const META_MENSUAL_POR_PDV_DEFAULT = 25;
 // Las pantallas de monitoreo se refrescan solas cada minuto: el cálculo se comparte
 // entre todas durante esta ventana. Los cambios del panel (meta, PDVs) la invalidan.
 const CACHE_MONITOREO_MS = 30_000;
 
-async function metaMensual(pool) {
-  try {
-    const { rows } = await pool.query(
-      `select meta_mensual_pdv from cuestionarios where activo = true order by created_at desc limit 1`
-    );
-    return rows[0]?.meta_mensual_pdv || META_MENSUAL_POR_PDV_DEFAULT;
-  } catch {
-    return META_MENSUAL_POR_PDV_DEFAULT;
-  }
-}
-
 async function calcularMonitoreo(pool, mes) {
-  const nombreMes = nombreMesDePeriodo(mes);
-  const siguiente = rangoMesEcuador(rangoMesEcuador(mes).fin.slice(0, 7)).mes;
-  // Ventana amplia para distinguir el año (el mes de gestión del cliente no lo trae):
-  // desde el mes anterior hasta el siguiente.
-  const ventanaInicio = rangoMesEcuador(periodoAnterior(mes)).inicio;
-  const ventanaFin = rangoMesEcuador(siguiente).fin;
-  // Clientes sin mes reconocible: cuentan en el mes calendario de la encuesta.
-  const { inicio: sinMesInicio, fin: sinMesFin } = rangoMesEcuador(mes);
-  const filtroMes = `e.completada = true
-    and (
-      (upper(trim(cc.mes_gestion)) = $1 and e.created_at >= $2 and e.created_at < $3)
-      or (coalesce(upper(trim(cc.mes_gestion)), '') <> all($4::text[]) and e.created_at >= $5 and e.created_at < $6)
-    )`;
-  const valoresMes = [nombreMes, ventanaInicio, ventanaFin, MESES_ES, sinMesInicio, sinMesFin];
+  const { sql: filtroMes, valores: valoresMes } = filtroEncuestasDelMes(mes);
 
   // Las consultas son independientes: van en paralelo.
   const [meta, { rows: pdvs }, improbables, { rows: grupos }, { rows: entrevistadoresRaw }] = await Promise.all([
