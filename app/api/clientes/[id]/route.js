@@ -3,6 +3,8 @@ import { getPool } from "../../../../lib/db";
 import { fetchPerson, twentyConfigurado, twentyEnVivoDisponible, registrarFalloEnVivo } from "../../../../lib/twenty";
 import { filaCache, upsertClientes } from "../../../../lib/clientes";
 import { esUUID, errorJson, conErrores } from "../../../../lib/http";
+import { mesGestionActivo, esMesActivo } from "../../../../lib/gestion";
+import { pdvsConMetaAlcanzada, marcarMetaAlcanzada } from "../../../../lib/meta";
 
 export const dynamic = "force-dynamic";
 
@@ -39,5 +41,19 @@ export const GET = conErrores("GET /api/clientes/[id]", async (_request, { param
     [id]
   );
   if (!rows[0]) return errorJson("Cliente no encontrado", 404);
-  return NextResponse.json({ cliente: rows[0], twentyDisponible });
+
+  // ¿Su PDV ya cumplió la meta del mes? Se revisa al abrir o retomar un borrador, para
+  // no dejar llenar una encuesta que el guardado va a rechazar. Solo aplica al mes de
+  // gestión activo, que es el único que se encuesta.
+  let [cliente] = rows;
+  try {
+    const { nombre, periodo } = await mesGestionActivo(pool);
+    if (esMesActivo(cliente.mes_gestion, nombre)) {
+      const { pdvs } = await pdvsConMetaAlcanzada(periodo, pool);
+      [cliente] = marcarMetaAlcanzada([cliente], pdvs);
+    }
+  } catch (err) {
+    console.error(`No se pudo calcular la meta por PDV del cliente ${id}:`, err);
+  }
+  return NextResponse.json({ cliente, twentyDisponible });
 });

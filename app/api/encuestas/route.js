@@ -6,6 +6,7 @@ import { prepararEnvio } from "../../../lib/encuesta-logica";
 import { esUUID, errorJson, leerJson, conErrores } from "../../../lib/http";
 import { verifySessionToken, SESSION_COOKIE } from "../../../lib/auth";
 import { mesGestionActivo, esMesActivo } from "../../../lib/gestion";
+import { metaMensual, completadasDelPdv, invalidarMeta } from "../../../lib/meta";
 
 export const dynamic = "force-dynamic";
 
@@ -107,8 +108,11 @@ export const POST = conErrores("POST /api/encuestas", async (request) => {
   // así un cliente repetido en dos meses no se encuesta en el registro equivocado).
   // El admin no tiene el límite.
   const esAdmin = Boolean(verifySessionToken(request.cookies.get(SESSION_COOKIE)?.value));
+  // Mes cuya meta por PDV se vigila (ver más abajo); null para el admin.
+  let periodoMeta = null;
   if (!esAdmin) {
-    const { nombre: mesActivo } = await mesGestionActivo(pool);
+    const { nombre: mesActivo, periodo } = await mesGestionActivo(pool);
+    periodoMeta = periodo;
     if (!esMesActivo(cliente.mes_gestion, mesActivo)) {
       return errorJson(
         `Este cliente es del mes de gestión ${cliente.mes_gestion?.trim() || "(sin mes)"}; ahora solo se registran encuestas de ${mesActivo}.`,
@@ -177,6 +181,29 @@ export const POST = conErrores("POST /api/encuestas", async (request) => {
       );
     }
 
+    // Meta mensual por PDV (25 por defecto): con la meta cumplida no se registra nada
+    // más de ese punto de venta, ni siquiera un rechazo. El candado por PDV serializa
+    // el conteo: dos encuestadores que guardan a la vez la encuesta 25 y 26 no pueden
+    // pasarse de la meta. Siempre se toma después del candado del cliente, en el mismo
+    // orden, para que no haya bloqueos cruzados. El admin no tiene el límite.
+    const pdvMeta = cliente.pdv?.trim();
+    if (periodoMeta && pdvMeta) {
+      await client.query(`select pg_advisory_xact_lock(hashtext($1))`, [`meta:${pdvMeta}`]);
+      const [meta, completadas] = await Promise.all([
+        // Con el pool: si falla, no deja abortada la transacción en curso.
+        metaMensual(pool),
+        completadasDelPdv(client, pdvMeta, periodoMeta),
+      ]);
+      if (completadas >= meta) {
+        await client.query("rollback");
+        return errorJson(
+          `Meta alcanzada: ${pdvMeta} ya completó ${completadas}/${meta} encuestas este mes; no se registran más. Puedes descartar el borrador y buscar otro cliente.`,
+          409,
+          { code: "META_ALCANZADA" }
+        );
+      }
+    }
+
     // Red de seguridad para clientes sin idempotency_key (versiones viejas de la UI).
     const { rows: recientes } = await client.query(
       `select id, completada from encuestas
@@ -230,6 +257,7 @@ export const POST = conErrores("POST /api/encuestas", async (request) => {
     }
 
     await client.query("commit");
+    invalidarMeta();
   } catch (err) {
     await client.query("rollback").catch(() => {});
     // Carrera entre dos reintentos con la misma idempotency_key.

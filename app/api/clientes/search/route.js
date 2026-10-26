@@ -8,6 +8,7 @@ import {
 } from "../../../../lib/twenty";
 import { filaCache, upsertClientes } from "../../../../lib/clientes";
 import { mesGestionActivo } from "../../../../lib/gestion";
+import { pdvsConMetaAlcanzada, marcarMetaAlcanzada } from "../../../../lib/meta";
 
 export const dynamic = "force-dynamic";
 
@@ -122,7 +123,7 @@ export async function GET(request) {
     const pool = getPool();
     // Solo el mes de gestión activo (ver lib/gestion.js): con un cliente repetido en
     // dos meses, el encuestador solo ve el registro del mes que se está trabajando.
-    const { nombre: mesActivo } = await mesGestionActivo(pool);
+    const { nombre: mesActivo, periodo } = await mesGestionActivo(pool);
     const mesesPermitidos = [mesActivo];
 
     if (q.length < 3) {
@@ -151,6 +152,15 @@ export async function GET(request) {
           console.warn("Aviso en búsqueda en vivo con Twenty CRM:", twentyErr.message);
         }
       }
+    }
+
+    // Los clientes de un PDV que ya cumplió la meta del mes se siguen mostrando, pero
+    // marcados para que no se encuesten (el guardado también lo rechaza).
+    try {
+      const { pdvs } = await pdvsConMetaAlcanzada(periodo, pool);
+      results = marcarMetaAlcanzada(results, pdvs);
+    } catch (metaErr) {
+      console.error("No se pudo calcular la meta por PDV en la búsqueda:", metaErr);
     }
 
     return NextResponse.json({ results, twentyDisponible, twentyMotivo, mesesPermitidos });

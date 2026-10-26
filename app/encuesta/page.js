@@ -364,6 +364,8 @@ export default function EncuestaPage() {
   }
 
   function elegirCliente(c) {
+    // Su PDV ya cumplió la meta del mes: se muestra pero no se encuesta.
+    if (c.meta_alcanzada) return;
     setCliente(c);
     refrescarCliente(c.id_twenty);
     const auto = evaluarAutoRespuestas(cuestionario?.preguntas, c);
@@ -420,7 +422,7 @@ export default function EncuestaPage() {
   }
 
   function manejarSubmit() {
-    if (!cuestionario || !cliente || enviando) return;
+    if (!cuestionario || !cliente || enviando || cliente.meta_alcanzada) return;
     const envio = prepararEnvio(cuestionario.preguntas, respuestas, cliente);
 
     if (!envio.valido) {
@@ -464,7 +466,7 @@ export default function EncuestaPage() {
             tipo: "sesion",
             mensaje: "Tu sesión expiró. Vuelve a iniciar sesión: el borrador quedó guardado en este dispositivo.",
           });
-        } else if (data.code === "YA_ENCUESTADO" || data.code === "MES_NO_PERMITIDO") {
+        } else if (data.code === "YA_ENCUESTADO" || data.code === "MES_NO_PERMITIDO" || data.code === "META_ALCANZADA") {
           setErrorEnvio({ tipo: "duplicado", mensaje: data.error });
         } else if (data.code === "RESPUESTAS_INVALIDAS") {
           // P. ej. la pregunta de corte y laminado quedó omitida con datos viejos del
@@ -697,11 +699,25 @@ export default function EncuestaPage() {
                 {resultados.map((r) => {
                   const tieneCorte = tieneDatoCliente(r, "total");
                   return (
-                    <div key={r.id_twenty} className="option-item" onClick={() => elegirCliente(r)}>
+                    <div
+                      key={r.id_twenty}
+                      className="option-item"
+                      onClick={() => elegirCliente(r)}
+                      aria-disabled={r.meta_alcanzada || undefined}
+                      style={r.meta_alcanzada ? { opacity: 0.6, cursor: "not-allowed", background: "#f8fafc" } : undefined}
+                    >
                       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 8 }}>
                         <div className="nombre">{r.nombre}</div>
                         <div style={{ display: "flex", gap: 6, alignItems: "center" }}>
-                          {tieneCorte ? (
+                          {r.meta_alcanzada ? (
+                            <span
+                              className="badge"
+                              style={{ fontSize: 11, padding: "2px 8px", background: "#fef2f2", color: "#991b1b", border: "1px solid #fecaca", fontWeight: 700 }}
+                              title="Este punto de venta ya cumplió la meta mensual de encuestas: no se pueden registrar más."
+                            >
+                              🔒 Meta alcanzada
+                            </span>
+                          ) : tieneCorte ? (
                             <span
                               className="badge"
                               style={{
@@ -804,6 +820,17 @@ export default function EncuestaPage() {
           </div>
 
           <div className="pad">
+            {cliente?.meta_alcanzada && (
+              <div className="validation-box" style={{ marginBottom: 12 }}>
+                🔒 <strong>Meta alcanzada:</strong> el PDV {cliente.pdv} ya cumplió la meta mensual de encuestas y no se
+                pueden registrar más.
+                <div style={{ marginTop: 8 }}>
+                  <button className="btn btn-primary" style={{ fontSize: 12, padding: "4px 10px" }} onClick={descartarBorradorActivo}>
+                    Descartar borrador y buscar otro cliente
+                  </button>
+                </div>
+              </div>
+            )}
             {estadoNoContactar(cliente?.status) && (
               <div className="validation-box" style={{ marginBottom: 12 }}>
                 ⚠️ En Twenty este cliente figura como <strong>{estadoNoContactar(cliente.status)}</strong>. Verifica
@@ -1078,7 +1105,8 @@ export default function EncuestaPage() {
                       className="btn btn-primary"
                       style={{ marginLeft: "auto" }}
                       onClick={manejarSubmit}
-                      disabled={enviando}
+                      disabled={enviando || cliente.meta_alcanzada}
+                      title={cliente.meta_alcanzada ? "Meta alcanzada: este PDV ya no admite más encuestas" : undefined}
                     >
                       {enviando ? "Enviando…" : errorEnvio ? "Reintentar envío ✓" : "Finalizar y Enviar Encuesta ✓"}
                     </button>
