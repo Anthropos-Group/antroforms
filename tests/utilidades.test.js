@@ -118,3 +118,25 @@ test("memo comparte un cálculo en curso, vence, no guarda errores y se invalida
   fallar = false;
   assert.equal(await memo("t:err", 60_000, inestable), "ok");
 });
+
+test("normalizeTotal: devuelve a número las fechas de Excel que llegaron en 'total'", () => {
+  const { normalizeTotal } = require("../lib/normalize");
+  // El número 1 escrito como fecha es 31/12/1899; el 4 es 3/01/1900.
+  assert.equal(normalizeTotal("31/12/1899"), "1");
+  assert.equal(normalizeTotal("3/01/1900"), "4");
+  assert.equal(normalizeTotal("28/02/1900"), "60");
+  assert.equal(normalizeTotal("1/03/1900"), "61");
+  assert.equal(normalizeTotal("18/11/1904"), "1784");
+  // Números, vacíos y marcadores no se tocan; fechas reales o imposibles tampoco.
+  assert.equal(normalizeTotal("552,82"), "552,82");
+  assert.equal(normalizeTotal("12"), "12");
+  assert.equal(normalizeTotal("N/A"), "");
+  assert.equal(normalizeTotal("4/11/2026"), "4/11/2026");
+  assert.equal(normalizeTotal("31/02/1900"), "31/02/1900");
+  assert.equal(normalizeTotal(undefined), undefined);
+  // Se corrige en la limpieza (Twenty) y en la copia local.
+  const { changes, patch } = computeChanges({ total: "3/01/1900" });
+  assert.deepEqual(changes.total, { before: "3/01/1900", after: "4" });
+  assert.equal(patch.total, "4");
+  assert.equal(filaCache({ id: "x", total: "3/01/1900" })[8], "4");
+});

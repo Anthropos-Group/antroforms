@@ -119,7 +119,10 @@ async function traerDeTwenty(pool, qTwenty, meses) {
 export async function GET(request) {
   try {
     const { searchParams } = new URL(request.url);
-    const q = (searchParams.get("q") || "").trim().slice(0, 100);
+    // Los espacios de más se ignoran: en Twenty algunos nombres traen espacios dobles
+    // ("AGUIRRE  ROLAN") y el encuestador los teclea tal cual, pero la copia local ya
+    // los guarda con uno solo (la limpieza los corrige).
+    const q = (searchParams.get("q") || "").replace(/\s+/g, " ").trim().slice(0, 100);
     const pool = getPool();
     // Solo el mes de gestión activo (ver lib/gestion.js): con un cliente repetido en
     // dos meses, el encuestador solo ve el registro del mes que se está trabajando.
