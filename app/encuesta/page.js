@@ -159,6 +159,24 @@ const PASOS = [
   { key: "cuestionario", label: "Cuestionario" },
 ];
 
+// Círculo rojo que marca el dato de corte y laminado del cliente.
+function PuntoRojo({ tamano = 9 }) {
+  return (
+    <span
+      aria-hidden="true"
+      style={{
+        display: "inline-block",
+        width: tamano,
+        height: tamano,
+        borderRadius: "50%",
+        background: "#dc2626",
+        marginRight: 6,
+        verticalAlign: "middle",
+      }}
+    />
+  );
+}
+
 function Stepper({ paso }) {
   const indiceActual = PASOS.findIndex((p) => p.key === paso);
   return (
@@ -729,7 +747,7 @@ export default function EncuestaPage() {
                               }}
                               title="El cliente registra servicio de corte y laminado en Twenty CRM"
                             >
-                              ✂️ Corte: {r.total} · P7 activa
+                              <PuntoRojo /> Corte: {r.total} · P7 activa
                             </span>
                           ) : (
                             <span
@@ -800,7 +818,7 @@ export default function EncuestaPage() {
               <span>Servicio de corte</span>
               {tieneDatoCliente(cliente, "total") ? (
                 <span style={{ color: "#059669", fontWeight: 700 }}>
-                  ✂️ Sí ({cliente.total}) · P7 activa
+                  <PuntoRojo /> Sí ({cliente.total}) · P7 activa
                 </span>
               ) : (
                 <span style={{ color: "#6b7280", fontWeight: 600 }}>
@@ -951,7 +969,7 @@ export default function EncuestaPage() {
                       <div>
                         {tieneDatoCliente(cliente, "total") ? (
                           <span className="badge" style={{ background: "#ecfdf5", color: "#065f46", border: "1px solid #a7f3d0", fontSize: 11 }}>
-                            ✂️ Servicio de corte registrado: {cliente.total}
+                            <PuntoRojo /> Servicio de corte registrado: {cliente.total}
                           </span>
                         ) : (
                           <span className="badge" style={{ background: "#f1f5f9", color: "#64748b", border: "1px solid #cbd5e1", fontSize: 11 }}>
@@ -977,7 +995,7 @@ export default function EncuestaPage() {
                         margin: "16px 0",
                       }}
                     >
-                      <div style={{ fontSize: 28, marginBottom: 8 }}>✂️</div>
+                      <div style={{ marginBottom: 8 }}><PuntoRojo tamano={22} /></div>
                       <h4 style={{ margin: "0 0 6px", color: "#334155", fontSize: 16 }}>
                         Pregunta omitida automáticamente (N/A)
                       </h4>
