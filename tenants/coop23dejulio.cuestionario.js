@@ -30,7 +30,7 @@ const RANGOS_USD = (cero) => [
   op("10000_MAS", "10.000 o más"),
 ];
 
-module.exports = {
+const cuestionario = {
   nombre: "Cooperativa 23 de Julio — Caracterización LA/FT 2026",
   guion_apertura:
     "Buenos días/tardes, ¿hablo con [nombre del socio o representante]? Soy {{ENCUESTADOR}} y le llamo en nombre de la Cooperativa de Ahorro y Crédito 23 de Julio, con el apoyo de la empresa Strattos. La cooperativa está haciendo un estudio para conocer mejor cómo trabajan y usan sus servicios sus socios. Dura unos 10 minutos y es voluntaria: puede no responder cualquier pregunta o terminar cuando quiera. No le pediremos cédula ni números de cuenta. Sus respuestas son confidenciales: se identifican con un código y la cooperativa recibe solo resultados agrupados. Si desea verificar esta llamada, puede comunicarse con la cooperativa al [PENDIENTE: teléfono de verificación]. Para ejercer sus derechos sobre sus datos puede escribir a [PENDIENTE: correo del responsable del estudio].",
@@ -236,7 +236,7 @@ module.exports = {
     {
       codigo: "IND_B", bloque: "Manejo del dinero", tipo: "informativa",
       texto: "Aclaración para la ruta B",
-      ayuda: "Lea: «En las siguientes preguntas, cuando se mencione su actividad, piense en sus ingresos y pagos personales».",
+      ayuda: "Lea: «Ahora le haré unas preguntas sobre el dinero que recibe y cómo lo maneja». Las preguntas de este bloque ya aparecen adaptadas a los ingresos personales: léalas tal como salen.",
       mostrar_si: ruta("B"),
     },
     {
@@ -567,3 +567,76 @@ module.exports = {
     },
   ],
 };
+
+// --- Textos adaptados a la ruta y al tipo de persona ------------------------------
+// El instrumento usa una sola redacción con «(o su empresa)», «[Persona natural] …
+// [Persona jurídica] …» o una nota para que en la ruta B se piense en ingresos
+// personales. Aquí cada caso ve ya su propia redacción (config.variantes, ver
+// lib/encuesta-logica.js); el texto original queda para cuando no aplica ninguna.
+const FAMILIARES =
+  "(cónyuge o conviviente, padres, hijos, abuelos, hermanos, nietos, suegros, yernos, nueras o cuñados)";
+const CARGOS =
+  "un cargo público de alta jerarquía o de elección popular (por ejemplo, ministro, asambleísta, alcalde, concejal, juez, fiscal, o alto mando militar o policial)";
+
+const VARIANTES = {
+  A3: [{ si: ruta("B"), texto: "Además de su ingreso principal, ¿tiene otra fuente de ingresos?" }],
+  C1: [
+    {
+      si: ruta("B"),
+      texto: "De lo que recibe cada mes (sueldo, pensión u otros ingresos), ¿qué parte le llega en efectivo?",
+      ayuda: "RUTA B: ingresos personales. Efectivo = billetes y monedas; no incluye transferencias ni tarjetas. No agrupar cero con «casi nada».",
+    },
+    { si: ruta("C"), texto: "De lo que cobra su empresa, ¿qué parte es en efectivo?" },
+  ],
+  C2: [
+    { si: ruta("B"), texto: "En un mes normal, ¿cuánto dinero en efectivo recibe (USD)?" },
+    { si: ruta("C"), texto: "En un mes normal, ¿cuánto dinero en efectivo maneja su empresa (USD)?" },
+  ],
+  C3: [
+    { si: ruta("B"), texto: "¿Qué hace normalmente con el efectivo que recibe?", ocultar_opciones: ["PAGA_PROVEEDORES"] },
+    { si: ruta("C"), texto: "¿Qué hace normalmente su empresa con el efectivo que cobra?" },
+  ],
+  C4: [
+    { si: ruta("B"), texto: "¿Alguna vez recibe o entrega pagos en bienes (vehículos, joyas, electrodomésticos, materiales) en lugar de dinero?" },
+    { si: ruta("C"), texto: "En su empresa, ¿alguna vez reciben o entregan pagos en bienes (vehículos, joyas, electrodomésticos, materiales) en lugar de dinero?" },
+  ],
+  C6: [
+    { si: esNatural, texto: "¿Recibe o envía dinero del o hacia el exterior (remesas, pagos)? Si es así, ¿con qué país tiene más movimiento?" },
+    { si: esJuridica, texto: "¿Su empresa realiza pagos o cobros con el exterior? Si es así, ¿con qué país tiene más movimiento?" },
+  ],
+  AC2: [
+    {
+      si: esNatural,
+      texto: "En los últimos 12 meses, ¿le han ofrecido invertir dinero con promesas de ganancias altas y rápidas (pirámides, «ahorros que se duplican», inversiones por redes sociales o criptomonedas)?",
+    },
+    {
+      si: esJuridica,
+      texto: "En los últimos 12 meses, ¿le han ofrecido a su empresa invertir dinero con promesas de ganancias altas y rápidas (pirámides, «ahorros que se duplican», inversiones por redes sociales o criptomonedas)?",
+    },
+  ],
+  AC3: [
+    { si: esNatural, texto: "En los últimos 12 meses, ¿ha pedido dinero prestado a prestamistas informales (chulco o «gota a gota»)?" },
+    { si: esJuridica, texto: "En los últimos 12 meses, ¿su empresa ha pedido dinero prestado a prestamistas informales (chulco o «gota a gota»)?" },
+  ],
+  G1: [
+    {
+      si: esNatural,
+      texto: `¿Usted o algún familiar suyo ${FAMILIARES} ocupa o ha ocupado ${CARGOS}?`,
+      ayuda: "Se permiten varios sí. No solicite nombres.",
+      ocultar_opciones: ["SI_SOCIO_REP"],
+    },
+    {
+      si: esJuridica,
+      texto: `¿Alguno de los socios o accionistas de su empresa, su representante legal o algún familiar de ellos ${FAMILIARES} ocupa o ha ocupado ${CARGOS}?`,
+      ayuda: "Se permiten varios sí. No solicite nombres.",
+      ocultar_opciones: ["SI_YO"],
+    },
+  ],
+};
+
+for (const p of cuestionario.preguntas) {
+  if (!VARIANTES[p.codigo]) continue;
+  p.config = { ...(p.config || {}), variantes: [...(p.config?.variantes || []), ...VARIANTES[p.codigo]] };
+}
+
+module.exports = cuestionario;

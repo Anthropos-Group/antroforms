@@ -52,3 +52,21 @@ test("A1 y L8 se adaptan a persona natural o empresa", () => {
   assert.equal(vista("L8", nat).texto, "¿En qué cantón vive?");
   assert.match(vista("L8", jur).texto, /domicilio de su empresa/);
 });
+
+test("ruta B: el bloque de manejo del dinero habla de lo que recibe, no de su actividad", () => {
+  const e = conRespuestas(NATURAL, { T2: "NO" });
+  for (const codigo of ["C1", "C2", "C3", "C4"]) {
+    assert.doesNotMatch(vista(codigo, e).texto, /actividad/, codigo);
+  }
+  assert.match(vista("C1", e).texto, /recibe/);
+  assert.ok(!valores(vista("C3", e)).includes("PAGA_PROVEEDORES"));
+});
+
+test("G1 y C6 muestran solo la redacción y opciones del tipo de persona", () => {
+  const nat = conRespuestas(NATURAL);
+  const jur = conRespuestas(JURIDICA);
+  assert.ok(!valores(vista("G1", nat)).includes("SI_SOCIO_REP"));
+  assert.ok(!valores(vista("G1", jur)).includes("SI_YO"));
+  assert.doesNotMatch(vista("C6", nat).texto, /\[Persona/);
+  assert.match(vista("C6", jur).texto, /Su empresa/);
+});
