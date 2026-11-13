@@ -1,5 +1,6 @@
 "use client";
 
+import { useTenant } from "../../../components/TenantProvider";
 import { useEffect, useState, useMemo } from "react";
 import Link from "next/link";
 import ImportModal from "../../../components/ImportModal";
@@ -21,6 +22,7 @@ function colorPromedio(prom) {
 }
 
 function DetalleEncuesta({ encuesta, preguntas, onClose }) {
+  const tenant = useTenant();
   useEffect(() => {
     const onKey = (e) => e.key === "Escape" && onClose();
     window.addEventListener("keydown", onKey);
@@ -36,7 +38,7 @@ function DetalleEncuesta({ encuesta, preguntas, onClose }) {
         </div>
         <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(150px, 1fr))", gap: 10, fontSize: 13, margin: "14px 0" }}>
           <div><span style={{ color: "#6b7280" }}>Código</span><br /><strong>{encuesta.codigo_cliente || "—"}</strong></div>
-          <div><span style={{ color: "#6b7280" }}>PDV</span><br /><strong>{encuesta.pdv || "—"}</strong></div>
+          <div><span style={{ color: "#6b7280" }}>{tenant.etiquetas.grupo}</span><br /><strong>{encuesta.pdv || "—"}</strong></div>
           <div><span style={{ color: "#6b7280" }}>Teléfono</span><br /><strong>{encuesta.telefono1 || "—"}</strong></div>
           <div><span style={{ color: "#6b7280" }}>Encuestador</span><br /><strong>{encuesta.encuestador_nombre || "—"}</strong></div>
           <div><span style={{ color: "#6b7280" }}>Fecha</span><br /><strong>{new Date(encuesta.created_at).toLocaleString("es-EC")}</strong></div>
@@ -75,6 +77,7 @@ function DetalleEncuesta({ encuesta, preguntas, onClose }) {
 }
 
 export default function ReportesPage() {
+  const tenant = useTenant();
   const [encuestadores, setEncuestadores] = useState([]);
   const [mesesDisponibles, setMesesDisponibles] = useState([]);
   const [pdvsDisponibles, setPdvsDisponibles] = useState([]);
@@ -419,7 +422,7 @@ export default function ReportesPage() {
                         <th>Encuestador</th>
                         <th>Cliente</th>
                         <th>Código</th>
-                        <th>PDV</th>
+                        <th>{tenant.etiquetas.grupo}</th>
                         <th>Estado</th>
                         {resumen.preguntas?.map((p) => (
                           <th key={p.id} title={p.texto} style={{ textAlign: "center", minWidth: 40 }}>

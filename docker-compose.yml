@@ -2,9 +2,12 @@ services:
   app:
     build: .
     pull_policy: build
-    container_name: antroforms-web-strattos
+    # Un stack por cliente: cada uno con su TENANT, su base y su Twenty. El nombre
+    # del contenedor es también el host que usa Cloudflare Tunnel.
+    container_name: ${CONTAINER_NAME:-antroforms-web-strattos}
     restart: always
     environment:
+      TENANT: ${TENANT:-edimca}
       NEXT_PUBLIC_SUPABASE_URL: ${NEXT_PUBLIC_SUPABASE_URL}
       NEXT_PUBLIC_SUPABASE_ANON_KEY: ${NEXT_PUBLIC_SUPABASE_ANON_KEY}
       SUPABASE_SERVICE_ROLE_KEY: ${SUPABASE_SERVICE_ROLE_KEY}
@@ -14,6 +17,13 @@ services:
       CRON_SECRET: ${CRON_SECRET}
       ADMIN_SESSION_SECRET: ${ADMIN_SESSION_SECRET}
       ENCUESTADOR_ACCESS_PASSWORD: ${ENCUESTADOR_ACCESS_PASSWORD}
+      # Al arrancar se aplican migraciones y se carga el cuestionario del cliente
+      # (scripts/arranque.js). Con ADMIN_EMAIL y ADMIN_PASSWORD se crea ese
+      # administrador si no existe (no cambia la contraseña de uno existente).
+      AUTO_SETUP: ${AUTO_SETUP:-on}
+      ADMIN_EMAIL: ${ADMIN_EMAIL:-}
+      ADMIN_PASSWORD: ${ADMIN_PASSWORD:-}
+      ADMIN_NOMBRE: ${ADMIN_NOMBRE:-Administrador}
       # Tareas programadas dentro del contenedor (keep-alive de Supabase y
       # sincronización con Twenty). Ver docs/DEPLOY.md §6.
       TAREAS_PROGRAMADAS: ${TAREAS_PROGRAMADAS:-on}
@@ -25,7 +35,7 @@ services:
     networks:
       strattos-net:
         aliases:
-          - antroforms-web-strattos
+          - ${CONTAINER_NAME:-antroforms-web-strattos}
 
 networks:
   strattos-net:

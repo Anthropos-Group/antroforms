@@ -54,7 +54,15 @@ async function main() {
   }
 
   const dir = path.join(__dirname, "..", "supabase", "migrations");
-  const files = fs.readdirSync(dir).filter((f) => f.endsWith(".sql")).sort();
+  // Migraciones con datos de otro cliente (p. ej. el cuestionario de EDIMCA).
+  const { tenant } = require("../lib/tenant");
+  const omitidas = new Set(tenant().migracionesOmitidas || []);
+  console.log(`Cliente: ${tenant().nombre}`);
+  for (const f of omitidas) console.log(`omitida para ${tenant().id}: ${f}`);
+  const files = fs
+    .readdirSync(dir)
+    .filter((f) => f.endsWith(".sql") && !omitidas.has(f))
+    .sort();
 
   await query(`create table if not exists _migrations (
     filename text primary key,

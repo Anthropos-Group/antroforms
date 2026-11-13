@@ -20,6 +20,7 @@ export const GET = conErrores("GET /api/preguntas", async () => {
   }
   const { rows } = await pool.query(
     `select p.id, p.orden, p.numero_reporte, p.texto, p.tipo, p.requiere_justificacion, p.condicion, p.activa,
+            p.codigo, p.bloque, p.ayuda, p.config, p.mostrar_si, p.termina_si,
             (select count(*)::int from respuestas r where r.pregunta_id = p.id) as total_respuestas
      from preguntas p where p.cuestionario_id = $1
      order by p.orden asc`,
@@ -57,9 +58,11 @@ export const POST = conErrores("POST /api/preguntas", async (request) => {
   if (errorCondicion) return errorJson(errorCondicion);
 
   const { rows } = await pool.query(
-    `insert into preguntas (cuestionario_id, orden, numero_reporte, texto, tipo, requiere_justificacion, condicion)
-     values ($1, $2, $3, $4, $5, $6, $7)
-     returning id, orden, numero_reporte, texto, tipo, requiere_justificacion, condicion, activa`,
+    `insert into preguntas (cuestionario_id, orden, numero_reporte, texto, tipo, requiere_justificacion, condicion,
+                            codigo, bloque, ayuda, config, mostrar_si, termina_si)
+     values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
+     returning id, orden, numero_reporte, texto, tipo, requiere_justificacion, condicion, activa,
+               codigo, bloque, ayuda, config, mostrar_si, termina_si`,
     [
       cuestionarioId,
       ordenFinal,
@@ -68,6 +71,12 @@ export const POST = conErrores("POST /api/preguntas", async (request) => {
       datos.tipo,
       Boolean(datos.requiere_justificacion),
       datos.condicion ? JSON.stringify(datos.condicion) : null,
+      datos.codigo ?? null,
+      datos.bloque ?? null,
+      datos.ayuda ?? null,
+      JSON.stringify(datos.config ?? {}),
+      datos.mostrar_si ? JSON.stringify(datos.mostrar_si) : null,
+      datos.termina_si ? JSON.stringify(datos.termina_si) : null,
     ]
   );
   return NextResponse.json(rows[0], { status: 201 });

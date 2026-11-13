@@ -1,5 +1,7 @@
 "use client";
 
+import { useTenant } from "../../../components/TenantProvider";
+import AvanceLevantamiento from "../../../components/AvanceLevantamiento";
 import { useEffect, useState, useMemo } from "react";
 import MesGestionConfig from "../../../components/MesGestionConfig";
 import { useRefrescoVisible } from "../../../components/useRefrescoVisible";
@@ -129,6 +131,7 @@ function ReporteEntrevistadoresChart({ entrevistadores = [] }) {
 }
 
 export default function AdminMonitoreoPage() {
+  const tenant = useTenant();
   // Vacío = el mes de gestión activo (lo decide el servidor, ver lib/gestion.js).
   const [mes, setMes] = useState("");
   const [data, setData] = useState(null);
@@ -229,9 +232,20 @@ export default function AdminMonitoreoPage() {
     return list;
   }, [pdvs, meta, filtroEstado, criterioOrden]);
 
+  // Levantamiento sin mes de gestión (Cooperativa 23 de Julio): otro tablero.
+  if (data?.modo === "avance") {
+    return (
+      <div className="container">
+        <h1 className="page-title">{`Avance por ${tenant.etiquetas.grupo}`}</h1>
+        <p className="page-subtitle">Se actualiza solo cada minuto. Cada socio cuenta una vez, con su último resultado.</p>
+        <AvanceLevantamiento data={data} />
+      </div>
+    );
+  }
+
   return (
     <div className="container">
-      <h1 className="page-title">Monitoreo por PDV (Administrador)</h1>
+      <h1 className="page-title">{`Monitoreo por ${tenant.etiquetas.grupo} (Administrador)`}</h1>
       <p className="page-subtitle">
         {data ? nombreMesLargo(data.mes) : "Cargando…"} · meta de {meta} encuestas completadas por sucursal.
       </p>

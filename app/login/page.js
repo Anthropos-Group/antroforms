@@ -2,6 +2,7 @@
 
 import { Suspense, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
+import { useTenant } from "../../components/TenantProvider";
 
 export default function LoginPage() {
   return (
@@ -12,6 +13,7 @@ export default function LoginPage() {
 }
 
 function LoginContent() {
+  const { marca } = useTenant();
   const router = useRouter();
   const searchParams = useSearchParams();
   const [tab, setTab] = useState("encuestador");
@@ -77,10 +79,10 @@ function LoginContent() {
     <div className="login-shell">
       <div className="login-card-wrap">
         <div className="login-brand">
-          <span className="brand-mark" style={{ width: 40, height: 40, borderRadius: 12, fontSize: 17 }}>E</span>
+          <span className="brand-mark" style={{ width: 40, height: 40, borderRadius: 12, fontSize: 17 }}>{marca.inicial}</span>
           <div>
             <div className="login-brand-title">Sistema de Encuestas</div>
-            <div className="login-brand-sub">EDIMCA · Antroproyectos</div>
+            <div className="login-brand-sub">{marca.subtitulo}</div>
           </div>
         </div>
 

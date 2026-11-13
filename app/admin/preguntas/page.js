@@ -8,6 +8,18 @@ const TIPOS = [
   { value: "texto_abierto", label: "Texto abierto" },
 ];
 
+// Tipos del motor de rutas (Cooperativa 23 de Julio): se cargan desde
+// tenants/<id>.cuestionario.js con sus opciones y reglas; aquí solo se muestran y
+// se conservan al editar el texto.
+const TIPOS_RUTA = [
+  { value: "opcion_unica", label: "Opción única" },
+  { value: "opcion_multiple", label: "Selección múltiple" },
+  { value: "numero", label: "Número" },
+  { value: "escala", label: "Escala" },
+  { value: "informativa", label: "Indicación" },
+];
+const etiquetaTipo = (tipo) => [...TIPOS, ...TIPOS_RUTA].find((t) => t.value === tipo)?.label || tipo;
+
 const CLIENTE_TOTAL = "__cliente_total__";
 
 function condicionVacia() {
@@ -206,7 +218,9 @@ export default function PreguntasPage() {
         tipo: edit.tipo,
         numero_reporte: Number(edit.numero_reporte),
         requiere_justificacion: edit.requiere_justificacion,
-        condicion,
+        // Las preguntas con reglas de ruta no usan la condición simple de EDIMCA:
+        // no se toca, para no borrar nada al editar solo el texto.
+        ...(original?.mostrar_si || original?.config?.calculo || original?.termina_si ? {} : { condicion }),
       }),
     });
     if (res.ok) {
@@ -321,7 +335,10 @@ export default function PreguntasPage() {
                           value={edit.tipo}
                           onChange={(e) => setEdit({ ...edit, tipo: e.target.value })}
                         >
-                          {TIPOS.map((t) => (
+                          {(TIPOS.some((t) => t.value === edit.tipo)
+                            ? TIPOS
+                            : [...TIPOS, { value: edit.tipo, label: etiquetaTipo(edit.tipo) }]
+                          ).map((t) => (
                             <option key={t.value} value={t.value}>{t.label}</option>
                           ))}
                         </select>
@@ -392,11 +409,11 @@ export default function PreguntasPage() {
                         </button>{" "}
                         {p.orden}
                       </td>
-                      <td>P{p.numero_reporte ?? p.orden}</td>
+                      <td>{p.codigo || `P${p.numero_reporte ?? p.orden}`}</td>
                       <td>{p.texto}</td>
-                      <td>{TIPOS.find((t) => t.value === p.tipo)?.label || p.tipo}</td>
+                      <td>{etiquetaTipo(p.tipo)}</td>
                       <td>{p.requiere_justificacion ? "Sí" : "No"}</td>
-                      <td>{describirCondicion(p.condicion, nombrePregunta)}</td>
+                      <td>{p.mostrar_si || p.termina_si || p.config?.calculo ? "Regla de ruta" : describirCondicion(p.condicion, nombrePregunta)}</td>
                       <td>
                         <span className={`badge ${p.activa ? "badge-completado" : "badge-fallido"}`}>
                           {p.activa ? "Activa" : "Inactiva"}

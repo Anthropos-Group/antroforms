@@ -5,6 +5,7 @@ import { filaCache, upsertClientes } from "../../../../lib/clientes";
 import { esUUID, errorJson, conErrores } from "../../../../lib/http";
 import { mesGestionActivo, esMesActivo } from "../../../../lib/gestion";
 import { pdvsConMetaAlcanzada, marcarMetaAlcanzada } from "../../../../lib/meta";
+import { tenant } from "../../../../lib/tenant";
 
 export const dynamic = "force-dynamic";
 
@@ -26,7 +27,7 @@ export const GET = conErrores("GET /api/clientes/[id]", async (_request, { param
     try {
       const person = await fetchPerson(id, { timeoutMs: TIMEOUT_TWENTY_MS, reintentos: 0 });
       // Solo un registro completo reemplaza la copia local.
-      if (person?.id && (person.name || person.codigoCliente)) await upsertClientes(pool, [filaCache(person)]);
+      if (person?.id && (person.name || person[tenant().twenty.campos.codigo_cliente])) await upsertClientes(pool, [filaCache(person)]);
       twentyDisponible = true;
     } catch (err) {
       registrarFalloEnVivo(err);
@@ -36,7 +37,7 @@ export const GET = conErrores("GET /api/clientes/[id]", async (_request, { param
   }
 
   const { rows } = await pool.query(
-    `select id_twenty, nombre, codigo_cliente, pdv, mes_gestion, id_edimca, status, telefono1, total, fecha_atencion, etiqueta
+    `select id_twenty, nombre, codigo_cliente, pdv, mes_gestion, id_edimca, status, telefono1, total, fecha_atencion, etiqueta, datos
      from clientes_cache where id_twenty = $1`,
     [id]
   );
@@ -47,6 +48,7 @@ export const GET = conErrores("GET /api/clientes/[id]", async (_request, { param
   // gestión activo, que es el único que se encuesta.
   let [cliente] = rows;
   try {
+    if (!tenant().metaPorGrupo || !tenant().gestionMensual) return NextResponse.json({ cliente, twentyDisponible });
     const { nombre, periodo } = await mesGestionActivo(pool);
     if (esMesActivo(cliente.mes_gestion, nombre)) {
       const { pdvs } = await pdvsConMetaAlcanzada(periodo, pool);

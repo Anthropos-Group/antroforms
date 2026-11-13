@@ -6,6 +6,9 @@ Excel y monitoreo de avance por sucursal.
 
 Documentación de diseño completa en [`docs/`](docs/README.md) (producto, arquitectura, base de datos, API).
 
+**Varios clientes:** el mismo código sirve a EDIMCA y a la Cooperativa 23 de Julio, cada uno con su propio
+despliegue, base de datos y Twenty, elegido con la variable `TENANT`. Ver [docs/MULTITENANT.md](docs/MULTITENANT.md).
+
 ## Requisitos
 
 - Node.js 20.9 o superior
@@ -93,6 +96,7 @@ En producción el propio contenedor refresca la copia local de clientes cada 3 m
 | `npm run start` | Sirve el build de producción |
 | `npm run db:migrate` | Aplica las migraciones pendientes de `supabase/migrations/` |
 | `npm run db:migrate:api` | Igual que `db:migrate` pero vía la Management API de Supabase (HTTPS), para cuando el puerto 5432 está bloqueado. Requiere `SUPABASE_ACCESS_TOKEN` y `SUPABASE_PROJECT_REF` (el ref o la URL del dashboard del proyecto); acepta `--dry-run` |
+| `node scripts/cargar-cuestionario.js [--dry-run]` | Carga el cuestionario de `tenants/<TENANT>.cuestionario.js` (p. ej. el de la Cooperativa 23 de Julio) |
 | `npm test` | Pruebas automatizadas (reglas del cuestionario, normalización, fechas, reportes, autenticación) |
 | `npm run sync:twenty -- --mode=<dry_run\|incremental\|backfill_completo>` | Corre el cron de limpieza/sincronización manualmente |
 

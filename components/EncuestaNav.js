@@ -2,13 +2,14 @@
 
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
-
-const LINKS = [
-  { href: "/encuesta", label: "Encuesta" },
-  { href: "/encuesta/monitoreo", label: "Monitoreo por PDV" },
-];
+import { useTenant } from "./TenantProvider";
 
 export default function EncuestaNav() {
+  const tenant = useTenant();
+  const LINKS = [
+    { href: "/encuesta", label: "Encuesta" },
+    { href: "/encuesta/monitoreo", label: `Monitoreo por ${tenant.etiquetas.grupo}` },
+  ];
   const pathname = usePathname();
   const router = useRouter();
 
@@ -26,7 +27,7 @@ export default function EncuestaNav() {
       <div className="tab-nav-inner">
         <div style={{ display: "flex", alignItems: "center" }}>
           <div className="tab-brand">
-            <span className="brand-mark">E</span>
+            <span className="brand-mark">{tenant.marca.inicial}</span>
           </div>
           <nav className="tab-links">
             {LINKS.map((l) => (
