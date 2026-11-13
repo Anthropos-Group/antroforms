@@ -2,18 +2,20 @@
 
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
+import { useTenant } from "./TenantProvider";
 
 const LINKS = [
   { href: "/admin/preguntas", label: "Preguntas", icon: "📋" },
   { href: "/admin/encuestadores", label: "Encuestadores", icon: "🧑‍💼" },
   { href: "/admin/administradores", label: "Administradores", icon: "🔐" },
   { href: "/admin/reportes", label: "Reportes", icon: "📊" },
-  { href: "/admin/monitoreo", label: "Monitoreo por PDV", icon: "📈" },
+  { href: "/admin/monitoreo", label: "Monitoreo", icon: "📈" },
   { href: "/admin/sync", label: "Historial Twenty", icon: "🔄" },
   { href: "/admin/uso", label: "Uso de Supabase", icon: "🗄️" },
 ];
 
 export default function AdminNav() {
+  const tenant = useTenant();
   const pathname = usePathname();
   const router = useRouter();
 
@@ -26,9 +28,9 @@ export default function AdminNav() {
   return (
     <aside className="sidebar">
       <div className="sidebar-brand">
-        <span className="brand-mark">E</span>
+        <span className="brand-mark">{tenant.marca.inicial}</span>
         <div>
-          <div className="sidebar-brand-title">EDIMCA</div>
+          <div className="sidebar-brand-title">{tenant.nombre}</div>
           <div className="sidebar-brand-sub">Panel admin</div>
         </div>
       </div>

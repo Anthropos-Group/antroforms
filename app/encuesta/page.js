@@ -10,7 +10,21 @@ import {
   evaluarCortePrematuro,
   respuestaCompleta,
   prepararEnvio,
+  textoConDatos,
+  preguntasFueraDeRuta,
 } from "../../lib/encuesta-logica";
+import PreguntaCampos, { TIPOS_CON_CAMPOS } from "../../components/PreguntaCampos";
+import { useTenant } from "../../components/TenantProvider";
+
+// Resultados con los que se puede cerrar una llamada sin terminar la encuesta.
+const ETIQUETAS_CIERRE = {
+  parcial: "Parcial (se cortó o retiró el consentimiento)",
+  cita: "Cita / volver a llamar",
+  no_contacto: "No contesta / no contacto",
+  numero_incorrecto: "Número incorrecto",
+  informante_no_autorizado: "Informante no autorizado",
+  fuera_universo: "Fuera del universo",
+};
 
 function armarGuion(texto, valores) {
   if (!texto) return "";
@@ -120,9 +134,10 @@ async function fetchSesion(url, options = {}, onExpirada, { timeoutMs = LECTURA_
 }
 
 // Estados de Twenty con los que no se debe encuestar (mismos que excluye el buscador).
-function estadoNoContactar(status) {
+function estadoNoContactar(status, excluidos) {
   const s = String(status || "").trim().toUpperCase().replace(/ /g, "_");
-  return s === "NO_LLAMAR" || s === "YA_LE_REALIZARON_LA_ENCUESTA" ? s : null;
+  const lista = excluidos || ["NO_LLAMAR", "YA_LE_REALIZARON_LA_ENCUESTA"];
+  return lista.includes(s) ? s : null;
 }
 
 function saveBorradorToStorage(borrador) {
@@ -195,6 +210,7 @@ function Stepper({ paso }) {
 }
 
 export default function EncuestaPage() {
+  const tenant = useTenant();
   const router = useRouter();
   const [step, setStep] = useState("encuestador");
 
@@ -229,6 +245,7 @@ export default function EncuestaPage() {
   const [copiado, setCopiado] = useState(false);
   const [mostrarGuion, setMostrarGuion] = useState(true);
   const [sinConexion, setSinConexion] = useState(false);
+  const [cierreElegido, setCierreElegido] = useState("");
 
   function sesionExpirada() {
     router.replace("/login?next=/encuesta");
@@ -345,9 +362,28 @@ export default function EncuestaPage() {
   const preguntaActual = cuestionario?.preguntas?.[indice];
 
   const autoRespuestas = useMemo(
-    () => (cuestionario ? evaluarAutoRespuestas(cuestionario.preguntas, cliente) : {}),
-    [cuestionario, cliente]
+    () => (cuestionario ? evaluarAutoRespuestas(cuestionario.preguntas, cliente, respuestas) : {}),
+    [cuestionario, cliente, respuestas]
   );
+  // Preguntas que "No aplican por ruta" (saltos del cuestionario): la navegación
+  // las pasa de largo. La N/A por dato del cliente (P7 de EDIMCA) sí se muestra.
+  // Las calculadas (tipo de persona, ruta) tampoco se visitan: se muestran arriba.
+  const fueraDeRuta = useMemo(
+    () => (cuestionario ? preguntasFueraDeRuta(cuestionario.preguntas, respuestas, cliente) : new Set()),
+    [cuestionario, respuestas, cliente]
+  );
+  const esSaltoDeRuta = (p) => fueraDeRuta.has(p?.id) || Array.isArray(p?.config?.calculo);
+  // N/A visible: dato del cliente faltante (P7 de EDIMCA) o fuera de la ruta. Una
+  // indicación que sí aplica no lleva respuesta, pero no es N/A.
+  const esNoAplica = (p) => fueraDeRuta.has(p.id) || (autoRespuestas[p.id] === NA && p.tipo !== "informativa");
+  // ¿Este cuestionario usa la regla de corte y laminado de EDIMCA (dato TOTAL)?
+  const usaCorte = Boolean(cuestionario?.preguntas?.some((p) => p.condicion?.campo === "total"));
+  function siguienteIndice(desde, paso) {
+    const lista = cuestionario?.preguntas || [];
+    let i = desde + paso;
+    while (i >= 0 && i < lista.length && esSaltoDeRuta(lista[i])) i += paso;
+    return i < 0 || i >= lista.length ? desde : i;
+  }
 
   function elegirEncuestador(id) {
     setEncuestadorId(id);
@@ -386,8 +422,7 @@ export default function EncuestaPage() {
     if (c.meta_alcanzada) return;
     setCliente(c);
     refrescarCliente(c.id_twenty);
-    const auto = evaluarAutoRespuestas(cuestionario?.preguntas, c);
-    const iniciales = { ...auto };
+    const iniciales = reconciliarAutoRespuestas(cuestionario?.preguntas, c, {});
     setRespuestas(iniciales);
     setIndice(0);
     const newDraftId = `draft_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`;
@@ -432,10 +467,14 @@ export default function EncuestaPage() {
   }
 
   function actualizarRespuesta(preguntaId, nuevoValor) {
-    setRespuestas((prev) => ({
-      ...prev,
-      [preguntaId]: nuevoValor,
-    }));
+    // Cada respuesta puede cambiar la ruta: se recalculan las preguntas calculadas y
+    // las que dejan (o vuelven a) aplicar.
+    setRespuestas((prev) => {
+      const nuevas = { ...prev };
+      if (nuevoValor === undefined) delete nuevas[preguntaId];
+      else nuevas[preguntaId] = nuevoValor;
+      return reconciliarAutoRespuestas(cuestionario?.preguntas, cliente, nuevas);
+    });
     setErroresValidacion((prev) => prev.filter((e) => e.preguntaId !== preguntaId));
   }
 
@@ -452,7 +491,20 @@ export default function EncuestaPage() {
     enviar(envio);
   }
 
-  async function enviar(envio) {
+  // Cerrar la llamada sin terminar (parcial, cita, no contacto…): se guarda lo
+  // respondido hasta ahora con el resultado elegido.
+  function cerrarLlamada() {
+    if (!cuestionario || !cliente || enviando || !cierreElegido) return;
+    if (!window.confirm(`¿Cerrar la llamada como "${ETIQUETAS_CIERRE[cierreElegido]}"? Se guardará lo respondido hasta ahora.`)) return;
+    const envio = prepararEnvio(cuestionario.preguntas, respuestas, cliente, { cierre: cierreElegido });
+    if (!envio.valido) {
+      setErroresValidacion(envio.errores);
+      return;
+    }
+    enviar(envio, cierreElegido);
+  }
+
+  async function enviar(envio, cierre = null) {
     setEnviando(true);
     setErrorEnvio(null);
     // Sin límite, un servidor lento dejaba "Guardando respuesta…" para siempre y había
@@ -473,6 +525,7 @@ export default function EncuestaPage() {
           // corte de red), el servidor devuelve la misma encuesta sin duplicarla.
           idempotency_key: activeDraftId,
           respuestas: envio.respuestas,
+          ...(cierre ? { cierre } : {}),
         }),
       });
       const data = await res.json().catch(() => ({}));
@@ -505,6 +558,7 @@ export default function EncuestaPage() {
         completada,
         id: data.id,
         status: data.status,
+        resultado: data.resultado ?? envio.resultado ?? null,
         duplicada: data.duplicada,
       });
 
@@ -535,6 +589,7 @@ export default function EncuestaPage() {
     setQuery("");
     setResultados([]);
     setRespuestas({});
+    setCierreElegido("");
     setIndice(0);
     setActiveDraftId(null);
     setErroresValidacion([]);
@@ -561,8 +616,8 @@ export default function EncuestaPage() {
 
   const corteInfoActual = useMemo(() => {
     if (!cuestionario) return { cortada: false };
-    return evaluarCortePrematuro(cuestionario.preguntas, respuestas);
-  }, [cuestionario, respuestas]);
+    return evaluarCortePrematuro(cuestionario.preguntas, respuestas, cliente);
+  }, [cuestionario, respuestas, cliente]);
 
   // El progreso solo cuenta las preguntas que realmente hay que hacer: las N/A
   // automáticas y las que quedan fuera por un corte no restan (antes nunca se
@@ -588,7 +643,7 @@ export default function EncuestaPage() {
 
   return (
     <div className="container">
-      <h1 className="page-title">Encuesta de satisfacción</h1>
+      <h1 className="page-title">{tenant.id === "edimca" ? "Encuesta de satisfacción" : "Levantar encuesta"}</h1>
       <p className="page-subtitle">
         {cuestionario ? cuestionario.nombre : cargandoCuestionario ? "Cargando cuestionario…" : "No hay cuestionario activo"}
       </p>
@@ -735,7 +790,7 @@ export default function EncuestaPage() {
                             >
                               🔒 Meta alcanzada
                             </span>
-                          ) : tieneCorte ? (
+                          ) : !usaCorte ? null : tieneCorte ? (
                             <span
                               className="badge"
                               style={{
@@ -782,9 +837,13 @@ export default function EncuestaPage() {
                       <div className="detalle" style={{ marginTop: 6, display: "flex", gap: "10px", flexWrap: "wrap", alignItems: "center" }}>
                         <span>Código: <strong>{r.codigo_cliente || "—"}</strong></span>
                         <span>·</span>
-                        <span>PDV: {r.pdv || "—"}</span>
-                        <span>·</span>
-                        <span>Mes: <strong>{r.mes_gestion || "—"}</strong></span>
+                        <span>{tenant.etiquetas.grupo}: {r.pdv || "—"}</span>
+                        {tenant.gestionMensual && (
+                          <>
+                            <span>·</span>
+                            <span>Mes: <strong>{r.mes_gestion || "—"}</strong></span>
+                          </>
+                        )}
                         {r.telefono1 && (
                           <>
                             <span>·</span>
@@ -812,8 +871,15 @@ export default function EncuestaPage() {
             <div><span>Cliente</span>{cliente.nombre}</div>
             <div><span>Código</span>{cliente.codigo_cliente}</div>
             {cliente.telefono1 && <div><span>Teléfono</span>📞 {cliente.telefono1}</div>}
-            <div><span>PDV</span>{cliente.pdv}</div>
-            <div><span>Mes</span>{cliente.mes_gestion}</div>
+            <div><span>{tenant.etiquetas.grupo}</span>{cliente.pdv}</div>
+            {tenant.gestionMensual && <div><span>Mes</span>{cliente.mes_gestion}</div>}
+            {cliente.datos?.tipo_persona && (
+              <div><span>Tipo de persona</span>{cliente.datos.tipo_persona}</div>
+            )}
+            {cliente.datos?.actividad && (
+              <div><span>Actividad registrada</span>{cliente.datos.actividad}</div>
+            )}
+            {usaCorte && (
             <div>
               <span>Servicio de corte</span>
               {tieneDatoCliente(cliente, "total") ? (
@@ -826,6 +892,7 @@ export default function EncuestaPage() {
                 </span>
               )}
             </div>
+            )}
             <div style={{ marginLeft: "auto" }}>
               <button
                 className="btn"
@@ -836,6 +903,22 @@ export default function EncuestaPage() {
               </button>
             </div>
           </div>
+
+          {cuestionario.preguntas.some((p) => Array.isArray(p.config?.calculo)) && (
+            <div style={{ display: "flex", gap: 8, flexWrap: "wrap", padding: "8px 16px 0" }}>
+              {cuestionario.preguntas
+                .filter((p) => Array.isArray(p.config?.calculo))
+                .map((p) => {
+                  const v = respuestas[p.id];
+                  const etiqueta = (p.config.opciones || []).find((o) => o.valor === v)?.etiqueta || v || "—";
+                  return (
+                    <span key={p.id} className="badge" style={{ fontSize: 12, padding: "3px 10px", background: "#eef2ff", color: "#3730a3", border: "1px solid #c7d2fe" }}>
+                      {p.texto}: <strong>{etiqueta}</strong>
+                    </span>
+                  );
+                })}
+            </div>
+          )}
 
           <div className="pad">
             {cliente?.meta_alcanzada && (
@@ -849,9 +932,9 @@ export default function EncuestaPage() {
                 </div>
               </div>
             )}
-            {estadoNoContactar(cliente?.status) && (
+            {estadoNoContactar(cliente?.status, tenant.estadosExcluidos) && (
               <div className="validation-box" style={{ marginBottom: 12 }}>
-                ⚠️ En Twenty este cliente figura como <strong>{estadoNoContactar(cliente.status)}</strong>. Verifica
+                ⚠️ En Twenty este cliente figura como <strong>{estadoNoContactar(cliente.status, tenant.estadosExcluidos)}</strong>. Verifica
                 antes de continuar con la encuesta.
               </div>
             )}
@@ -873,8 +956,9 @@ export default function EncuestaPage() {
             {/* Selector directo de preguntas */}
             <div className="question-nav-bar">
               {cuestionario.preguntas.map((p, i) => {
-                const esNA = autoRespuestas[p.id] === NA;
+                const esNA = esNoAplica(p);
                 const numLabel = p.numero_reporte ?? (i + 1);
+                const etiquetaPill = p.codigo || `P${numLabel}`;
                 const esCompleta = esNA || respuestaCompleta(p, respuestas[p.id], cliente);
 
                 return (
@@ -887,11 +971,15 @@ export default function EncuestaPage() {
                     }}
                     title={
                       esNA
-                        ? `Pregunta ${numLabel}: Omitida (N/A) - Cliente sin servicio de corte`
-                        : `Pregunta ${numLabel}`
+                        ? p.mostrar_si
+                          ? `${etiquetaPill}: No aplica por ruta`
+                          : `Pregunta ${numLabel}: Omitida (N/A) - Cliente sin servicio de corte`
+                        : p.bloque
+                          ? `${etiquetaPill} · ${p.bloque}`
+                          : `Pregunta ${numLabel}`
                     }
                   >
-                    P{numLabel} {esNA && <span style={{ fontSize: 10, marginLeft: 2 }}>(N/A)</span>}
+                    {etiquetaPill} {esNA && <span style={{ fontSize: 10, marginLeft: 2 }}>(N/A)</span>}
                   </button>
                 );
               })}
@@ -925,7 +1013,9 @@ export default function EncuestaPage() {
             {corteInfoActual.cortada && (
               <div className="script-box" style={{ background: "#fee2e2", borderColor: "#fca5a5", color: "#991b1b" }}>
                 <span className="script-label" style={{ color: "#7f1d1d" }}>Aviso de finalización anticipada</span>
-                El cliente respondió "No" en una de las preguntas de filtro. Al finalizar, la encuesta se guardará como <strong>CORTADA</strong>.
+                {corteInfoActual.resultado === "rechazo"
+                  ? <>No acepta participar. Agradezca y finalice: la encuesta se guardará como <strong>RECHAZO</strong>.</>
+                  : <>El cliente respondió "No" en una de las preguntas de filtro. Al finalizar, la encuesta se guardará como <strong>CORTADA</strong>.</>}
               </div>
             )}
 
@@ -956,14 +1046,16 @@ export default function EncuestaPage() {
             )}
 
             {!enviando && preguntaActual && (() => {
-              const esNA = autoRespuestas[preguntaActual.id] === NA;
+              const esNA = esNoAplica(preguntaActual);
               const numReporte = preguntaActual.numero_reporte ?? (indice + 1);
+              const etiquetaPregunta = preguntaActual.codigo || `Pregunta ${numReporte}`;
 
               return (
                 <div style={{ marginTop: 16 }}>
                   <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 6, flexWrap: "wrap", gap: 8 }}>
                     <div style={{ fontSize: 12, textTransform: "uppercase", color: "#6b7280", fontWeight: 700 }}>
-                      Pregunta {numReporte} · Paso {indice + 1} de {cuestionario.preguntas.length}
+                      {etiquetaPregunta}
+                      {preguntaActual.bloque ? ` · ${preguntaActual.bloque}` : ""} · Paso {indice + 1} de {cuestionario.preguntas.length}
                     </div>
                     {preguntaActual.condicion?.campo === "total" && (
                       <div>
@@ -981,8 +1073,15 @@ export default function EncuestaPage() {
                   </div>
 
                   <p style={{ fontSize: 17, fontWeight: 500, marginBottom: 14 }}>
-                    {preguntaActual.texto}
+                    {textoConDatos(preguntaActual.texto, cliente)}
                   </p>
+                  {preguntaActual.ayuda && preguntaActual.tipo !== "informativa" && !esNA && (
+                    <div
+                      style={{ background: "#fff7ed", border: "1px solid #fed7aa", color: "#9a3412", borderRadius: 8, padding: "8px 12px", fontSize: 13, marginBottom: 14, whiteSpace: "pre-line" }}
+                    >
+                      {preguntaActual.ayuda}
+                    </div>
+                  )}
 
                   {esNA ? (
                     <div
@@ -997,10 +1096,12 @@ export default function EncuestaPage() {
                     >
                       <div style={{ marginBottom: 8 }}><PuntoRojo tamano={22} /></div>
                       <h4 style={{ margin: "0 0 6px", color: "#334155", fontSize: 16 }}>
-                        Pregunta omitida automáticamente (N/A)
+                        {preguntaActual.mostrar_si ? "No aplica por ruta" : "Pregunta omitida automáticamente (N/A)"}
                       </h4>
                       <p style={{ margin: "0 0 12px", color: "#64748b", fontSize: 14, maxWidth: 520, marginInline: "auto", lineHeight: 1.5 }}>
-                        Esta pregunta sobre la calidad de piezas cortadas y laminadas solo aplica para clientes que registraron dicho servicio (columna <code>total</code> en Twenty CRM).
+                        {preguntaActual.mostrar_si
+                          ? "Por las respuestas anteriores o los datos del listado, esta pregunta no se hace a este socio."
+                          : <>Esta pregunta sobre la calidad de piezas cortadas y laminadas solo aplica para clientes que registraron dicho servicio (columna <code>total</code> en Twenty CRM).</>}
                       </p>
                       <div style={{ display: "inline-block", padding: "6px 14px", borderRadius: 6, background: "#e2e8f0", color: "#475569", fontSize: 13, fontWeight: 600 }}>
                         ✓ Registrada como N/A — No requiere respuesta del encuestador
@@ -1080,6 +1181,14 @@ export default function EncuestaPage() {
                         );
                       })()}
 
+                      {TIPOS_CON_CAMPOS.includes(preguntaActual.tipo) && (
+                        <PreguntaCampos
+                          pregunta={preguntaActual}
+                          valor={respuestas[preguntaActual.id]}
+                          onChange={(v) => actualizarRespuesta(preguntaActual.id, v)}
+                        />
+                      )}
+
                       {preguntaActual.tipo === "texto_abierto" && (
                         <div>
                           <textarea
@@ -1098,18 +1207,18 @@ export default function EncuestaPage() {
                       className="btn btn-secondary"
                       disabled={indice === 0}
                       onClick={() => {
-                        setIndice((prev) => Math.max(0, prev - 1));
+                        setIndice((prev) => siguienteIndice(prev, -1));
                         setErroresValidacion([]);
                       }}
                     >
                       ◀ Anterior
                     </button>
 
-                    {indice < cuestionario.preguntas.length - 1 ? (
+                    {siguienteIndice(indice, 1) !== indice ? (
                       <button
                         className="btn btn-secondary"
                         onClick={() => {
-                          setIndice((prev) => Math.min(cuestionario.preguntas.length - 1, prev + 1));
+                          setIndice((prev) => siguienteIndice(prev, 1));
                           setErroresValidacion([]);
                         }}
                       >
@@ -1129,6 +1238,21 @@ export default function EncuestaPage() {
                       {enviando ? "Enviando…" : errorEnvio ? "Reintentar envío ✓" : "Finalizar y Enviar Encuesta ✓"}
                     </button>
                   </div>
+
+                  {tenant.cierres?.length > 0 && (
+                    <div style={{ marginTop: 16, paddingTop: 12, borderTop: "1px dashed #e2e8f0", display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center" }}>
+                      <span style={{ fontSize: 13, color: "#475569", fontWeight: 600 }}>Cerrar la llamada sin terminar:</span>
+                      <select value={cierreElegido} onChange={(e) => setCierreElegido(e.target.value)} style={{ padding: "6px 8px" }}>
+                        <option value="">Elegir resultado…</option>
+                        {tenant.cierres.map((c) => (
+                          <option key={c} value={c}>{ETIQUETAS_CIERRE[c] || c}</option>
+                        ))}
+                      </select>
+                      <button className="btn" disabled={!cierreElegido || enviando} onClick={cerrarLlamada}>
+                        Guardar resultado
+                      </button>
+                    </div>
+                  )}
 
                   {errorEnvio && (
                     <div className="validation-box" style={{ marginTop: 16 }}>
@@ -1164,14 +1288,20 @@ export default function EncuestaPage() {
             {resultadoFinal.completada ? "✓" : "✕"}
           </div>
           <h2 style={{ margin: "0 0 8px" }}>
-            {resultadoFinal.completada ? "Encuesta completada" : "Encuesta cortada"}
+            {resultadoFinal.completada
+              ? "Encuesta completada"
+              : ETIQUETAS_CIERRE[resultadoFinal.resultado]
+                ? "Llamada cerrada"
+                : "Encuesta cortada"}
           </h2>
           <p style={{ color: "#6b7280", fontSize: 14 }}>
             {resultadoFinal.completada
-              ? "Se guardó la respuesta y el estado del cliente quedó como EFECTIVA."
-              : resultadoFinal.status === "NO_LLAMAR"
-                ? "El cliente no aceptó participar: se guardó lo respondido y quedó marcado como NO_LLAMAR."
-                : "El cliente no continuó (no era quien realizó la compra). Se guardó lo respondido."}
+              ? `Se guardó la respuesta y el estado del cliente quedó como ${tenant.estados.completada}.`
+              : resultadoFinal.status === tenant.estados.rechazo
+                ? `El cliente no aceptó participar: se guardó lo respondido y quedó marcado como ${tenant.estados.rechazo}.`
+                : ETIQUETAS_CIERRE[resultadoFinal.resultado]
+                  ? `Se guardó lo respondido con el resultado "${ETIQUETAS_CIERRE[resultadoFinal.resultado]}"${resultadoFinal.status ? ` (estado ${resultadoFinal.status} en el CRM)` : ""}.`
+                  : "El cliente no continuó (no era quien realizó la compra). Se guardó lo respondido."}
           </p>
           {cuestionario?.guion_cierre && (
             <div className="script-box" style={{ textAlign: "left" }}>

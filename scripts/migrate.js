@@ -8,6 +8,7 @@ const fs = require("fs");
 const path = require("path");
 const { Client } = require("pg");
 const { sslConfig } = require("../lib/db");
+const { tenant } = require("../lib/tenant");
 
 async function main() {
   const connectionString = process.env.SUPABASE_DB_URL;
@@ -21,6 +22,9 @@ async function main() {
     .readdirSync(dir)
     .filter((f) => f.endsWith(".sql"))
     .sort();
+  // Migraciones con datos de otro cliente (p. ej. el cuestionario de EDIMCA).
+  const omitidas = new Set(tenant().migracionesOmitidas || []);
+  console.log(`Cliente: ${tenant().nombre}`);
 
   const client = new Client({ connectionString, ssl: sslConfig(connectionString) });
   await client.connect();
@@ -40,6 +44,11 @@ async function main() {
       );
       if (rows.length > 0) {
         console.log(`skip (ya aplicada): ${file}`);
+        continue;
+      }
+
+      if (omitidas.has(file)) {
+        console.log(`omitida para ${tenant().id}: ${file}`);
         continue;
       }
 

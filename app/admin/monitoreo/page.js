@@ -1,5 +1,6 @@
 "use client";
 
+import { useTenant } from "../../../components/TenantProvider";
 import { useEffect, useState, useMemo } from "react";
 import MesGestionConfig from "../../../components/MesGestionConfig";
 import { useRefrescoVisible } from "../../../components/useRefrescoVisible";
@@ -129,6 +130,7 @@ function ReporteEntrevistadoresChart({ entrevistadores = [] }) {
 }
 
 export default function AdminMonitoreoPage() {
+  const tenant = useTenant();
   // Vacío = el mes de gestión activo (lo decide el servidor, ver lib/gestion.js).
   const [mes, setMes] = useState("");
   const [data, setData] = useState(null);
@@ -231,7 +233,7 @@ export default function AdminMonitoreoPage() {
 
   return (
     <div className="container">
-      <h1 className="page-title">Monitoreo por PDV (Administrador)</h1>
+      <h1 className="page-title">{`Monitoreo por ${tenant.etiquetas.grupo} (Administrador)`}</h1>
       <p className="page-subtitle">
         {data ? nombreMesLargo(data.mes) : "Cargando…"} · meta de {meta} encuestas completadas por sucursal.
       </p>

@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { getPool } from "../../../../lib/db";
-import { validarPregunta, validarCondicionContraBD } from "../../../../lib/preguntas";
+import { validarPregunta, validarCondicionContraBD, CAMPOS_JSON } from "../../../../lib/preguntas";
 import { esUUID, errorJson, leerJson, conErrores } from "../../../../lib/http";
 
 export const dynamic = "force-dynamic";
@@ -35,14 +35,15 @@ export const PATCH = conErrores("PATCH /api/preguntas/[id]", async (request, { p
   const sets = [];
   const valores = [];
   for (const [campo, valor] of Object.entries(datos)) {
-    valores.push(campo === "condicion" ? (valor === null ? null : JSON.stringify(valor)) : valor);
+    valores.push(CAMPOS_JSON.includes(campo) ? (valor === null ? null : JSON.stringify(valor)) : valor);
     sets.push(`${campo} = $${valores.length}`);
   }
 
   valores.push(id);
   const { rows } = await pool.query(
     `update preguntas set ${sets.join(", ")} where id = $${valores.length}
-     returning id, orden, numero_reporte, texto, tipo, requiere_justificacion, condicion, activa`,
+     returning id, orden, numero_reporte, texto, tipo, requiere_justificacion, condicion, activa,
+               codigo, bloque, ayuda, config, mostrar_si, termina_si`,
     valores
   );
   return NextResponse.json(rows[0]);

@@ -1,5 +1,6 @@
 "use client";
 
+import { useTenant } from "../../../components/TenantProvider";
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { useRefrescoVisible } from "../../../components/useRefrescoVisible";
@@ -19,6 +20,7 @@ function estadoPdv(completadas, meta) {
 }
 
 export default function EncuestadorMonitoreoPage() {
+  const tenant = useTenant();
   const router = useRouter();
 
   const [data, setData] = useState(null);
@@ -63,7 +65,7 @@ export default function EncuestadorMonitoreoPage() {
 
   return (
     <div className="container">
-      <h1 className="page-title">Monitoreo por PDV</h1>
+      <h1 className="page-title">{`Monitoreo por ${tenant.etiquetas.grupo}`}</h1>
       <p className="page-subtitle">
         {data ? nombreMesLargo(data.mes) : "Cargando…"} · meta de {meta} encuestas completadas por sucursal.
       </p>

@@ -2,9 +2,12 @@ services:
   app:
     build: .
     pull_policy: build
-    container_name: antroforms-web-strattos
+    # Un stack por cliente: cada uno con su TENANT, su base y su Twenty. El nombre
+    # del contenedor es también el host que usa Cloudflare Tunnel.
+    container_name: ${CONTAINER_NAME:-antroforms-web-strattos}
     restart: always
     environment:
+      TENANT: ${TENANT:-edimca}
       NEXT_PUBLIC_SUPABASE_URL: ${NEXT_PUBLIC_SUPABASE_URL}
       NEXT_PUBLIC_SUPABASE_ANON_KEY: ${NEXT_PUBLIC_SUPABASE_ANON_KEY}
       SUPABASE_SERVICE_ROLE_KEY: ${SUPABASE_SERVICE_ROLE_KEY}
@@ -25,7 +28,7 @@ services:
     networks:
       strattos-net:
         aliases:
-          - antroforms-web-strattos
+          - ${CONTAINER_NAME:-antroforms-web-strattos}
 
 networks:
   strattos-net:

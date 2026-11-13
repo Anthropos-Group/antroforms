@@ -9,6 +9,7 @@ import {
 import { filaCache, upsertClientes } from "../../../../lib/clientes";
 import { mesGestionActivo } from "../../../../lib/gestion";
 import { pdvsConMetaAlcanzada, marcarMetaAlcanzada } from "../../../../lib/meta";
+import { tenant } from "../../../../lib/tenant";
 
 export const dynamic = "force-dynamic";
 
@@ -40,15 +41,18 @@ function terminoParaLike(q) {
 // entra otra vez en la base del mes siguiente con registro nuevo y debe poder
 // encuestarse). Son dos NOT EXISTS y no uno con OR: así cada uno usa su índice
 // parcial de encuestas en vez de recorrer la copia local completa.
+//
+// Sin mes de gestión (meses = null, p. ej. Cooperativa 23 de Julio) se busca en toda
+// la base y "ya encuestado" es cualquier encuesta completada con el mismo código.
 async function buscarEnCache(pool, q, meses) {
   const { rows } = await pool.query(
-    `select id_twenty, nombre, codigo_cliente, pdv, mes_gestion, id_edimca, status, telefono1, total, fecha_atencion, etiqueta
+    `select id_twenty, nombre, codigo_cliente, pdv, mes_gestion, id_edimca, status, telefono1, total, fecha_atencion, etiqueta, datos
      from clientes_cache
      where (nombre ilike $1 or codigo_cliente ilike $1 or telefono1 ilike $1 or id_edimca ilike $1)
-       and upper(trim(mes_gestion)) = any($2::text[])
+       and ($2::text[] is null or upper(trim(mes_gestion)) = any($2::text[]))
        and (
          status is null
-         or upper(replace(trim(status), ' ', '_')) not in ('NO_LLAMAR', 'YA_LE_REALIZARON_LA_ENCUESTA')
+         or upper(replace(trim(status), ' ', '_')) <> all($3::text[])
        )
        and not exists (
          select 1 from encuestas e
@@ -60,11 +64,12 @@ async function buscarEnCache(pool, q, meses) {
          where e.completada
            and clientes_cache.codigo_cliente is not null
            and e.codigo_cliente = clientes_cache.codigo_cliente
-           and (ce.id_twenty is null or upper(trim(ce.mes_gestion)) = upper(trim(clientes_cache.mes_gestion)))
+           and ($2::text[] is null or ce.id_twenty is null
+                or upper(trim(ce.mes_gestion)) = upper(trim(clientes_cache.mes_gestion)))
        )
      order by nombre asc
      limit ${LIMITE_RESULTADOS}`,
-    [`%${terminoParaLike(q)}%`, meses]
+    [`%${terminoParaLike(q)}%`, meses, tenant().twenty.estadosExcluidos]
   );
 
   // Deduplicar defensivamente por codigo_cliente
@@ -80,21 +85,26 @@ async function buscarEnCache(pool, q, meses) {
 // Trae de Twenty los clientes que coinciden con lo tecleado y los guarda en la copia
 // local. Lanza el error de Twenty; un fallo al guardar no se confunde con Twenty caído.
 async function traerDeTwenty(pool, qTwenty, meses) {
-  // Si se tecleó un número (código de cliente, id EDIMCA o teléfono) no hace
+  // Si se tecleó un número (código de cliente, id externo o teléfono) no hace
   // falta buscar en los nombres, y el código se busca exacto: consulta más liviana.
+  const { campos } = tenant().twenty;
   const esNumero = /^\d{4,}$/.test(qTwenty);
+  const exactos = [campos.codigo_cliente, campos.id_externo].filter(Boolean);
+  const telefono = campos.telefono ? [`${campos.telefono}[ilike]:%${qTwenty}%`] : [];
   const orConditions = esNumero
-    ? [`codigoCliente[eq]:${qTwenty}`, `idEdimca[eq]:${qTwenty}`, `telefono1[ilike]:%${qTwenty}%`]
+    ? [...exactos.map((c) => `${c}[eq]:${qTwenty}`), ...telefono]
     : [
         `name.firstName[ilike]:%${qTwenty}%`,
         `name.lastName[ilike]:%${qTwenty}%`,
-        `codigoCliente[ilike]:%${qTwenty}%`,
-        `telefono1[ilike]:%${qTwenty}%`,
-        `idEdimca[ilike]:%${qTwenty}%`,
+        ...exactos.map((c) => `${c}[ilike]:%${qTwenty}%`),
+        ...telefono,
       ];
-  const condMeses = meses.map((m) => `mesGestion[ilike]:%${m}%`);
-  const filtroMeses = condMeses.length === 1 ? condMeses[0] : `or(${condMeses.join(",")})`;
-  const filter = `and(or(${orConditions.join(",")}),${filtroMeses})`;
+  let filter = `or(${orConditions.join(",")})`;
+  if (meses && campos.mes_gestion) {
+    const condMeses = meses.map((m) => `${campos.mes_gestion}[ilike]:%${m}%`);
+    const filtroMeses = condMeses.length === 1 ? condMeses[0] : `or(${condMeses.join(",")})`;
+    filter = `and(${filter},${filtroMeses})`;
+  }
 
   const { people } = await fetchPeoplePage({
     limit: 25,
@@ -126,11 +136,14 @@ export async function GET(request) {
     const pool = getPool();
     // Solo el mes de gestión activo (ver lib/gestion.js): con un cliente repetido en
     // dos meses, el encuestador solo ve el registro del mes que se está trabajando.
-    const { nombre: mesActivo, periodo } = await mesGestionActivo(pool);
-    const mesesPermitidos = [mesActivo];
+    const config = tenant();
+    const { nombre: mesActivo, periodo } = config.gestionMensual
+      ? await mesGestionActivo(pool)
+      : { nombre: null, periodo: null };
+    const mesesPermitidos = config.gestionMensual ? [mesActivo] : null;
 
     if (q.length < 3) {
-      return NextResponse.json({ results: [], mesesPermitidos });
+      return NextResponse.json({ results: [], mesesPermitidos: mesesPermitidos || [] });
     }
 
     let results = await buscarEnCache(pool, q, mesesPermitidos);
@@ -159,14 +172,16 @@ export async function GET(request) {
 
     // Los clientes de un PDV que ya cumplió la meta del mes se siguen mostrando, pero
     // marcados para que no se encuesten (el guardado también lo rechaza).
-    try {
-      const { pdvs } = await pdvsConMetaAlcanzada(periodo, pool);
-      results = marcarMetaAlcanzada(results, pdvs);
-    } catch (metaErr) {
-      console.error("No se pudo calcular la meta por PDV en la búsqueda:", metaErr);
+    if (config.metaPorGrupo && periodo) {
+      try {
+        const { pdvs } = await pdvsConMetaAlcanzada(periodo, pool);
+        results = marcarMetaAlcanzada(results, pdvs);
+      } catch (metaErr) {
+        console.error("No se pudo calcular la meta por PDV en la búsqueda:", metaErr);
+      }
     }
 
-    return NextResponse.json({ results, twentyDisponible, twentyMotivo, mesesPermitidos });
+    return NextResponse.json({ results, twentyDisponible, twentyMotivo, mesesPermitidos: mesesPermitidos || [] });
   } catch (err) {
     console.error("Error en búsqueda de clientes:", err);
     return NextResponse.json({ error: "No se pudo completar la búsqueda", results: [] }, { status: 500 });

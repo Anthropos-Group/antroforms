@@ -18,7 +18,8 @@ export const GET = conErrores("GET /api/cuestionarios/activo", async () => {
   }
 
   const { rows: preguntas } = await pool.query(
-    `select id, orden, numero_reporte, texto, tipo, requiere_justificacion, condicion
+    `select id, orden, numero_reporte, texto, tipo, requiere_justificacion, condicion,
+            codigo, bloque, ayuda, config, mostrar_si, termina_si
      from preguntas
      where cuestionario_id = $1 and activa = true
      order by orden asc`,

@@ -1,4 +1,6 @@
 import Link from "next/link";
+import { connection } from "next/server";
+import { tenant } from "../lib/tenant";
 
 const ACCESOS = [
   {
@@ -27,14 +29,16 @@ const ACCESOS = [
   },
 ];
 
-export default function Home() {
+export default async function Home() {
+  await connection();
+  const { marca } = tenant();
   return (
     <div className="container">
       <div className="login-brand" style={{ marginBottom: 30 }}>
-        <span className="brand-mark" style={{ width: 40, height: 40, borderRadius: 12, fontSize: 17 }}>E</span>
+        <span className="brand-mark" style={{ width: 40, height: 40, borderRadius: 12, fontSize: 17 }}>{marca.inicial}</span>
         <div>
           <div className="login-brand-title">Sistema de Encuestas</div>
-          <div className="login-brand-sub">EDIMCA · Antroproyectos</div>
+          <div className="login-brand-sub">{marca.subtitulo}</div>
         </div>
       </div>
 

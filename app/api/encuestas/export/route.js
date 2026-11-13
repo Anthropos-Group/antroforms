@@ -1,4 +1,5 @@
 import ExcelJS from "exceljs";
+import { tenant } from "../../../../lib/tenant";
 import { getPool } from "../../../../lib/db";
 import { obtenerReporte, obtenerResumen, leerFiltros } from "../../../../lib/reportes";
 import { formatFechaHoraEcuador, hoyISOEcuador } from "../../../../lib/fecha";
@@ -19,7 +20,7 @@ export const GET = conErrores("GET /api/encuestas/export", async (request) => {
   const { cuestionario, encuestas } = reporte;
 
   const workbook = new ExcelJS.Workbook();
-  workbook.creator = "Sistema de Encuestas EDIMCA";
+  workbook.creator = `Sistema de Encuestas ${tenant().nombre}`;
   workbook.created = new Date();
   const sheet = workbook.addWorksheet("Encuestas", { views: [{ state: "frozen", ySplit: 1 }] });
 

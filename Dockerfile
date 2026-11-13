@@ -30,6 +30,8 @@ COPY --from=builder --chown=nextjs:nodejs /app/.next/static ./.next/static
 COPY --from=builder --chown=nextjs:nodejs /app/supabase ./supabase
 COPY --from=builder --chown=nextjs:nodejs /app/scripts ./scripts
 COPY --from=builder --chown=nextjs:nodejs /app/lib ./lib
+# Configuración de cada cliente (TENANT) y sus cuestionarios, para los scripts.
+COPY --from=builder --chown=nextjs:nodejs /app/tenants ./tenants
 
 USER nextjs
 

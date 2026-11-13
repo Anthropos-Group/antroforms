@@ -1,12 +1,13 @@
 import { NextResponse, after } from "next/server";
 import { getPool } from "../../../lib/db";
-import { patchPerson, twentyConfigurado, twentyEnVivoDisponible, registrarFalloEnVivo } from "../../../lib/twenty";
+import { patchEstado, twentyConfigurado, twentyEnVivoDisponible, registrarFalloEnVivo } from "../../../lib/twenty";
 import { obtenerReporte, obtenerResumen, leerFiltros } from "../../../lib/reportes";
 import { prepararEnvio } from "../../../lib/encuesta-logica";
 import { esUUID, errorJson, leerJson, conErrores } from "../../../lib/http";
 import { verifySessionToken, SESSION_COOKIE } from "../../../lib/auth";
 import { mesGestionActivo, esMesActivo } from "../../../lib/gestion";
 import { metaMensual, completadasDelPdv, invalidarMeta } from "../../../lib/meta";
+import { tenant } from "../../../lib/tenant";
 
 export const dynamic = "force-dynamic";
 
@@ -49,7 +50,8 @@ async function cargarCuestionarioActivo(pool) {
   );
   if (!rows[0]) return null;
   const { rows: preguntas } = await pool.query(
-    `select id, orden, numero_reporte, texto, tipo, requiere_justificacion, condicion
+    `select id, orden, numero_reporte, texto, tipo, requiere_justificacion, condicion,
+            codigo, bloque, config, mostrar_si, termina_si
      from preguntas where cuestionario_id = $1 and activa = true
      order by orden asc`,
     [rows[0].id]
@@ -62,6 +64,8 @@ export const POST = conErrores("POST /api/encuestas", async (request) => {
   if (!body) return errorJson("Cuerpo de la solicitud inválido");
 
   const { cuestionario_id, cliente_twenty_id, encuestador_id, respuestas } = body;
+  // Cierre anticipado de la llamada (parcial, cita, no contacto…), si el cliente lo usa.
+  const cierre = typeof body.cierre === "string" && body.cierre ? body.cierre : null;
   const idempotencyKey =
     typeof body.idempotency_key === "string" && body.idempotency_key.trim()
       ? body.idempotency_key.trim().slice(0, 100)
@@ -110,9 +114,10 @@ export const POST = conErrores("POST /api/encuestas", async (request) => {
   const esAdmin = Boolean(verifySessionToken(request.cookies.get(SESSION_COOKIE)?.value));
   // Mes cuya meta por PDV se vigila (ver más abajo); null para el admin.
   let periodoMeta = null;
-  if (!esAdmin) {
+  const config = tenant();
+  if (!esAdmin && config.gestionMensual) {
     const { nombre: mesActivo, periodo } = await mesGestionActivo(pool);
-    periodoMeta = periodo;
+    periodoMeta = config.metaPorGrupo ? periodo : null;
     if (!esMesActivo(cliente.mes_gestion, mesActivo)) {
       return errorJson(
         `Este cliente es del mes de gestión ${cliente.mes_gestion?.trim() || "(sin mes)"}; ahora solo se registran encuestas de ${mesActivo}.`,
@@ -128,7 +133,10 @@ export const POST = conErrores("POST /api/encuestas", async (request) => {
   for (const r of respuestas) {
     if (r && idsValidos.has(r.pregunta_id)) mapa[r.pregunta_id] = r.valor;
   }
-  const envio = prepararEnvio(cuestionario.preguntas, mapa, cliente);
+  if (cierre && !config.twenty.estadosCierre) {
+    return errorJson("Este cuestionario no admite cerrar la llamada sin terminar la encuesta", 400);
+  }
+  const envio = prepararEnvio(cuestionario.preguntas, mapa, cliente, { cierre });
   if (!envio.valido) {
     return errorJson(
       "Faltan respuestas o hay valores inválidos. Si el cuestionario fue modificado, recarga la página (el borrador se conserva).",
@@ -137,7 +145,12 @@ export const POST = conErrores("POST /api/encuestas", async (request) => {
     );
   }
 
-  const targetStatus = envio.completada ? "EFECTIVA" : envio.rechazo ? "NO_LLAMAR" : null;
+  const { estados } = config.twenty;
+  const targetStatus = envio.completada
+    ? estados.completada
+    : envio.rechazo
+      ? estados.rechazo
+      : config.twenty.estadosCierre?.[envio.resultado] || null;
 
   // 4. Transacción con candado por cliente: dos encuestadores (o dos pestañas)
   //    no pueden registrar a la vez una encuesta efectiva del mismo cliente. El
@@ -166,10 +179,10 @@ export const POST = conErrores("POST /api/encuestas", async (request) => {
          and (
            e.cliente_twenty_id = $1
            or ($2::text is not null and e.codigo_cliente = $2
-               and (ce.id_twenty is null or upper(trim(ce.mes_gestion)) = upper(trim($3::text))))
+               and (not $4::boolean or ce.id_twenty is null or upper(trim(ce.mes_gestion)) = upper(trim($3::text))))
          )
        order by e.created_at desc limit 1`,
-      [cliente_twenty_id, cliente.codigo_cliente, cliente.mes_gestion ?? ""]
+      [cliente_twenty_id, cliente.codigo_cliente, cliente.mes_gestion ?? "", config.gestionMensual]
     );
     if (previas[0]) {
       await client.query("rollback");
@@ -217,10 +230,19 @@ export const POST = conErrores("POST /api/encuestas", async (request) => {
     }
 
     const { rows } = await client.query(
-      `insert into encuestas (cuestionario_id, cliente_twenty_id, codigo_cliente, encuestador_id, completada, idempotency_key)
-       values ($1, $2, $3, $4, $5, $6)
+      `insert into encuestas (cuestionario_id, cliente_twenty_id, codigo_cliente, encuestador_id, completada, idempotency_key, resultado, ultimo_bloque)
+       values ($1, $2, $3, $4, $5, $6, $7, $8)
        returning id`,
-      [cuestionario.id, cliente_twenty_id, cliente.codigo_cliente ?? null, encuestador_id, envio.completada, idempotencyKey]
+      [
+        cuestionario.id,
+        cliente_twenty_id,
+        cliente.codigo_cliente ?? null,
+        encuestador_id,
+        envio.completada,
+        idempotencyKey,
+        envio.resultado ?? null,
+        envio.ultimoBloque ?? null,
+      ]
     );
     encuestaId = rows[0].id;
 
@@ -277,7 +299,7 @@ export const POST = conErrores("POST /api/encuestas", async (request) => {
     after(async () => {
       if (!twentyEnVivoDisponible()) return;
       try {
-        await patchPerson(cliente_twenty_id, { status: targetStatus }, { timeoutMs: 8000, reintentos: 0 });
+        await patchEstado(cliente_twenty_id, targetStatus, { timeoutMs: 8000, reintentos: 0 });
         await pool.query(`delete from pending_twenty_sync where id = $1`, [pendienteId]);
       } catch (err) {
         registrarFalloEnVivo(err);
@@ -293,7 +315,7 @@ export const POST = conErrores("POST /api/encuestas", async (request) => {
   }
 
   return NextResponse.json(
-    { id: encuestaId, completada: envio.completada, status: targetStatus },
+    { id: encuestaId, completada: envio.completada, status: targetStatus, resultado: envio.resultado ?? null },
     { status: 201 }
   );
 });
