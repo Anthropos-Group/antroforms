@@ -14,6 +14,7 @@ const op = (valor, etiqueta, extra = {}) => ({ valor, etiqueta, ...extra });
 const ruta = (...rutas) => ({ pregunta: "RUTA", op: "en", valor: rutas });
 const tipoConfirmado = { pregunta: "TP", op: "en", valor: ["NATURAL", "JURIDICA"] };
 const esNatural = { pregunta: "TP", op: "=", valor: "NATURAL" };
+const esJuridica = { pregunta: "TP", op: "=", valor: "JURIDICA" };
 const conOperaciones = { no: { pregunta: "A2", op: "=", valor: "SIN_OPERACIONES" } };
 // La actividad cambió o no constaba: hay que volver a levantar antigüedad, cantón y RUC.
 const actividadNueva = { alguna: [{ pregunta: "A1", op: "=", valor: "NO" }, { pregunta: "L2", op: "respondida" }] };
@@ -85,6 +86,11 @@ module.exports = {
       texto: "¿A qué se dedica principalmente usted o su empresa?",
       ayuda: "SOLO SI FALTA LA ACTIVIDAD · REEMPLAZA A A1. Las opciones de jubilación o sin ingresos prevalecen sobre la categoría agrupada si describen mejor el caso. No clasifique en B solo por tener empleo: T2 identifica actividad propia adicional.",
       config: {
+        // Texto según el tipo de persona confirmado (TP).
+        variantes: [
+          { si: esNatural, texto: "¿A qué se dedica principalmente?" },
+          { si: esJuridica, texto: "¿A qué se dedica principalmente su empresa?" },
+        ],
         opciones: [
           op("AGRICULTURA", "Agricultura o ganadería"),
           op("COMERCIO", "Comercio (tienda, local, mercado)"),
@@ -107,13 +113,20 @@ module.exports = {
     {
       codigo: "A1", bloque: "Su actividad", tipo: "opcion_unica",
       texto: "Según los registros de la cooperativa, usted (o su empresa) se dedica a {{actividad}}. ¿Sigue siendo su actividad principal?",
-      config: { opciones: [op("SI", "Sí"), op("NO", "No — actividad actual:", { con_texto: true })], especiales: NS_NR },
+      config: {
+        opciones: [op("SI", "Sí"), op("NO", "No — actividad actual:", { con_texto: true })],
+        especiales: NS_NR,
+        variantes: [
+          { si: esNatural, texto: "Según los registros de la cooperativa, usted se dedica a {{actividad}}. ¿Sigue siendo su actividad principal?" },
+          { si: esJuridica, texto: "Según los registros de la cooperativa, su empresa se dedica a {{actividad}}. ¿Sigue siendo su actividad principal?" },
+        ],
+      },
       mostrar_si: { cliente: "actividad", op: "no_vacio" },
     },
     {
       codigo: "T2", bloque: "Su actividad", tipo: "opcion_unica",
       texto: "¿Actualmente realiza alguna actividad por cuenta propia o tiene un negocio, aunque también tenga empleo, estudie o reciba una pensión?",
-      ayuda: "VERIFICACIÓN ADICIONAL SOLO PERSONA NATURAL. Sí → ruta A. No → ruta B. La ruta se define por la existencia de actividad propia, no por cuál genera el mayor ingreso.",
+      ayuda: "SOLO PERSONA NATURAL. Define qué preguntas siguen: Sí = ruta A (tiene actividad propia: se pregunta por su negocio); No = ruta B (no tiene actividad propia: se pregunta por sus ingresos personales y se omiten las preguntas del negocio). Cuenta cualquier actividad propia, aunque no sea la que más ingresos le da.",
       config: { opciones: [op("SI", "Sí — actividad propia (si es secundaria, cuál):", { con_texto: true }), op("NO", "No")], especiales: NS_NR },
       mostrar_si: esNatural,
     },
@@ -143,6 +156,25 @@ module.exports = {
       config: {
         opciones: [...RANGOS_USD("0 — Sin ventas o sin ingresos"), op("SIN_OPERACIONES", "(Solo empresas) La organización no tiene operaciones")],
         especiales: NS_NR,
+        // El instrumento lee A2 distinto según la ruta: se muestra ya adaptada.
+        variantes: [
+          {
+            si: ruta("B"),
+            texto: "Aproximadamente, ¿cuánto recibe por mes en total (USD)?",
+            ayuda: "RUTA B (sin actividad propia): ingresos personales —sueldo, pensión, bonos, ayudas—, no los del hogar. Referencia: promedio mensual de los últimos tres meses. El ingreso cero no termina la encuesta.",
+            ocultar_opciones: ["SIN_OPERACIONES"],
+          },
+          {
+            si: ruta("C"),
+            texto: "Aproximadamente, ¿cuánto vende o cobra por mes en total su empresa (USD)?",
+            ayuda: "RUTA C (empresa): ventas o cobros brutos antes de gastos. Referencia: promedio mensual de los últimos tres meses. Si la organización no tiene operaciones, marque esa opción.",
+          },
+          {
+            si: ruta("A"),
+            ayuda: "RUTA A (actividad propia): ventas o cobros brutos del negocio antes de gastos. Referencia: promedio mensual de los últimos tres meses. El ingreso cero no termina la encuesta.",
+            ocultar_opciones: ["SIN_OPERACIONES"],
+          },
+        ],
       },
       mostrar_si: ruta("A", "B", "C"),
     },
@@ -461,6 +493,10 @@ module.exports = {
       texto: "¿Hace cuánto tiempo realiza esta actividad? (empresa: ¿hace cuánto tiempo opera?)",
       ayuda: "SOLO SI FALTA o cambió la actividad. Registre antigüedad operativa; no la sustituya por la fecha de constitución.",
       config: {
+        variantes: [
+          { si: ruta("A"), texto: "¿Hace cuánto tiempo realiza esta actividad?" },
+          { si: ruta("C"), texto: "¿Hace cuánto tiempo opera su empresa?" },
+        ],
         opciones: [op("MENOS_1", "Menos de 1 año"), op("1_3", "De 1 a menos de 3 años"), op("3_5", "De 3 a menos de 5 años"), op("5_MAS", "5 años o más")],
         especiales: NS_NR,
       },
@@ -517,6 +553,10 @@ module.exports = {
       texto: "¿En qué cantón vive? (empresa: ¿en qué cantón está el domicilio de la empresa?)",
       ayuda: "SOLO SI FALTA. Elija el cantón del catálogo DPA (escriba para buscar); no confunda residencia, domicilio de la organización y lugar de actividad.",
       config: {
+        variantes: [
+          { si: esNatural, texto: "¿En qué cantón vive?" },
+          { si: esJuridica, texto: "¿En qué cantón está el domicilio de su empresa?" },
+        ],
         opciones: [
           op("CANTON", "Cantón (y provincia):", { con_texto: true, catalogo: "cantones" }),
           op("EXTERIOR", "Reside o tiene domicilio fuera de Ecuador (especifique)", { con_texto: true }),

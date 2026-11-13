@@ -2,8 +2,9 @@
 //
 // En cada arranque, y sin borrar nada:
 //   1. Aplica las migraciones pendientes (las ya aplicadas se saltan).
-//   2. Si el cliente tiene cuestionario propio (tenants/<TENANT>.cuestionario.js)
-//      y todavía no está cargado, lo carga. Si ya está, no lo toca.
+//   2. Si el cliente tiene cuestionario propio (tenants/<TENANT>.cuestionario.js),
+//      lo carga si falta o si el archivo cambió. Si está igual, no lo toca. Si ya
+//      tiene encuestas, crea una versión nueva (las respuestas viejas no se tocan).
 //   3. Si vienen ADMIN_EMAIL y ADMIN_PASSWORD y ese administrador no existe, lo
 //      crea. Si ya existe, no cambia su contraseña (la que puso desde el panel manda).
 //   4. Si no hay ningún encuestador, crea "Encuestador de prueba".
@@ -23,7 +24,7 @@ async function prepararBase() {
   await migrar({ log });
 
   if (fs.existsSync(archivoCuestionario())) {
-    await cargarCuestionario({ soloSiFalta: true, log });
+    await cargarCuestionario({ soloSiCambio: true, log });
   }
 
   const pool = getPool();

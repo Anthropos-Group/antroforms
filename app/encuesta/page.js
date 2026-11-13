@@ -11,6 +11,7 @@ import {
   respuestaCompleta,
   prepararEnvio,
   textoConDatos,
+  preguntaParaMostrar,
   preguntasFueraDeRuta,
 } from "../../lib/encuesta-logica";
 import PreguntaCampos, { TIPOS_CON_CAMPOS } from "../../components/PreguntaCampos";
@@ -359,7 +360,12 @@ export default function EncuestaPage() {
     }
   }, [respuestas, indice, step, activeDraftId, cliente, cuestionario, encuestadorId]);
 
-  const preguntaActual = cuestionario?.preguntas?.[indice];
+  const preguntaOriginal = cuestionario?.preguntas?.[indice];
+  // Texto, ayuda y opciones según la ruta (config.variantes, ver lib/encuesta-logica.js).
+  const preguntaActual = useMemo(
+    () => preguntaParaMostrar(preguntaOriginal, cuestionario?.preguntas, respuestas, cliente),
+    [preguntaOriginal, cuestionario, respuestas, cliente]
+  );
 
   const autoRespuestas = useMemo(
     () => (cuestionario ? evaluarAutoRespuestas(cuestionario.preguntas, cliente, respuestas) : {}),
