@@ -228,6 +228,7 @@ export default function ReportesPage() {
               ))}
             </select>
           </div>
+          {tenant.gestionMensual && (
           <div style={{ minWidth: 160 }}>
             <label className="field-label">Mes de gestión</label>
             <select className="text-input" value={mesGestion} onChange={(e) => setMesGestion(e.target.value)}>
@@ -237,6 +238,7 @@ export default function ReportesPage() {
               ))}
             </select>
           </div>
+          )}
           <div style={{ minWidth: 180 }}>
             <label className="field-label">PDV / Sucursal</label>
             <select className="text-input" value={pdv} onChange={(e) => setPdv(e.target.value)}>
