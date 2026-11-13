@@ -93,12 +93,28 @@ cliente lo tiene configurado (`twenty.estadosCierre`). Se guarda lo respondido,
    Y en Cloudflare Tunnel, un subdominio propio que apunte a
    `http://antroforms-web-23dejulio:3000`.
 
+## Twenty y carga de socios (23 de Julio)
+
+```bash
+# Campos personalizados en el Twenty del cliente (sin --aplicar solo muestra el plan)
+TENANT=coop23dejulio node scripts/twenty-esquema.js --aplicar
+
+# Socios: simula por defecto; --aplicar carga los que falten (se puede repetir)
+TENANT=coop23dejulio node scripts/cargar-socios.js --base=BASE_SOCIOS.xlsx \
+  --oficinas=base_de_oficinas.xlsx [--muestra=muestra.xlsx] --aplicar
+```
+
+No se cargan cédula, datos financieros ni `TIPO PERSONA` (incluye la marca PEP).
+El tipo de persona sale de `TIPO` (P = natural, C = jurídica).
+
+El monitoreo de 23 de Julio muestra el avance por oficina y por resultado de la
+llamada (`lib/avance.js`), en lugar del tablero por mes de EDIMCA.
+
 ## Pendiente para 23 de Julio
 
 - Datos que el instrumento deja en blanco: teléfono de verificación y correo del
   responsable (guion de apertura), lista de cooperativas de SM0 por ciudad y
   catálogo de productos de SM5.
 - Cuotas por oficina/ciudad (`metaPorGrupo`), cuando llegue el diseño muestral.
-- L8 / L4: hoy el cantón se anota como texto; falta un selector con el catálogo DPA.
-- Monitoreo y reportes siguen pensados para el mes de gestión de EDIMCA; para 23 de
-  Julio hace falta una vista de avance por oficina y por resultado de contacto.
+- Reportes/Excel: siguen pensados para EDIMCA; falta una exportación con una
+  columna por código de pregunta (CI1…L8) para el análisis.

@@ -37,6 +37,9 @@ module.exports = {
     },
   },
 
+  // El Twenty de EDIMCA ya tiene sus campos: no se administran desde aquí.
+  esquemaTwenty: [],
+
   etiquetas: { grupo: "PDV", grupoPlural: "PDV", idExterno: "ID EDIMCA" },
 
   // Un solo mes de gestión activo a la vez (ver lib/gestion.js).

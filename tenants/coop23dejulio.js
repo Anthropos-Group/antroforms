@@ -51,6 +51,43 @@ module.exports = {
     },
   },
 
+  // Campos personalizados de `person` que necesita este cliente en su Twenty.
+  // scripts/twenty-esquema.js crea los que falten (no modifica ni borra otros).
+  esquemaTwenty: [
+    { name: "codigoCliente", label: "Código cliente", type: "TEXT", icon: "IconHash" },
+    { name: "codigoMuestra", label: "Código de muestra", type: "TEXT", icon: "IconTicket" },
+    { name: "nombreOficina", label: "Oficina", type: "TEXT", icon: "IconBuildingBank" },
+    { name: "ciudadOficina", label: "Ciudad (estrato)", type: "TEXT", icon: "IconMapPin" },
+    { name: "celular", label: "Celular", type: "TEXT", icon: "IconPhone" },
+    {
+      name: "estadoGestion", label: "Estado de gestión", type: "SELECT", icon: "IconProgressCheck",
+      defaultValue: "'PENDIENTE'",
+      opciones: [
+        ["PENDIENTE", "Pendiente", "gray"],
+        ["COMPLETA", "Completa", "green"],
+        ["PARCIAL", "Parcial", "yellow"],
+        ["CITA", "Cita", "blue"],
+        ["NO_CONTACTO", "No contacto", "orange"],
+        ["RECHAZO", "Rechazo", "red"],
+        ["NUMERO_INCORRECTO", "Número incorrecto", "pink"],
+        ["INFORMANTE_NO_AUTORIZADO", "Informante no autorizado", "purple"],
+        ["FUERA_UNIVERSO", "Fuera del universo", "sky"],
+      ],
+    },
+    {
+      name: "tipoPersona", label: "Tipo de persona", type: "SELECT", icon: "IconUser",
+      opciones: [["NATURAL", "Natural", "blue"], ["JURIDICA", "Jurídica", "purple"]],
+    },
+    { name: "actividadEconomica", label: "Actividad económica", type: "TEXT", icon: "IconBriefcase" },
+    { name: "profesion", label: "Profesión", type: "TEXT", icon: "IconSchool" },
+    { name: "edad", label: "Edad", type: "NUMBER", icon: "IconCalendar" },
+    { name: "sexo", label: "Sexo al nacer", type: "TEXT", icon: "IconGenderBigender" },
+    { name: "cantonDomicilio", label: "Cantón de domicilio", type: "TEXT", icon: "IconHome" },
+    { name: "cantonActividad", label: "Cantón de la actividad", type: "TEXT", icon: "IconMap" },
+    { name: "antiguedadActividad", label: "Antigüedad de la actividad", type: "TEXT", icon: "IconClock" },
+    { name: "tieneRuc", label: "Registro tributario (RUC/RIMPE)", type: "TEXT", icon: "IconReceipt" },
+  ],
+
   etiquetas: { grupo: "Oficina", grupoPlural: "Oficinas", idExterno: "Código de muestra" },
 
   gestionMensual: false,

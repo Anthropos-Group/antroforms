@@ -8,6 +8,8 @@ import {
 } from "../../../lib/auth";
 import { metaMensual, filtroEncuestasDelMes } from "../../../lib/meta";
 import { periodoDeMesGestion } from "../../../lib/fecha";
+import { tenant } from "../../../lib/tenant";
+import { calcularAvance } from "../../../lib/avance";
 
 export const dynamic = "force-dynamic";
 
@@ -110,6 +112,12 @@ export async function GET(request) {
     // El proxy ya garantiza que hay una sesión válida; aquí solo se distingue el rol.
     const rol = verifySessionToken(request.cookies.get(SESSION_COOKIE)?.value) ? "admin" : "encuestador";
     const pool = getPool();
+    // Sin mes de gestión (Cooperativa 23 de Julio): avance del levantamiento por
+    // oficina y por resultado de la llamada.
+    if (!tenant().gestionMensual) {
+      const avance = await memo("monitoreo:avance", CACHE_MONITOREO_MS, () => calcularAvance(pool));
+      return NextResponse.json({ ...avance, rol });
+    }
     // Por defecto, el mes de gestión activo. El encuestador solo ve ese mes; el admin
     // puede consultar cualquiera.
     const activo = await mesGestionActivo(pool);

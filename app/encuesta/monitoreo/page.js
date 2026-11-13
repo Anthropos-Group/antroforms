@@ -1,6 +1,7 @@
 "use client";
 
 import { useTenant } from "../../../components/TenantProvider";
+import AvanceLevantamiento from "../../../components/AvanceLevantamiento";
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { useRefrescoVisible } from "../../../components/useRefrescoVisible";
@@ -62,6 +63,17 @@ export default function EncuestadorMonitoreoPage() {
 
   const pdvs = data?.pdvs || [];
   const meta = data?.meta_por_pdv || 25;
+
+  // Levantamiento sin mes de gestión (Cooperativa 23 de Julio): otro tablero.
+  if (data?.modo === "avance") {
+    return (
+      <div className="container">
+        <h1 className="page-title">{`Avance por ${tenant.etiquetas.grupo}`}</h1>
+        <p className="page-subtitle">Se actualiza solo cada minuto. Cada socio cuenta una vez, con su último resultado.</p>
+        <AvanceLevantamiento data={data} />
+      </div>
+    );
+  }
 
   return (
     <div className="container">

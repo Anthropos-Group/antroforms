@@ -473,8 +473,8 @@ module.exports = {
       config: {
         opciones: [
           op("MISMO_CANTON", "En el mismo cantón donde vive"),
-          op("OTRO_CANTON", "En otro cantón (anote cuál)", { con_texto: true }),
-          op("VARIOS", "En varios cantones / sin lugar fijo (principal, si lo identifica)", { con_texto: true }),
+          op("OTRO_CANTON", "En otro cantón (anote cuál)", { con_texto: true, catalogo: "cantones" }),
+          op("VARIOS", "En varios cantones / sin lugar fijo (principal, si lo identifica)", { con_texto: true, catalogo: "cantones" }),
           op("SIN_ACTIVIDAD", "No realiza actualmente actividad"),
         ],
         especiales: NS_NR,
@@ -515,10 +515,10 @@ module.exports = {
     {
       codigo: "L8", bloque: "Datos faltantes", tipo: "opcion_unica",
       texto: "¿En qué cantón vive? (empresa: ¿en qué cantón está el domicilio de la empresa?)",
-      ayuda: "SOLO SI FALTA. Registre el cantón (y provincia) según el catálogo DPA; no confunda residencia, domicilio de la organización y lugar de actividad.",
+      ayuda: "SOLO SI FALTA. Elija el cantón del catálogo DPA (escriba para buscar); no confunda residencia, domicilio de la organización y lugar de actividad.",
       config: {
         opciones: [
-          op("CANTON", "Cantón (y provincia):", { con_texto: true }),
+          op("CANTON", "Cantón (y provincia):", { con_texto: true, catalogo: "cantones" }),
           op("EXTERIOR", "Reside o tiene domicilio fuera de Ecuador (especifique)", { con_texto: true }),
         ],
         especiales: NS_NR,

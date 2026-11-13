@@ -4,6 +4,23 @@
 // múltiple (con opciones excluyentes), número, escala configurable e indicación.
 // Los tipos de EDIMCA (Sí/No, escala 1–10, texto) siguen en app/encuesta/page.js.
 
+import cantones from "../lib/catalogos/cantones-ec.json";
+
+// Catálogos para autocompletar el detalle de una opción (`catalogo` en la opción).
+const CATALOGOS = {
+  cantones: cantones.map((c) => `${c.canton} (${c.provincia})`),
+};
+
+function CatalogoDatalist({ id }) {
+  const valores = CATALOGOS[id];
+  if (!valores) return null;
+  return (
+    <datalist id={`catalogo-${id}`}>
+      {valores.map((v) => <option key={v} value={v} />)}
+    </datalist>
+  );
+}
+
 const ETIQUETA_ESPECIAL = { NS: "No sabe", NR: "Prefiere no responder" };
 
 function esEspecial(val) {
@@ -74,11 +91,13 @@ function OpcionUnica({ pregunta, valor, onChange }) {
         <input
           className="search-input"
           style={{ marginTop: 10 }}
-          placeholder="Especifique…"
+          list={opcionElegida.catalogo ? `catalogo-${opcionElegida.catalogo}` : undefined}
+          placeholder={opcionElegida.catalogo ? "Escriba para buscar en el catálogo…" : "Especifique…"}
           value={valor?.texto || ""}
           onChange={(e) => onChange({ valor: opcionElegida.valor, texto: e.target.value })}
         />
       )}
+      {opcionElegida?.catalogo && <CatalogoDatalist id={opcionElegida.catalogo} />}
     </div>
   );
 }
