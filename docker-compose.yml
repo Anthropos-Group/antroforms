@@ -17,6 +17,13 @@ services:
       CRON_SECRET: ${CRON_SECRET}
       ADMIN_SESSION_SECRET: ${ADMIN_SESSION_SECRET}
       ENCUESTADOR_ACCESS_PASSWORD: ${ENCUESTADOR_ACCESS_PASSWORD}
+      # Al arrancar se aplican migraciones y se carga el cuestionario del cliente
+      # (scripts/arranque.js). Con ADMIN_EMAIL y ADMIN_PASSWORD se crea ese
+      # administrador si no existe (no cambia la contraseña de uno existente).
+      AUTO_SETUP: ${AUTO_SETUP:-on}
+      ADMIN_EMAIL: ${ADMIN_EMAIL:-}
+      ADMIN_PASSWORD: ${ADMIN_PASSWORD:-}
+      ADMIN_NOMBRE: ${ADMIN_NOMBRE:-Administrador}
       # Tareas programadas dentro del contenedor (keep-alive de Supabase y
       # sincronización con Twenty). Ver docs/DEPLOY.md §6.
       TAREAS_PROGRAMADAS: ${TAREAS_PROGRAMADAS:-on}

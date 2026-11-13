@@ -45,9 +45,9 @@ En Cloudflare Zero Trust → tu túnel → **Published application routes → Ad
 
 ## 5. Aplicar el esquema de base de datos
 
-> **Cada actualización que agregue un archivo en `supabase/migrations/` requiere correr las migraciones _antes_ del "Pull and redeploy".** Es seguro correrlas varias veces.
+> **Automático:** al arrancar, el contenedor (`scripts/arranque.js`) aplica las migraciones pendientes, carga el cuestionario del cliente si falta y crea el administrador de `ADMIN_EMAIL`/`ADMIN_PASSWORD` si no existe, antes de levantar la app. Basta con "Pull and redeploy". Si algo falla, queda en el log del contenedor (`[arranque]`) y la app arranca igual. `AUTO_SETUP=off` lo desactiva.
 
-Las migraciones solo necesitan `SUPABASE_DB_URL` — se pueden correr desde cualquier máquina con acceso a internet, no hace falta que sea el servidor:
+Para correrlas a mano: las migraciones solo necesitan `SUPABASE_DB_URL` — se pueden correr desde cualquier máquina con acceso a internet, no hace falta que sea el servidor:
 
 ```bash
 npm run db:migrate

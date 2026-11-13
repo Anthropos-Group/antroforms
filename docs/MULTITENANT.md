@@ -54,13 +54,13 @@ cliente lo tiene configurado (`twenty.estadosCierre`). Se guarda lo respondido,
 
 ## Levantar un cliente nuevo (ej. Cooperativa 23 de Julio)
 
-1. **Base de datos**: crear la base y correr las migraciones con su `TENANT`:
+1. **Base de datos**: basta con crear el proyecto de Supabase vacío. Al arrancar,
+   el contenedor (`scripts/arranque.js`) aplica las migraciones con su `TENANT`
+   (omite las de otros clientes), carga `tenants/<TENANT>.cuestionario.js` si aún
+   no está, crea el administrador de `ADMIN_EMAIL`/`ADMIN_PASSWORD` si no existe y
+   un "Encuestador de prueba" si no hay encuestadores. Se puede repetir sin riesgo.
 
-   ```bash
-   TENANT=coop23dejulio SUPABASE_DB_URL=... npm run db:migrate
-   ```
-
-2. **Cuestionario**:
+2. **Cuestionario**: para cambiarlo después, editar el archivo y correr a mano
 
    ```bash
    TENANT=coop23dejulio SUPABASE_DB_URL=... node scripts/cargar-cuestionario.js
@@ -69,7 +69,8 @@ cliente lo tiene configurado (`twenty.estadosCierre`). Se guarda lo respondido,
    Con `--dry-run` solo valida. Si el cuestionario ya tiene encuestas, crea una
    versión nueva en lugar de pisarlo.
 
-3. **Administrador**: `node scripts/create-admin.js ...` (igual que EDIMCA).
+3. **Administrador**: con `ADMIN_EMAIL` y `ADMIN_PASSWORD` en el stack (ver 5), o
+   a mano con `node scripts/create-admin.js ...`.
 
 4. **Twenty**: crear en `person` los campos personalizados de `tenants/coop23dejulio.js`
    (`codigoCliente`, `nombreOficina`, `ciudadOficina`, `codigoMuestra`, `celular`,
@@ -88,6 +89,8 @@ cliente lo tiene configurado (`twenty.estadosCierre`). Se guarda lo respondido,
    ENCUESTADOR_ACCESS_PASSWORD=<propia>
    ADMIN_SESSION_SECRET=<propio>
    CRON_SECRET=<propio>
+   ADMIN_EMAIL=<usuario del administrador>
+   ADMIN_PASSWORD=<contraseña temporal; cambiarla desde el panel>
    ```
 
    Y en Cloudflare Tunnel, un subdominio propio que apunte a

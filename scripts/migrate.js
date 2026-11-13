@@ -10,12 +10,9 @@ const { Client } = require("pg");
 const { sslConfig } = require("../lib/db");
 const { tenant } = require("../lib/tenant");
 
-async function main() {
+async function migrar({ log = console.log } = {}) {
   const connectionString = process.env.SUPABASE_DB_URL;
-  if (!connectionString) {
-    console.error("Falta SUPABASE_DB_URL en .env");
-    process.exit(1);
-  }
+  if (!connectionString) throw new Error("Falta SUPABASE_DB_URL en .env");
 
   const dir = path.join(__dirname, "..", "supabase", "migrations");
   const files = fs
@@ -24,7 +21,7 @@ async function main() {
     .sort();
   // Migraciones con datos de otro cliente (p. ej. el cuestionario de EDIMCA).
   const omitidas = new Set(tenant().migracionesOmitidas || []);
-  console.log(`Cliente: ${tenant().nombre}`);
+  log(`Cliente: ${tenant().nombre}`);
 
   const client = new Client({ connectionString, ssl: sslConfig(connectionString) });
   await client.connect();
@@ -43,36 +40,40 @@ async function main() {
         [file]
       );
       if (rows.length > 0) {
-        console.log(`skip (ya aplicada): ${file}`);
+        log(`skip (ya aplicada): ${file}`);
         continue;
       }
 
       if (omitidas.has(file)) {
-        console.log(`omitida para ${tenant().id}: ${file}`);
+        log(`omitida para ${tenant().id}: ${file}`);
         continue;
       }
 
       const sql = fs.readFileSync(path.join(dir, file), "utf8");
-      console.log(`aplicando: ${file}`);
+      log(`aplicando: ${file}`);
       await client.query("begin");
       try {
         await client.query(sql);
         await client.query("insert into _migrations (filename) values ($1)", [file]);
         await client.query("commit");
-        console.log(`  ok`);
+        log(`  ok`);
       } catch (err) {
         await client.query("rollback");
         throw new Error(`fallo en ${file}: ${err.message}`);
       }
     }
 
-    console.log("Migraciones al día.");
+    log("Migraciones al día.");
   } finally {
     await client.end();
   }
 }
 
-main().catch((err) => {
-  console.error(err);
-  process.exit(1);
-});
+if (require.main === module) {
+  migrar().catch((err) => {
+    console.error(err);
+    process.exit(1);
+  });
+}
+
+module.exports = { migrar };

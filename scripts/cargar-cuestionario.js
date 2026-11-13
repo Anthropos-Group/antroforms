@@ -58,32 +58,33 @@ function validarCuestionario(def) {
   return errores;
 }
 
-async function main() {
+function archivoCuestionario() {
+  return path.join(__dirname, "..", "tenants", `${tenant().id}.cuestionario.js`);
+}
+
+// soloSiFalta: no toca nada si ya hay un cuestionario activo con ese nombre
+// (lo usa el arranque del contenedor, que corre en cada reinicio).
+async function cargarCuestionario({ soloSiFalta = false, log = console.log } = {}) {
   const config = tenant();
-  const archivo = path.join(__dirname, "..", "tenants", `${config.id}.cuestionario.js`);
+  const archivo = archivoCuestionario();
   if (!fs.existsSync(archivo)) {
-    console.error(`No hay cuestionario definido para ${config.id} (${path.relative(process.cwd(), archivo)}).`);
-    process.exit(1);
+    throw new Error(`No hay cuestionario definido para ${config.id} (${path.relative(process.cwd(), archivo)}).`);
   }
   const def = require(archivo);
   const errores = validarCuestionario(def);
   if (errores.length) {
-    console.error("El cuestionario tiene errores:\n - " + errores.join("\n - "));
-    process.exit(1);
+    throw new Error("El cuestionario tiene errores:\n - " + errores.join("\n - "));
   }
   const porTipo = def.preguntas.reduce((acc, p) => ({ ...acc, [p.tipo]: (acc[p.tipo] || 0) + 1 }), {});
-  console.log(`Cliente: ${config.nombre}`);
-  console.log(`Cuestionario "${def.nombre}": ${def.preguntas.length} preguntas`, porTipo);
+  log(`Cliente: ${config.nombre}`);
+  log(`Cuestionario "${def.nombre}": ${def.preguntas.length} preguntas`, porTipo);
   if (DRY_RUN) {
-    console.log("--dry-run: validación correcta, no se escribió nada.");
+    log("--dry-run: validación correcta, no se escribió nada.");
     return;
   }
 
   const connectionString = process.env.SUPABASE_DB_URL;
-  if (!connectionString) {
-    console.error("Falta SUPABASE_DB_URL en .env");
-    process.exit(1);
-  }
+  if (!connectionString) throw new Error("Falta SUPABASE_DB_URL en .env");
   const db = new Client({ connectionString, ssl: sslConfig(connectionString) });
   await db.connect();
   try {
@@ -94,6 +95,11 @@ async function main() {
        from cuestionarios c where c.activo = true order by c.created_at desc`
     );
     const mismo = activos.find((c) => c.nombre === def.nombre);
+    if (soloSiFalta && mismo) {
+      await db.query("rollback");
+      log(`Cuestionario "${def.nombre}" ya cargado (versión ${mismo.version}); no se toca.`);
+      return;
+    }
     let cuestionarioId;
     if (mismo && mismo.encuestas === 0) {
       cuestionarioId = mismo.id;
@@ -102,7 +108,7 @@ async function main() {
         `update cuestionarios set guion_apertura = $2, guion_cierre = $3 where id = $1`,
         [cuestionarioId, def.guion_apertura || null, def.guion_cierre || null]
       );
-      console.log(`Se reemplazan las preguntas del cuestionario activo (sin encuestas todavía).`);
+      log(`Se reemplazan las preguntas del cuestionario activo (sin encuestas todavía).`);
     } else {
       const version = (mismo?.version || 0) + 1;
       await db.query(`update cuestionarios set activo = false where activo = true`);
@@ -112,7 +118,7 @@ async function main() {
         [def.nombre, version, def.guion_apertura || null, def.guion_cierre || null]
       );
       cuestionarioId = rows[0].id;
-      console.log(`Cuestionario nuevo, versión ${version}${activos.length ? " (los anteriores quedan inactivos)" : ""}.`);
+      log(`Cuestionario nuevo, versión ${version}${activos.length ? " (los anteriores quedan inactivos)" : ""}.`);
     }
 
     for (const [i, p] of def.preguntas.entries()) {
@@ -136,7 +142,7 @@ async function main() {
       );
     }
     await db.query("commit");
-    console.log("Listo.");
+    log("Listo.");
   } catch (err) {
     await db.query("rollback").catch(() => {});
     throw err;
@@ -146,10 +152,10 @@ async function main() {
 }
 
 if (require.main === module) {
-  main().catch((err) => {
+  cargarCuestionario().catch((err) => {
     console.error(err);
     process.exit(1);
   });
 }
 
-module.exports = { validarCuestionario };
+module.exports = { validarCuestionario, cargarCuestionario, archivoCuestionario };
