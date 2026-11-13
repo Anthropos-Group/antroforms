@@ -45,6 +45,8 @@ function validarCuestionario(def) {
       ["mostrar_si", p.mostrar_si, false],
       ["termina_si", p.termina_si, true],
       ...((p.config?.calculo || []).map((c) => ["calculo", c.si, false])),
+      ...((p.config?.variantes || []).map((v) => ["variantes", v.si, true])),
+      ...((p.config?.opciones || []).filter((o) => o.solo_si).map((o) => ["solo_si", o.solo_si, true])),
     ];
     for (const [campo, regla, propia] of reglas) {
       for (const ref of referencias(regla)) {
@@ -62,9 +64,39 @@ function archivoCuestionario() {
   return path.join(__dirname, "..", "tenants", `${tenant().id}.cuestionario.js`);
 }
 
-// soloSiFalta: no toca nada si ya hay un cuestionario activo con ese nombre
-// (lo usa el arranque del contenedor, que corre en cada reinicio).
-async function cargarCuestionario({ soloSiFalta = false, log = console.log } = {}) {
+// JSON con las claves ordenadas: jsonb de Postgres no conserva el orden de las claves.
+function canonico(v) {
+  if (Array.isArray(v)) return `[${v.map(canonico).join(",")}]`;
+  if (v && typeof v === "object") {
+    return `{${Object.keys(v).sort().filter((k) => v[k] !== undefined).map((k) => `${JSON.stringify(k)}:${canonico(v[k])}`).join(",")}}`;
+  }
+  return JSON.stringify(v ?? null);
+}
+
+// Lo que se guarda de cada pregunta, igual desde el archivo o desde la base.
+function huella(guionApertura, guionCierre, preguntas) {
+  return canonico({
+    guion_apertura: guionApertura || null,
+    guion_cierre: guionCierre || null,
+    preguntas: preguntas.map((p) => ({
+      codigo: p.codigo,
+      texto: p.texto,
+      tipo: p.tipo,
+      requiere_justificacion: Boolean(p.requiere_justificacion),
+      bloque: p.bloque || null,
+      ayuda: p.ayuda || null,
+      config: p.config || {},
+      mostrar_si: p.mostrar_si || null,
+      termina_si: p.termina_si || null,
+    })),
+  });
+}
+
+// soloSiCambio (lo usa el arranque del contenedor, que corre en cada reinicio): si
+// el cuestionario activo con ese nombre ya es igual al archivo, no se toca. Si
+// cambió, se actualiza con las mismas reglas de siempre (reemplaza si no tiene
+// encuestas; si ya tiene, crea una versión nueva).
+async function cargarCuestionario({ soloSiCambio = false, log = console.log } = {}) {
   const config = tenant();
   const archivo = archivoCuestionario();
   if (!fs.existsSync(archivo)) {
@@ -95,10 +127,25 @@ async function cargarCuestionario({ soloSiFalta = false, log = console.log } = {
        from cuestionarios c where c.activo = true order by c.created_at desc`
     );
     const mismo = activos.find((c) => c.nombre === def.nombre);
-    if (soloSiFalta && mismo) {
-      await db.query("rollback");
-      log(`Cuestionario "${def.nombre}" ya cargado (versión ${mismo.version}); no se toca.`);
-      return;
+    if (soloSiCambio && mismo) {
+      const { rows: actual } = await db.query(
+        `select codigo, texto, tipo, requiere_justificacion, bloque, ayuda, config, mostrar_si, termina_si
+         from preguntas where cuestionario_id = $1 order by orden`,
+        [mismo.id]
+      );
+      const { rows: guiones } = await db.query(
+        `select guion_apertura, guion_cierre from cuestionarios where id = $1`,
+        [mismo.id]
+      );
+      const igual =
+        huella(guiones[0]?.guion_apertura, guiones[0]?.guion_cierre, actual) ===
+        huella(def.guion_apertura, def.guion_cierre, def.preguntas);
+      if (igual) {
+        await db.query("rollback");
+        log(`Cuestionario "${def.nombre}" al día (versión ${mismo.version}); no se toca.`);
+        return;
+      }
+      log(`El cuestionario cambió respecto de la versión ${mismo.version}: se actualiza.`);
     }
     let cuestionarioId;
     if (mismo && mismo.encuestas === 0) {
@@ -158,4 +205,4 @@ if (require.main === module) {
   });
 }
 
-module.exports = { validarCuestionario, cargarCuestionario, archivoCuestionario };
+module.exports = { validarCuestionario, cargarCuestionario, archivoCuestionario, huella };
