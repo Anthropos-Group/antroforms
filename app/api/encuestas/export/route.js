@@ -4,6 +4,7 @@ import { getPool } from "../../../../lib/db";
 import { obtenerReporte, obtenerResumen, leerFiltros } from "../../../../lib/reportes";
 import { formatFechaHoraEcuador, hoyISOEcuador } from "../../../../lib/fecha";
 import { conErrores } from "../../../../lib/http";
+import { excelPorCodigos } from "../../../../lib/excel-rutas";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 120;
@@ -13,6 +14,17 @@ export const GET = conErrores("GET /api/encuestas/export", async (request) => {
   const filtros = leerFiltros(searchParams);
 
   const pool = getPool();
+  // Cuestionario con códigos y rutas (Cooperativa 23 de Julio): Excel para análisis.
+  if (!tenant().gestionMensual) {
+    const buffer = await excelPorCodigos(pool, filtros);
+    if (!buffer) return Response.json({ error: "No hay cuestionario activo" }, { status: 404 });
+    return new Response(buffer, {
+      headers: {
+        "Content-Type": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        "Content-Disposition": `attachment; filename="${tenant().id}_respuestas_${hoyISOEcuador()}.xlsx"`,
+      },
+    });
+  }
   const [reporte, resumen] = await Promise.all([obtenerReporte(pool, filtros), obtenerResumen(pool, filtros)]);
   if (!reporte) {
     return Response.json({ error: "No hay cuestionario activo" }, { status: 404 });

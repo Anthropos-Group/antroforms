@@ -107,6 +107,16 @@ TENANT=coop23dejulio node scripts/cargar-socios.js --base=BASE_SOCIOS.xlsx \
 No se cargan cédula, datos financieros ni `TIPO PERSONA` (incluye la marca PEP).
 El tipo de persona sale de `TIPO` (P = natural, C = jurídica).
 
+Twenty de 23 de Julio trae registros de ejemplo de fábrica (personas sin código de
+socio). La app los ignora (`twenty.requiereCodigo`), pero conviene borrarlos desde
+Twenty antes de salir a campo.
+
+**Excel para análisis** (Admin → Reportes → Exportar): hoja «Respuestas» con una
+fila por llamada y una columna por código (CI1…L8; selección múltiple en columnas
+1/0 como `A3_EMPLEO`; `NA` = no aplica por ruta, `NS`/`NR`; vacío = no se llegó a
+preguntar) y hoja «Diccionario» con la etiqueta de cada valor. No incluye nombre ni
+teléfono: el socio se identifica por su código.
+
 El monitoreo de 23 de Julio muestra el avance por oficina y por resultado de la
 llamada (`lib/avance.js`), en lugar del tablero por mes de EDIMCA.
 
@@ -116,5 +126,3 @@ llamada (`lib/avance.js`), en lugar del tablero por mes de EDIMCA.
   responsable (guion de apertura), lista de cooperativas de SM0 por ciudad y
   catálogo de productos de SM5.
 - Cuotas por oficina/ciudad (`metaPorGrupo`), cuando llegue el diseño muestral.
-- Reportes/Excel: siguen pensados para EDIMCA; falta una exportación con una
-  columna por código de pregunta (CI1…L8) para el análisis.

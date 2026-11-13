@@ -33,6 +33,8 @@ module.exports = {
       tiene_ruc: "tieneRuc",
       ciudad_oficina: "ciudadOficina",
     },
+    // Solo se encuestan socios cargados desde la base (con código de cliente).
+    requiereCodigo: true,
     estados: { completada: "COMPLETA", rechazo: "RECHAZO" },
     // Estado en Twenty según el resultado con el que se cierra la llamada.
     estadosCierre: {
