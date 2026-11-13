@@ -250,7 +250,7 @@ export default function AdminMonitoreoPage() {
         {data ? nombreMesLargo(data.mes) : "Cargando…"} · meta de {meta} encuestas completadas por sucursal.
       </p>
 
-      <MesGestionConfig />
+      {tenant.gestionMensual && <MesGestionConfig />}
 
       <div className="card pad" style={{ display: "flex", gap: 12, alignItems: "flex-end", flexWrap: "wrap", marginBottom: 20 }}>
         <div>

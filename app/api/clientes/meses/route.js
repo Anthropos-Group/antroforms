@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { getPool } from "../../../../lib/db";
 import { MESES_ES } from "../../../../lib/fecha";
 import { mesGestionActivo } from "../../../../lib/gestion";
+import { tenant } from "../../../../lib/tenant";
 import { memo } from "../../../../lib/cache";
 import { conErrores } from "../../../../lib/http";
 
@@ -32,6 +33,12 @@ async function mesesPresentes(pool) {
 export const GET = conErrores("GET /api/clientes/meses", async () => {
   const pool = getPool();
   const meses = await memo("meses-clientes", CACHE_MESES_MS, () => mesesPresentes(pool));
+
+  // Clientes sin gestión mensual (p. ej. Cooperativa 23 de Julio): no hay mes activo
+  // y el encuestador ve toda la base.
+  if (!tenant().gestionMensual) {
+    return NextResponse.json({ mesActivo: null, periodoActivo: null, meses: [] });
+  }
 
   // Mes de gestión activo (el único que ve el encuestador).
   const activo = await mesGestionActivo(pool);
