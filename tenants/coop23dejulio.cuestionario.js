@@ -15,6 +15,11 @@ const ruta = (...rutas) => ({ pregunta: "RUTA", op: "en", valor: rutas });
 const tipoConfirmado = { pregunta: "TP", op: "en", valor: ["NATURAL", "JURIDICA"] };
 const esNatural = { pregunta: "TP", op: "=", valor: "NATURAL" };
 const esJuridica = { pregunta: "TP", op: "=", valor: "JURIDICA" };
+// La actividad confirmada en A1 (la del listado) se nombra en el texto para que no
+// se confunda con la actividad secundaria o alterna (T2, A3).
+const actividadConfirmada = { pregunta: "A1", op: "=", valor: "SI" };
+const conActividad = (r) => ({ todas: [ruta(r), actividadConfirmada] });
+
 const conOperaciones = { no: { pregunta: "A2", op: "=", valor: "SIN_OPERACIONES" } };
 // La actividad cambió o no constaba: hay que volver a levantar antigüedad, cantón y RUC.
 const actividadNueva = { alguna: [{ pregunta: "A1", op: "=", valor: "NO" }, { pregunta: "L2", op: "respondida" }] };
@@ -201,6 +206,12 @@ const cuestionario = {
             si: ruta("C"),
             texto: "Aproximadamente, ¿cuánto vende o cobra por mes en total su empresa (USD)?",
             ayuda: "RUTA C (empresa): ventas o cobros brutos antes de gastos. Referencia: promedio mensual de los últimos tres meses. Si la organización no tiene operaciones, marque esa opción.",
+          },
+          {
+            si: conActividad("A"),
+            texto: "Aproximadamente, ¿cuánto vende o cobra por mes en total por su actividad ({{actividad}}) (USD)?",
+            ayuda: "RUTA A (actividad propia): ventas o cobros brutos del negocio antes de gastos. Referencia: promedio mensual de los últimos tres meses. El ingreso cero no termina la encuesta.",
+            ocultar_opciones: ["SIN_OPERACIONES"],
           },
           {
             si: ruta("A"),
@@ -617,8 +628,13 @@ const CARGOS =
   "un cargo público de alta jerarquía o de elección popular (por ejemplo, ministro, asambleísta, alcalde, concejal, juez, fiscal, o alto mando militar o policial)";
 
 const VARIANTES = {
-  A3: [{ si: ruta("B"), texto: "Además de su ingreso principal, ¿tiene otra fuente de ingresos?" }],
+  A3: [
+    { si: conActividad("A"), texto: "Además de su actividad principal ({{actividad}}), ¿tiene otra actividad o fuente de ingresos?" },
+    { si: conActividad("B"), texto: "Además de su ingreso principal ({{actividad}}), ¿tiene otra fuente de ingresos?" },
+    { si: ruta("B"), texto: "Además de su ingreso principal, ¿tiene otra fuente de ingresos?" },
+  ],
   C1: [
+    { si: conActividad("A"), texto: "De lo que cobra por su actividad ({{actividad}}), ¿qué parte es en efectivo?" },
     {
       si: ruta("B"),
       texto: "De lo que recibe cada mes (sueldo, pensión u otros ingresos), ¿qué parte le llega en efectivo?",
@@ -627,14 +643,17 @@ const VARIANTES = {
     { si: ruta("C"), texto: "De lo que cobra su empresa, ¿qué parte es en efectivo?" },
   ],
   C2: [
+    { si: conActividad("A"), texto: "En un mes normal, ¿cuánto dinero en efectivo maneja por su actividad ({{actividad}}) (USD)?" },
     { si: ruta("B"), texto: "En un mes normal, ¿cuánto dinero en efectivo recibe (USD)?" },
     { si: ruta("C"), texto: "En un mes normal, ¿cuánto dinero en efectivo maneja su empresa (USD)?" },
   ],
   C3: [
+    { si: conActividad("A"), texto: "¿Qué hace normalmente con el efectivo que cobra por su actividad ({{actividad}})?" },
     { si: ruta("B"), texto: "¿Qué hace normalmente con el efectivo que recibe?", ocultar_opciones: ["PAGA_PROVEEDORES"] },
     { si: ruta("C"), texto: "¿Qué hace normalmente su empresa con el efectivo que cobra?" },
   ],
   C4: [
+    { si: conActividad("A"), texto: "En su actividad ({{actividad}}), ¿alguna vez recibe o entrega pagos en bienes (vehículos, joyas, electrodomésticos, materiales) en lugar de dinero?" },
     { si: ruta("B"), texto: "¿Alguna vez recibe o entrega pagos en bienes (vehículos, joyas, electrodomésticos, materiales) en lugar de dinero?" },
     { si: ruta("C"), texto: "En su empresa, ¿alguna vez reciben o entregan pagos en bienes (vehículos, joyas, electrodomésticos, materiales) en lugar de dinero?" },
   ],

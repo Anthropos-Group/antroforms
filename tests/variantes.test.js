@@ -106,3 +106,13 @@ test("el guion de apertura usa el nombre del socio y ya no pide el correo del re
   assert.match(def.guion_apertura, /¿hablo con \{\{NOMBRE\}\}\?/);
   assert.doesNotMatch(def.guion_apertura, /derechos sobre sus datos/);
 });
+
+test("ruta A con actividad confirmada en A1: el texto nombra la actividad del listado", () => {
+  const e = conRespuestas(NATURAL, { A1: "SI", T2: "SI" });
+  for (const codigo of ["A2", "A3", "C1", "C2", "C3", "C4"]) {
+    assert.match(vista(codigo, e).texto, /\{\{actividad\}\}/, codigo);
+  }
+  // Si en A1 dijo que ya no se dedica a eso, no se nombra la actividad vieja.
+  const cambio = conRespuestas(NATURAL, { A1: "NO", T2: "SI" });
+  assert.doesNotMatch(vista("A2", cambio).texto, /\{\{actividad\}\}/);
+});
