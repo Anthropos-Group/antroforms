@@ -47,7 +47,8 @@ module.exports = {
       informante_no_autorizado: "INFORMANTE_NO_AUTORIZADO",
       fuera_universo: "FUERA_UNIVERSO",
     },
-    estadosExcluidos: ["RECHAZO", "NUMERO_INCORRECTO", "FUERA_UNIVERSO", "COMPLETA"],
+    // RESERVA: reemplazo todavía no activado (el encuestador no lo ve).
+    estadosExcluidos: ["RECHAZO", "NUMERO_INCORRECTO", "FUERA_UNIVERSO", "COMPLETA", "RESERVA"],
     limpieza: {
       texto: ["nombreOficina", "actividadEconomica", "profesion", "cantonDomicilio"],
       telefono: ["celular"],
@@ -64,6 +65,14 @@ module.exports = {
     { name: "ciudadOficina", label: "Ciudad (estrato)", type: "TEXT", icon: "IconMapPin" },
     { name: "celular", label: "Celular", type: "TEXT", icon: "IconPhone" },
     { name: "intentosLlamada", label: "Intentos de llamada", type: "NUMBER", icon: "IconPhoneCall" },
+    // Sorteo de la muestra (Entrega_Sorteo_23deJulio): principal o reemplazo, el
+    // registro vinculado y el orden en que se llama dentro de cada ciudad.
+    {
+      name: "condicion", label: "Condición", type: "SELECT", icon: "IconArrowsExchange",
+      opciones: [["PRINCIPAL", "Principal", "blue"], ["REEMPLAZO", "Reemplazo", "orange"]],
+    },
+    { name: "idVinculado", label: "ID vinculado (principal ↔ reemplazo)", type: "TEXT", icon: "IconLink" },
+    { name: "ordenGestion", label: "Orden de gestión", type: "NUMBER", icon: "IconSortAscendingNumbers" },
     {
       name: "estadoGestion", label: "Estado de gestión", type: "SELECT", icon: "IconProgressCheck",
       defaultValue: "'PENDIENTE'",
@@ -77,6 +86,9 @@ module.exports = {
         ["NUMERO_INCORRECTO", "Número incorrecto", "pink"],
         ["INFORMANTE_NO_AUTORIZADO", "Informante no autorizado", "purple"],
         ["FUERA_UNIVERSO", "Fuera del universo", "sky"],
+        // Reemplazos del sorteo: cargados pero ocultos a los encuestadores hasta
+        // que se activen (pasan a PENDIENTE).
+        ["RESERVA", "Reserva (reemplazo)", "turquoise"],
       ],
     },
     {

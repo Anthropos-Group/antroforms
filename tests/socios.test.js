@@ -51,3 +51,28 @@ test("deduplicar: un socio por código, cuenta duplicados y completa vacíos", (
   assert.equal(s100.nombre, "PEREZ PEREZ JUAN", "se queda la primera fila");
   assert.equal(s100.profesion, "INGENIERIA", "pero completa lo que faltaba");
 });
+
+test("base del sorteo: principal pendiente, reemplazo en reserva y datos limpios", () => {
+  const { socioDesdeSorteo, personaTwenty } = require("../lib/socios");
+  const base = {
+    "ID SELECCIÓN": "QUI-P-0001", "ESTRATO (CIUDAD)": "Quito", "SUCURSAL": "QUITO NORTE", "ORDEN DE GESTIÓN": 1,
+    "ID ORIGINAL (CLIENTE)": "519509", "TIPO DE IDENTIFICACIÓN": "CI", "NOMBRE": "FATIMA MU¥OZ",
+    "CELULAR (NORMALIZADO)": "0986460790", "TIPO DE PERSONA": "PN", "EDAD": "86", "CANTÓN DOMICILIO": "QUITO",
+    "ACTIVIDAD ECONÓMICA": "X".repeat(64), "CANTÓN EMPLEO": "QUITO", "CONDICIÓN": "Principal", "ID REEMPLAZO VINCULADO": "QUI-R-0001",
+  };
+  const p = socioDesdeSorteo(base);
+  assert.equal(p.nombre, "FATIMA MUÑOZ");
+  assert.equal(p.tipoPersona, "NATURAL");
+  assert.equal(p.estadoGestion, "PENDIENTE");
+  assert.equal(p.idVinculado, "QUI-R-0001");
+  assert.ok(p.actividadEconomica.endsWith("…"));
+  const r = socioDesdeSorteo({ ...base, "CONDICIÓN": "Reemplazo", "TIPO DE IDENTIFICACIÓN": "RUC", "TIPO DE PERSONA": "NULL", "EDAD": "NULL", "ID REEMPLAZO VINCULADO": undefined, "ID DEL REGISTRO PRINCIPAL": "QUI-P-0001" });
+  assert.equal(r.estadoGestion, "RESERVA");
+  assert.equal(r.tipoPersona, "JURIDICA");
+  assert.equal(r.edad, null);
+  assert.equal(r.idVinculado, "QUI-P-0001");
+  const t = personaTwenty(r);
+  assert.equal(t.estadoGestion, "RESERVA");
+  assert.equal(t.codigoMuestra, "QUI-P-0001".replace("P", "P"));
+  assert.ok(!("edad" in t));
+});

@@ -1,5 +1,9 @@
 // Carga la base de socios de la Cooperativa 23 de Julio a su Twenty.
 //
+//   TENANT=coop23dejulio node scripts/cargar-socios.js --sorteo=Entrega_Sorteo.xlsx \
+//     [--hojas=principales|reemplazos|ambas] [--aplicar]
+//   (base del sorteo: hoja 1 principales → PENDIENTE, hoja 2 reemplazos → RESERVA)
+//
 //   TENANT=coop23dejulio node scripts/cargar-socios.js --base=BASE_SOCIOS.xlsx \
 //     [--oficinas=base_de_oficinas.xlsx] [--muestra=muestra.xlsx] [--limite=N] [--aplicar]
 //
@@ -17,7 +21,7 @@ try {
 const path = require("path");
 const ExcelJS = require("exceljs");
 const { tenant } = require("../lib/tenant");
-const { socioDesdeFila, deduplicar, personaTwenty, limpio } = require("../lib/socios");
+const { socioDesdeFila, socioDesdeSorteo, deduplicar, personaTwenty, limpio } = require("../lib/socios");
 
 const args = Object.fromEntries(
   process.argv.slice(2).map((a) => {
@@ -28,11 +32,12 @@ const args = Object.fromEntries(
 const APLICAR = Boolean(args.aplicar);
 const LOTE = 50;
 
-async function leerHoja(archivo, { encabezadoEn } = {}) {
+async function leerHoja(archivo, { encabezadoEn, hoja = 0 } = {}) {
   const wb = new ExcelJS.Workbook();
   if (/\.csv$/i.test(archivo)) await wb.csv.readFile(archivo);
   else await wb.xlsx.readFile(archivo);
-  const ws = wb.worksheets[0];
+  const ws = wb.worksheets[hoja];
+  if (!ws) throw new Error(`El archivo no tiene la hoja ${hoja + 1}`);
   const filas = [];
   ws.eachRow({ includeEmpty: false }, (row) => filas.push(row.values.slice(1).map((c) => (c && typeof c === "object" ? c.text ?? c.result ?? "" : c))));
   const idxEnc = encabezadoEn ? filas.findIndex(encabezadoEn) : 0;
@@ -101,14 +106,34 @@ async function codigosExistentes() {
 async function main() {
   const config = tenant();
   if (config.id !== "coop23dejulio") throw new Error("Este script es para TENANT=coop23dejulio");
-  if (!args.base) throw new Error("Falta --base=<archivo de socios .xlsx o .csv>");
+  if (!args.base && !args.sorteo) throw new Error("Falta --sorteo=<Entrega_Sorteo.xlsx> o --base=<archivo de socios>");
 
-  const [filas, oficinas, muestra] = await Promise.all([
-    leerHoja(path.resolve(args.base)),
-    leerOficinas(args.oficinas && path.resolve(args.oficinas)),
-    leerMuestra(args.muestra && path.resolve(args.muestra)),
-  ]);
-  const { socios, resumen } = deduplicar(filas.map((f) => socioDesdeFila(f, oficinas)));
+  let socios, resumen, muestra = null;
+  if (args.sorteo) {
+    const hojas = args.hojas || "principales";
+    if (!["principales", "reemplazos", "ambas"].includes(hojas)) throw new Error("--hojas debe ser principales, reemplazos o ambas");
+    const indices = hojas === "ambas" ? [0, 1] : hojas === "reemplazos" ? [1] : [0];
+    const filas = (await Promise.all(indices.map((hoja) => leerHoja(path.resolve(args.sorteo), { hoja })))).flat();
+    ({ socios, resumen } = deduplicar(filas.map(socioDesdeSorteo)));
+    console.log(`Base del sorteo · hojas: ${hojas}`);
+    const menores = socios.filter((s) => s.edad != null && s.edad < 18).length;
+    const telefonos = new Map();
+    for (const s of socios) if (s.celular) telefonos.set(s.celular, (telefonos.get(s.celular) || 0) + 1);
+    const compartidos = [...telefonos.values()].filter((n) => n > 1).length;
+    const porEstado = socios.reduce((acc, s) => ({ ...acc, [s.estadoGestion]: (acc[s.estadoGestion] || 0) + 1 }), {});
+    const porCiudad = socios.reduce((acc, s) => ({ ...acc, [s.ciudadOficina]: (acc[s.ciudadOficina] || 0) + 1 }), {});
+    console.log("Por estado inicial:", porEstado);
+    console.log("Por ciudad:", porCiudad);
+    console.log(`Avisos · menores de 18: ${menores} · celulares compartidos: ${compartidos} · sin edad: ${socios.filter((s) => s.edad == null).length}`);
+  } else {
+    let filas, oficinas;
+    [filas, oficinas, muestra] = await Promise.all([
+      leerHoja(path.resolve(args.base)),
+      leerOficinas(args.oficinas && path.resolve(args.oficinas)),
+      leerMuestra(args.muestra && path.resolve(args.muestra)),
+    ]);
+    ({ socios, resumen } = deduplicar(filas.map((f) => socioDesdeFila(f, oficinas))));
+  }
   let aCargar = muestra ? socios.filter((s) => muestra.has(s.codigoCliente)) : socios;
   if (args.limite) aCargar = aCargar.slice(0, Number(args.limite));
 
