@@ -158,6 +158,7 @@ export const POST = conErrores("POST /api/encuestas", async (request) => {
   //    también cuenta como "ya encuestado" otro registro con el mismo código.
   const client = await pool.connect();
   let encuestaId;
+  let intentos = null;
   let pendienteId = null;
   try {
     await client.query("begin");
@@ -245,6 +246,13 @@ export const POST = conErrores("POST /api/encuestas", async (request) => {
       ]
     );
     encuestaId = rows[0].id;
+    // Llamadas registradas a este socio, incluida esta (va a Twenty con el estado).
+    const { rows: cuenta } = await client.query(
+      `select count(*)::int as n from encuestas
+       where cliente_twenty_id = $1 or ($2::text is not null and codigo_cliente = $2)`,
+      [cliente_twenty_id, cliente.codigo_cliente ?? null]
+    );
+    intentos = cuenta[0].n;
 
     if (envio.respuestas.length > 0) {
       const placeholders = [];
@@ -299,7 +307,7 @@ export const POST = conErrores("POST /api/encuestas", async (request) => {
     after(async () => {
       if (!twentyEnVivoDisponible()) return;
       try {
-        await patchEstado(cliente_twenty_id, targetStatus, { timeoutMs: 8000, reintentos: 0 });
+        await patchEstado(cliente_twenty_id, targetStatus, { timeoutMs: 8000, reintentos: 0, intentos });
         await pool.query(`delete from pending_twenty_sync where id = $1`, [pendienteId]);
       } catch (err) {
         registrarFalloEnVivo(err);
@@ -315,7 +323,7 @@ export const POST = conErrores("POST /api/encuestas", async (request) => {
   }
 
   return NextResponse.json(
-    { id: encuestaId, completada: envio.completada, status: targetStatus, resultado: envio.resultado ?? null },
+    { id: encuestaId, completada: envio.completada, status: targetStatus, resultado: envio.resultado ?? null, intento: intentos },
     { status: 201 }
   );
 });

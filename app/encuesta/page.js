@@ -31,6 +31,7 @@ function armarGuion(texto, valores) {
   if (!texto) return "";
   return texto
     .replaceAll("{{ENCUESTADOR}}", valores.encuestador || "—")
+    .replaceAll("{{NOMBRE}}", valores.nombre || "—")
     .replaceAll("{{SUCURSAL}}", valores.sucursal || "—")
     .replaceAll("{{FECHA}}", valores.fecha || "—");
 }
@@ -239,6 +240,9 @@ export default function EncuestaPage() {
   const [indice, setIndice] = useState(0);
   const [activeDraftId, setActiveDraftId] = useState(null);
   const [erroresValidacion, setErroresValidacion] = useState([]);
+  // Cliente con todas las preguntas obligatorias (tenant.avanceObligatorio): aviso al
+  // intentar pasar a la siguiente sin responder la actual.
+  const [avisoAvance, setAvisoAvance] = useState("");
 
   const [enviando, setEnviando] = useState(false);
   const [errorEnvio, setErrorEnvio] = useState(null);
@@ -363,7 +367,7 @@ export default function EncuestaPage() {
   const preguntaOriginal = cuestionario?.preguntas?.[indice];
   // Texto, ayuda y opciones según la ruta (config.variantes, ver lib/encuesta-logica.js).
   const preguntaActual = useMemo(
-    () => preguntaParaMostrar(preguntaOriginal, cuestionario?.preguntas, respuestas, cliente),
+    () => preguntaParaMostrar(preguntaOriginal, cuestionario?.preguntas, respuestas, cliente, { semilla: cliente?.id_twenty }),
     [preguntaOriginal, cuestionario, respuestas, cliente]
   );
 
@@ -384,6 +388,18 @@ export default function EncuestaPage() {
   const esNoAplica = (p) => fueraDeRuta.has(p.id) || (autoRespuestas[p.id] === NA && p.tipo !== "informativa");
   // ¿Este cuestionario usa la regla de corte y laminado de EDIMCA (dato TOTAL)?
   const usaCorte = Boolean(cuestionario?.preguntas?.some((p) => p.condicion?.campo === "total"));
+  // ¿Falta responder esta pregunta? (las que no aplican, las indicaciones y las
+  // calculadas no cuentan).
+  const faltaResponder = (p) =>
+    Boolean(p) && !esSaltoDeRuta(p) && !esNoAplica(p) && p.tipo !== "informativa" && !respuestaCompleta(p, respuestas[p.id], cliente);
+  // Con avance obligatorio solo se puede ir hasta la primera pregunta sin responder.
+  const primeraPendiente = useMemo(() => {
+    if (!tenant.avanceObligatorio || !cuestionario) return Infinity;
+    const i = cuestionario.preguntas.findIndex((p) => faltaResponder(p));
+    return i === -1 ? Infinity : i;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [tenant.avanceObligatorio, cuestionario, respuestas, cliente, fueraDeRuta, autoRespuestas]);
+  const MENSAJE_OBLIGATORIA = "Responda esta pregunta para continuar. Si el socio no sabe o no quiere responder, use «No sabe» o «Prefiere no responder».";
   function siguienteIndice(desde, paso) {
     const lista = cuestionario?.preguntas || [];
     let i = desde + paso;
@@ -473,6 +489,7 @@ export default function EncuestaPage() {
   }
 
   function actualizarRespuesta(preguntaId, nuevoValor) {
+    setAvisoAvance("");
     // Cada respuesta puede cambiar la ruta: se recalculan las preguntas calculadas y
     // las que dejan (o vuelven a) aplicar.
     setRespuestas((prev) => {
@@ -642,6 +659,7 @@ export default function EncuestaPage() {
   const guionApertura = cuestionario
     ? armarGuion(cuestionario.guion_apertura, {
         encuestador: nombreEncuestador,
+        nombre: cliente?.nombre,
         sucursal: cliente?.pdv,
         fecha: formatFecha(cliente?.fecha_atencion),
       })
@@ -878,6 +896,7 @@ export default function EncuestaPage() {
             <div><span>Código</span>{cliente.codigo_cliente}</div>
             {cliente.telefono1 && <div><span>Teléfono</span>📞 {cliente.telefono1}</div>}
             <div><span>{tenant.etiquetas.grupo}</span>{cliente.pdv}</div>
+            {cliente.intento > 0 && <div><span>Intento de llamada</span>N.º {cliente.intento}</div>}
             {tenant.gestionMensual && <div><span>Mes</span>{cliente.mes_gestion}</div>}
             {cliente.datos?.tipo_persona && (
               <div><span>Tipo de persona</span>{cliente.datos.tipo_persona}</div>
@@ -972,7 +991,13 @@ export default function EncuestaPage() {
                     key={p.id}
                     className={`question-pill${i === indice ? " active" : ""}${esNA ? " na" : esCompleta ? " done" : ""}`}
                     onClick={() => {
+                      if (i > primeraPendiente) {
+                        setIndice(primeraPendiente);
+                        setAvisoAvance(MENSAJE_OBLIGATORIA);
+                        return;
+                      }
                       setIndice(i);
+                      setAvisoAvance("");
                       setErroresValidacion([]);
                     }}
                     title={
@@ -1207,6 +1232,12 @@ export default function EncuestaPage() {
                     </>
                   )}
 
+                  {avisoAvance && (
+                    <div className="validation-box" style={{ marginBottom: 12 }} role="alert">
+                      {avisoAvance}
+                    </div>
+                  )}
+
                   {/* Botones de Navegación Flexible */}
                   <div className="nav-buttons-row">
                     <button
@@ -1214,6 +1245,7 @@ export default function EncuestaPage() {
                       disabled={indice === 0}
                       onClick={() => {
                         setIndice((prev) => siguienteIndice(prev, -1));
+                        setAvisoAvance("");
                         setErroresValidacion([]);
                       }}
                     >
@@ -1224,6 +1256,11 @@ export default function EncuestaPage() {
                       <button
                         className="btn btn-secondary"
                         onClick={() => {
+                          if (tenant.avanceObligatorio && faltaResponder(preguntaOriginal)) {
+                            setAvisoAvance(MENSAJE_OBLIGATORIA);
+                            return;
+                          }
+                          setAvisoAvance("");
                           setIndice((prev) => siguienteIndice(prev, 1));
                           setErroresValidacion([]);
                         }}

@@ -47,6 +47,18 @@ export const GET = conErrores("GET /api/clientes/[id]", async (_request, { param
   // no dejar llenar una encuesta que el guardado va a rechazar. Solo aplica al mes de
   // gestión activo, que es el único que se encuesta.
   let [cliente] = rows;
+  // Número de intento de llamada: cada llamada cerrada (completa, rechazo, no
+  // contesta, cita…) queda como una encuesta; esta es la siguiente.
+  try {
+    const { rows: previas } = await pool.query(
+      `select count(*)::int as n from encuestas
+       where cliente_twenty_id = $1 or ($2::text is not null and codigo_cliente = $2)`,
+      [id, cliente.codigo_cliente]
+    );
+    cliente = { ...cliente, intento: previas[0].n + 1 };
+  } catch (err) {
+    console.error(`No se pudo contar los intentos del cliente ${id}:`, err.message);
+  }
   try {
     if (!tenant().metaPorGrupo || !tenant().gestionMensual) return NextResponse.json({ cliente, twentyDisponible });
     const { nombre, periodo } = await mesGestionActivo(pool);

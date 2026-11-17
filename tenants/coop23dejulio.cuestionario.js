@@ -20,6 +20,19 @@ const conOperaciones = { no: { pregunta: "A2", op: "=", valor: "SIN_OPERACIONES"
 const actividadNueva = { alguna: [{ pregunta: "A1", op: "=", valor: "NO" }, { pregunta: "L2", op: "respondida" }] };
 const faltaOActividadNueva = (dato) => ({ alguna: [{ cliente: dato, op: "vacio" }, actividadNueva] });
 
+// Cooperativas que se leen en SM0 (y que SM1 ofrece si el socio las conoce).
+const COOPERATIVAS_SM0 = [
+  op("C23_JULIO", "Cooperativa 23 de Julio"),
+  op("JEP", "Juventud Ecuatoriana Progresista (JEP)"),
+  op("JARDIN_AZUAYO", "Jardín Azuayo"),
+  op("ALIANZA_VALLE", "Alianza del Valle"),
+  op("POLICIA_NACIONAL", "Policía Nacional"),
+  op("29_OCTUBRE", "29 de Octubre"),
+  op("COOPROGRESO", "Cooprogreso"),
+  op("SAN_FRANCISCO", "San Francisco"),
+  op("MUSHUC_RUNA", "Mushuc Runa"),
+];
+
 const RANGOS_USD = (cero) => [
   op("0", cero),
   op("1_499", "Más de 0 y menos de 500"),
@@ -33,7 +46,7 @@ const RANGOS_USD = (cero) => [
 const cuestionario = {
   nombre: "Cooperativa 23 de Julio — Caracterización LA/FT 2026",
   guion_apertura:
-    "Buenos días/tardes, ¿hablo con [nombre del socio o representante]? Soy {{ENCUESTADOR}} y le llamo en nombre de la Cooperativa de Ahorro y Crédito 23 de Julio, con el apoyo de la empresa Strattos. La cooperativa está haciendo un estudio para conocer mejor cómo trabajan y usan sus servicios sus socios. Dura unos 10 minutos y es voluntaria: puede no responder cualquier pregunta o terminar cuando quiera. No le pediremos cédula ni números de cuenta. Sus respuestas son confidenciales: se identifican con un código y la cooperativa recibe solo resultados agrupados. Si desea verificar esta llamada, puede comunicarse con la cooperativa al [PENDIENTE: teléfono de verificación]. Para ejercer sus derechos sobre sus datos puede escribir a [PENDIENTE: correo del responsable del estudio].",
+    "Buenos días/tardes, ¿hablo con {{NOMBRE}}? Soy {{ENCUESTADOR}} y le llamo en nombre de la Cooperativa de Ahorro y Crédito 23 de Julio, con el apoyo de la empresa Strattos. La cooperativa está haciendo un estudio para conocer mejor cómo trabajan y usan sus servicios sus socios. Dura unos 10 minutos y es voluntaria: puede no responder cualquier pregunta o terminar cuando quiera. No le pediremos cédula ni números de cuenta. Sus respuestas son confidenciales: se identifican con un código y la cooperativa recibe solo resultados agrupados. Si desea verificar esta llamada, puede comunicarse con la cooperativa al [PENDIENTE: teléfono de verificación].",
   guion_cierre: "¡Muchas gracias por su tiempo y su colaboración!",
 
   preguntas: [
@@ -114,7 +127,7 @@ const cuestionario = {
       codigo: "A1", bloque: "Su actividad", tipo: "opcion_unica",
       texto: "Según los registros de la cooperativa, usted (o su empresa) se dedica a {{actividad}}. ¿Sigue siendo su actividad principal?",
       config: {
-        opciones: [op("SI", "Sí"), op("NO", "No — actividad actual:", { con_texto: true })],
+        opciones: [op("SI", "Sí"), op("NO", "No")],
         especiales: NS_NR,
         variantes: [
           { si: esNatural, texto: "Según los registros de la cooperativa, usted se dedica a {{actividad}}. ¿Sigue siendo su actividad principal?" },
@@ -122,6 +135,26 @@ const cuestionario = {
         ],
       },
       mostrar_si: { cliente: "actividad", op: "no_vacio" },
+    },
+    {
+      codigo: "A1A", bloque: "Su actividad", tipo: "opcion_unica",
+      texto: "¿Cuál es su ocupación actual?",
+      ayuda: "Solo si en A1 respondió que no. Lea las opciones y marque la principal; «Otra ocupación» se anota textualmente.",
+      config: {
+        opciones: [
+          op("EMPLEADO_PRIVADO", "Empleado/a del sector privado"),
+          op("EMPLEADO_PUBLICO", "Empleado/a público o del gobierno"),
+          op("CUENTA_PROPIA", "Cuenta propia / negocio propio pequeño"),
+          op("EMPRESARIO", "Empresario/a (con empleados a su cargo)"),
+          op("AGRICULTOR", "Agricultor/a o trabajador/a agropecuario/a"),
+          op("AMA_CASA", "Ama de casa / quehaceres del hogar"),
+          op("JUBILADO", "Jubilado"),
+          op("ESTUDIANTE", "Estudiante"),
+          op("OTRA", "Otra ocupación:", { con_texto: true }),
+        ],
+        especiales: NS_NR,
+      },
+      mostrar_si: { pregunta: "A1", op: "=", valor: "NO" },
     },
     {
       codigo: "T2", bloque: "Su actividad", tipo: "opcion_unica",
@@ -336,18 +369,12 @@ const cuestionario = {
     {
       codigo: "SM0", bloque: "Salud de marca", tipo: "opcion_multiple",
       texto: "Le voy a leer algunos nombres de cooperativas de ahorro y crédito. Dígame cuáles conoce, aunque sea de nombre.",
-      ayuda: "CONOCIMIENTO ASISTIDO. Lea siempre los mismos nombres, rotando el orden. Lista PENDIENTE de validar con la cooperativa por ciudad.",
+      ayuda: "CONOCIMIENTO ASISTIDO. Lea los nombres en el orden en que aparecen: el sistema los rota en cada encuesta. Lista PENDIENTE de validar con la cooperativa por ciudad.",
       config: {
+        // Orden distinto por encuesta; «Otra» y «Ninguna» quedan al final.
+        rotar: true,
         opciones: [
-          op("C23_JULIO", "Cooperativa 23 de Julio"),
-          op("JEP", "Juventud Ecuatoriana Progresista (JEP)"),
-          op("JARDIN_AZUAYO", "Jardín Azuayo"),
-          op("ALIANZA_VALLE", "Alianza del Valle"),
-          op("POLICIA_NACIONAL", "Policía Nacional"),
-          op("29_OCTUBRE", "29 de Octubre"),
-          op("COOPROGRESO", "Cooprogreso"),
-          op("SAN_FRANCISCO", "San Francisco"),
-          op("MUSHUC_RUNA", "Mushuc Runa"),
+          ...COOPERATIVAS_SM0,
           op("OTRA", "Otra (especifique)", { con_texto: true }),
           op("NINGUNA", "Ninguna", { excluyente: true }),
         ],
@@ -355,11 +382,22 @@ const cuestionario = {
       },
     },
     {
-      codigo: "SM1", bloque: "Salud de marca", tipo: "opcion_unica",
-      texto: "De las cooperativas, bancos u otras instituciones que conoce, ¿con cuáles trabaja o ha trabajado, además de la Cooperativa 23 de Julio?",
-      ayuda: "No vuelva a leer la lista: anote textualmente las que mencione, sean de SM0 o cualquier otra.",
+      codigo: "SM1", bloque: "Salud de marca", tipo: "opcion_multiple",
+      texto: "De las que conoce, ¿con cuáles trabaja o ha trabajado, además de la Cooperativa 23 de Julio?",
+      ayuda: "Solo aparecen las cooperativas que conoce (SM0). Si menciona un banco u otra institución, márquela en «Otra institución» y anótela.",
       config: {
-        opciones: [op("SOLO_23", "Solo con la Cooperativa 23 de Julio"), op("MENCIONA", "Instituciones mencionadas:", { con_texto: true })],
+        // Cada cooperativa aparece solo si la conoce (marcada en SM0).
+        opciones: [
+          ...COOPERATIVAS_SM0.filter((c) => c.valor !== "C23_JULIO").map((c) =>
+            op(c.valor, c.etiqueta, { solo_si: { pregunta: "SM0", op: "contiene", valor: c.valor } })
+          ),
+          op("OTRA", "Otra cooperativa que conoce (la de SM0):", {
+            con_texto: true,
+            solo_si: { pregunta: "SM0", op: "contiene", valor: "OTRA" },
+          }),
+          op("OTRA_INST", "Otra institución (banco u otra), especifique:", { con_texto: true }),
+          op("SOLO_23", "Ninguna otra: solo con la Cooperativa 23 de Julio", { excluyente: true }),
+        ],
         especiales: NS_NR,
       },
     },

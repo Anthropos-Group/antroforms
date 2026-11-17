@@ -110,7 +110,7 @@ function ConfiguracionCuestionario() {
         onChange={(e) => setConfig({ ...config, guion_apertura: e.target.value })}
       />
       <p style={{ fontSize: 12, color: "#6b7280", margin: "4px 0 0" }}>
-        Variables disponibles: <code>{"{{ENCUESTADOR}}"}</code>, <code>{"{{SUCURSAL}}"}</code>, <code>{"{{FECHA}}"}</code> (fecha de atención del cliente).
+        Variables disponibles: <code>{"{{ENCUESTADOR}}"}</code>, <code>{"{{NOMBRE}}"}</code> (nombre del cliente), <code>{"{{SUCURSAL}}"}</code>, <code>{"{{FECHA}}"}</code> (fecha de atención del cliente).
       </p>
       <label className="field-label" style={{ marginTop: 14 }}>Guion de cierre</label>
       <textarea
