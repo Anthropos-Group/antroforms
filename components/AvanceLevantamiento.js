@@ -10,6 +10,7 @@ const ETIQUETA_RESULTADO = {
   parcial: "Parcial",
   cita: "Cita",
   no_contacto: "No contacto",
+  no_interesado: "No interesado",
   numero_incorrecto: "Número incorrecto",
   informante_no_autorizado: "Informante no autorizado",
   fuera_universo: "Fuera del universo",
@@ -39,7 +40,8 @@ export default function AvanceLevantamiento({ data }) {
       <div style={{ display: "flex", gap: 12, flexWrap: "wrap", marginBottom: 16 }}>
         <Kpi titulo="Encuestas completas" valor={completas} detalle={`de ${base} socios en la base`} />
         <Kpi titulo="En gestión" valor={suma("en_gestion")} detalle="parcial, cita, no contacto…" />
-        <Kpi titulo="Rechazos" valor={suma("rechazos")} />
+        <Kpi titulo="Rechazos" valor={suma("rechazos")} detalle="no aceptó el consentimiento (CI1)" />
+        <Kpi titulo="No interesados" valor={suma("no_interesados")} />
         <Kpi titulo="Descartados" valor={suma("descartados")} detalle="número incorrecto o fuera del universo" />
         <Kpi titulo="Llamadas registradas" valor={llamadas} />
       </div>
@@ -54,6 +56,7 @@ export default function AvanceLevantamiento({ data }) {
               <th style={{ textAlign: "right" }}>Completas</th>
               <th style={{ textAlign: "right" }}>En gestión</th>
               <th style={{ textAlign: "right" }}>Rechazos</th>
+              <th style={{ textAlign: "right" }}>No interesados</th>
               <th style={{ textAlign: "right" }}>Descartados</th>
               <th style={{ textAlign: "right" }}>Sin llamar</th>
             </tr>
@@ -67,12 +70,13 @@ export default function AvanceLevantamiento({ data }) {
                 <td style={{ textAlign: "right", fontWeight: 700, color: "#059669" }}>{g.completas}</td>
                 <td style={{ textAlign: "right" }}>{g.en_gestion}</td>
                 <td style={{ textAlign: "right" }}>{g.rechazos}</td>
+                <td style={{ textAlign: "right" }}>{g.no_interesados}</td>
                 <td style={{ textAlign: "right" }}>{g.descartados}</td>
                 <td style={{ textAlign: "right", color: "#6b7280" }}>{g.sin_llamar}</td>
               </tr>
             ))}
             {grupos.length === 0 && (
-              <tr><td colSpan={8} className="empty-state">Todavía no hay socios cargados.</td></tr>
+              <tr><td colSpan={9} className="empty-state">Todavía no hay socios cargados.</td></tr>
             )}
           </tbody>
         </table>
