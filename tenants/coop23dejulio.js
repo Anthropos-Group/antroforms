@@ -43,12 +43,13 @@ module.exports = {
       parcial: "PARCIAL",
       cita: "CITA",
       no_contacto: "NO_CONTACTO",
+      no_interesado: "NO_INTERESADO",
       numero_incorrecto: "NUMERO_INCORRECTO",
       informante_no_autorizado: "INFORMANTE_NO_AUTORIZADO",
       fuera_universo: "FUERA_UNIVERSO",
     },
     // RESERVA: reemplazo todavía no activado (el encuestador no lo ve).
-    estadosExcluidos: ["RECHAZO", "NUMERO_INCORRECTO", "FUERA_UNIVERSO", "COMPLETA", "RESERVA", "AGOTADO"],
+    estadosExcluidos: ["RECHAZO", "NO_INTERESADO", "NUMERO_INCORRECTO", "FUERA_UNIVERSO", "COMPLETA", "RESERVA", "AGOTADO"],
     limpieza: {
       texto: ["nombreOficina", "actividadEconomica", "profesion", "cantonDomicilio"],
       telefono: ["celular"],
@@ -83,6 +84,8 @@ module.exports = {
         ["CITA", "Cita", "blue"],
         ["NO_CONTACTO", "No contacto", "orange"],
         ["RECHAZO", "Rechazo", "red"],
+        // Dice explícitamente que no le interesa: no se vuelve a llamar.
+        ["NO_INTERESADO", "No interesado", "red"],
         ["NUMERO_INCORRECTO", "Número incorrecto", "pink"],
         ["INFORMANTE_NO_AUTORIZADO", "Informante no autorizado", "purple"],
         ["FUERA_UNIVERSO", "Fuera del universo", "sky"],

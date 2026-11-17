@@ -253,3 +253,16 @@ test("23 de Julio: tipo sin resolver → ruta U, salta al bloque común (SM0) y 
   for (const c of ["A2", "C1", "C6", "AC2", "AC3", "G1", "L8"]) assert.equal(r[idDe(ps, c)], NA, `${c} no aplica en U`);
   for (const c of ["SM0", "SM3", "AC1", "AC4", "AC5"]) assert.notEqual(r[idDe(ps, c)], NA, `${c} aplica en U`);
 });
+
+test("cierre «No interesado»: se guarda lo respondido y va a NO_INTERESADO en Twenty", () => {
+  const envio = prepararEnvio(preguntas, { [id(1)]: "SI" }, natural, { cierre: "no_interesado" });
+  assert.equal(envio.valido, true);
+  assert.equal(envio.completada, false);
+  assert.equal(envio.resultado, "no_interesado");
+  const { tenant } = require("../lib/tenant");
+  const config = tenant("coop23dejulio");
+  assert.equal(config.twenty.estadosCierre.no_interesado, "NO_INTERESADO");
+  assert.ok(config.twenty.estadosExcluidos.includes("NO_INTERESADO"), "sale del buscador");
+  const estado = config.esquemaTwenty.find((c) => c.name === "estadoGestion");
+  assert.ok(estado.opciones.some(([v]) => v === "NO_INTERESADO"), "la opción existe en Twenty");
+});

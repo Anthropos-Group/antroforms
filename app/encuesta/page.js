@@ -22,6 +22,7 @@ const ETIQUETAS_CIERRE = {
   parcial: "Parcial (se cortó o retiró el consentimiento)",
   cita: "Cita / volver a llamar",
   no_contacto: "No contesta / no contacto",
+  no_interesado: "No interesado (lo dice explícitamente)",
   numero_incorrecto: "Número incorrecto",
   informante_no_autorizado: "Informante no autorizado",
   fuera_universo: "Fuera del universo",
