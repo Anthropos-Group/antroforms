@@ -63,19 +63,38 @@ async function main() {
   const existentes = new Map((person.fields || []).map((f) => [f.name, f]));
 
   const faltan = [];
+  // Campos SELECT que ya existen pero no tienen todas las opciones (p. ej. RESERVA).
+  const opcionesNuevas = [];
   for (const c of esquema) {
     const actual = existentes.get(c.name);
     if (!actual) faltan.push(c);
     else if (actual.type !== c.type) console.warn(`⚠ ${c.name} existe como ${actual.type}, se esperaba ${c.type} (no se toca)`);
-    else console.log(`= ${c.name} ya existe`);
+    else if (c.type === "SELECT") {
+      const tiene = new Set((actual.options || []).map((o) => o.value));
+      const nuevas = c.opciones.filter(([value]) => !tiene.has(value));
+      if (nuevas.length) opcionesNuevas.push({ c, actual, nuevas });
+      else console.log(`= ${c.name} ya existe`);
+    } else console.log(`= ${c.name} ya existe`);
   }
   for (const c of faltan) console.log(`+ ${c.name} (${c.type}) — ${c.label}`);
-  if (!faltan.length) return console.log("Todos los campos ya existen.");
-  if (!APLICAR) return console.log(`\n${faltan.length} campos por crear. Repite con --aplicar para crearlos.`);
+  for (const { c, nuevas } of opcionesNuevas) console.log(`+ ${c.name}: opciones ${nuevas.map(([v]) => v).join(", ")}`);
+  const cambios = faltan.length + opcionesNuevas.length;
+  if (!cambios) return console.log("Todos los campos ya existen.");
+  if (!APLICAR) return console.log(`\n${cambios} cambios pendientes. Repite con --aplicar para hacerlos.`);
 
   for (const c of faltan) {
     await api("/metadata/fields", { method: "POST", body: cuerpoCampo(person.id, c) });
     console.log(`✓ creado ${c.name}`);
+  }
+  // Se agregan al final; las existentes se mandan tal cual (con su id) para no tocarlas.
+  for (const { c, actual, nuevas } of opcionesNuevas) {
+    const previas = [...(actual.options || [])].sort((a, b) => a.position - b.position);
+    const options = [
+      ...previas,
+      ...nuevas.map(([value, label, color], i) => ({ value, label, color, position: previas.length + i })),
+    ];
+    await api(`/metadata/fields/${actual.id}`, { method: "PATCH", body: { options } });
+    console.log(`✓ ${c.name}: agregadas ${nuevas.map(([v]) => v).join(", ")}`);
   }
 }
 
