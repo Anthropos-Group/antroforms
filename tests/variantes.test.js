@@ -70,3 +70,39 @@ test("G1 y C6 muestran solo la redacción y opciones del tipo de persona", () =>
   assert.doesNotMatch(vista("C6", nat).texto, /\[Persona/);
   assert.match(vista("C6", jur).texto, /Su empresa/);
 });
+
+test("A1 = No abre la pregunta de ocupación (A1A) con sus 9 opciones", () => {
+  const { preguntasFueraDeRuta } = require("../lib/encuesta-logica");
+  const si = conRespuestas(NATURAL, { A1: "SI" });
+  const no = conRespuestas(NATURAL, { A1: "NO" });
+  const a1a = porCodigo("A1A");
+  assert.ok(preguntasFueraDeRuta(preguntas, si.r, NATURAL).has(a1a.id));
+  assert.ok(!preguntasFueraDeRuta(preguntas, no.r, NATURAL).has(a1a.id));
+  assert.equal(a1a.config.opciones.length, 9);
+  assert.ok(a1a.config.opciones.find((o) => o.valor === "OTRA").con_texto);
+});
+
+test("SM0 rota las cooperativas por encuesta y deja «Otra» y «Ninguna» al final", () => {
+  const sm0 = porCodigo("SM0");
+  const orden = (semilla) =>
+    preguntaParaMostrar(sm0, preguntas, {}, NATURAL, { semilla }).config.opciones.map((o) => o.valor);
+  const a = orden("cliente-1");
+  assert.deepEqual(orden("cliente-1"), a, "estable para la misma encuesta");
+  const distintos = new Set(["c1", "c2", "c3", "c4", "c5", "c6"].map((x) => orden(x).join(",")));
+  assert.ok(distintos.size > 1, "cambia entre encuestas");
+  assert.deepEqual(a.slice(-2), ["OTRA", "NINGUNA"]);
+  assert.equal(a.length, sm0.config.opciones.length);
+});
+
+test("SM1 ofrece solo las cooperativas marcadas en SM0 (sin la 23 de Julio)", () => {
+  const e = conRespuestas(NATURAL, { SM0: ["C23_JULIO", "JEP", "MUSHUC_RUNA"] });
+  const v = valores(vista("SM1", e));
+  assert.deepEqual(v, ["JEP", "MUSHUC_RUNA", "OTRA_INST", "SOLO_23"]);
+  const ninguna = valores(vista("SM1", conRespuestas(NATURAL, { SM0: ["NINGUNA"] })));
+  assert.deepEqual(ninguna, ["OTRA_INST", "SOLO_23"]);
+});
+
+test("el guion de apertura usa el nombre del socio y ya no pide el correo del responsable", () => {
+  assert.match(def.guion_apertura, /¿hablo con \{\{NOMBRE\}\}\?/);
+  assert.doesNotMatch(def.guion_apertura, /derechos sobre sus datos/);
+});

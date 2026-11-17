@@ -14,6 +14,8 @@ module.exports = {
       mes_gestion: null,
       id_externo: "codigoMuestra",
       status: "estadoGestion",
+      // Número de llamadas registradas al socio (se actualiza con cada cierre).
+      intentos: "intentosLlamada",
       telefono: "celular",
       total: null,
       fecha_atencion: null,
@@ -61,6 +63,7 @@ module.exports = {
     { name: "nombreOficina", label: "Oficina", type: "TEXT", icon: "IconBuildingBank" },
     { name: "ciudadOficina", label: "Ciudad (estrato)", type: "TEXT", icon: "IconMapPin" },
     { name: "celular", label: "Celular", type: "TEXT", icon: "IconPhone" },
+    { name: "intentosLlamada", label: "Intentos de llamada", type: "NUMBER", icon: "IconPhoneCall" },
     {
       name: "estadoGestion", label: "Estado de gestión", type: "SELECT", icon: "IconProgressCheck",
       defaultValue: "'PENDIENTE'",
@@ -93,6 +96,9 @@ module.exports = {
   etiquetas: { grupo: "Oficina", grupoPlural: "Oficinas", idExterno: "Código de muestra" },
 
   gestionMensual: false,
+  // Todas las preguntas son obligatorias: no se pasa a la siguiente sin responder la
+  // actual (NS/NR cuentan como respuesta).
+  avanceObligatorio: true,
   // Las cuotas por oficina se definen cuando llegue el diseño muestral.
   metaPorGrupo: false,
 
