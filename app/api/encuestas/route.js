@@ -1,5 +1,6 @@
 import { NextResponse, after } from "next/server";
 import { getPool } from "../../../lib/db";
+import { agotaAlSocio, activarReemplazos } from "../../../lib/reemplazos";
 import { patchEstado, twentyConfigurado, twentyEnVivoDisponible, registrarFalloEnVivo } from "../../../lib/twenty";
 import { obtenerReporte, obtenerResumen, leerFiltros } from "../../../lib/reportes";
 import { prepararEnvio } from "../../../lib/encuesta-logica";
@@ -146,7 +147,7 @@ export const POST = conErrores("POST /api/encuestas", async (request) => {
   }
 
   const { estados } = config.twenty;
-  const targetStatus = envio.completada
+  let targetStatus = envio.completada
     ? estados.completada
     : envio.rechazo
       ? estados.rechazo
@@ -159,6 +160,7 @@ export const POST = conErrores("POST /api/encuestas", async (request) => {
   const client = await pool.connect();
   let encuestaId;
   let intentos = null;
+  let agotado = false;
   let pendienteId = null;
   try {
     await client.query("begin");
@@ -254,6 +256,21 @@ export const POST = conErrores("POST /api/encuestas", async (request) => {
     );
     intentos = cuenta[0].n;
 
+    // 3.ª llamada sin contestar: el socio queda agotado (y se activa su reemplazo
+    // después de responder, ver abajo).
+    if (envio.resultado === "no_contacto" && config.reemplazos) {
+      const { rows: sinContacto } = await client.query(
+        `select count(*)::int as n from encuestas
+         where resultado = 'no_contacto'
+           and (cliente_twenty_id = $1 or ($2::text is not null and codigo_cliente = $2))`,
+        [cliente_twenty_id, cliente.codigo_cliente ?? null]
+      );
+      if (agotaAlSocio(envio.resultado, sinContacto[0].n)) {
+        agotado = true;
+        targetStatus = config.reemplazos.estadoAgotado;
+      }
+    }
+
     if (envio.respuestas.length > 0) {
       const placeholders = [];
       const params = [];
@@ -309,6 +326,7 @@ export const POST = conErrores("POST /api/encuestas", async (request) => {
       try {
         await patchEstado(cliente_twenty_id, targetStatus, { timeoutMs: 8000, reintentos: 0, intentos });
         await pool.query(`delete from pending_twenty_sync where id = $1`, [pendienteId]);
+        if (agotado) await activarReemplazos(pool, { principalId: cliente_twenty_id });
       } catch (err) {
         registrarFalloEnVivo(err);
         console.error(`Twenty CRM no respondió para ${cliente_twenty_id}; queda en la cola de reintentos:`, err.message);
@@ -323,7 +341,7 @@ export const POST = conErrores("POST /api/encuestas", async (request) => {
   }
 
   return NextResponse.json(
-    { id: encuestaId, completada: envio.completada, status: targetStatus, resultado: envio.resultado ?? null, intento: intentos },
+    { id: encuestaId, completada: envio.completada, status: targetStatus, resultado: envio.resultado ?? null, intento: intentos, agotado },
     { status: 201 }
   );
 });

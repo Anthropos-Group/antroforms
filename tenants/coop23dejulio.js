@@ -48,7 +48,7 @@ module.exports = {
       fuera_universo: "FUERA_UNIVERSO",
     },
     // RESERVA: reemplazo todavía no activado (el encuestador no lo ve).
-    estadosExcluidos: ["RECHAZO", "NUMERO_INCORRECTO", "FUERA_UNIVERSO", "COMPLETA", "RESERVA"],
+    estadosExcluidos: ["RECHAZO", "NUMERO_INCORRECTO", "FUERA_UNIVERSO", "COMPLETA", "RESERVA", "AGOTADO"],
     limpieza: {
       texto: ["nombreOficina", "actividadEconomica", "profesion", "cantonDomicilio"],
       telefono: ["celular"],
@@ -89,6 +89,8 @@ module.exports = {
         // Reemplazos del sorteo: cargados pero ocultos a los encuestadores hasta
         // que se activen (pasan a PENDIENTE).
         ["RESERVA", "Reserva (reemplazo)", "turquoise"],
+        // 3 llamadas sin contestar: sale de la lista (y se activa su reemplazo).
+        ["AGOTADO", "Agotado (3 sin contestar)", "gray"],
       ],
     },
     {
@@ -108,6 +110,15 @@ module.exports = {
   etiquetas: { grupo: "Oficina", grupoPlural: "Oficinas", idExterno: "Código de muestra" },
 
   gestionMensual: false,
+  // Reemplazos del sorteo (lib/reemplazos.js): a la 3.ª llamada cerrada como «No
+  // contesta» el socio queda AGOTADO y, si es principal, su reemplazo vinculado
+  // pasa de RESERVA a PENDIENTE.
+  reemplazos: {
+    intentosSinContacto: 3,
+    estadoAgotado: "AGOTADO",
+    estadoReserva: "RESERVA",
+    estadoActivo: "PENDIENTE",
+  },
   // Todas las preguntas son obligatorias: no se pasa a la siguiente sin responder la
   // actual (NS/NR cuentan como respuesta).
   avanceObligatorio: true,
