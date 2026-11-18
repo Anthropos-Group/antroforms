@@ -264,6 +264,15 @@ export default function ReportesPage() {
             <button className="btn btn-primary" onClick={descargarExcel} disabled={descargando || !!errorRango}>
               {descargando ? "Generando Excel…" : "Descargar Excel"}
             </button>
+            {!tenant.gestionMensual && (
+              <a
+                className="btn"
+                href="/api/reportes/gestion"
+                title="Histórico completo: avance por ciudad, estados, resultados y productividad por encuestador"
+              >
+                Reporte de gestión
+              </a>
+            )}
             <button
               className="btn"
               style={{ borderColor: "#818cf8", color: "#4f46e5", background: "#eef2ff", fontWeight: 600 }}
