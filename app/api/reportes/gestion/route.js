@@ -3,6 +3,7 @@ import { getPool } from "../../../../lib/db";
 import { verifySessionToken, SESSION_COOKIE, safeEqual, adminSigueActivo } from "../../../../lib/auth";
 import { excelReporteGestion, datosReporte, resumenReporte } from "../../../../lib/reporte-gestion";
 import { excelPorCodigos } from "../../../../lib/excel-rutas";
+import { leerFiltros } from "../../../../lib/reportes";
 import { tenant } from "../../../../lib/tenant";
 import { hoyISOEcuador } from "../../../../lib/fecha";
 import { conErrores } from "../../../../lib/http";
@@ -39,7 +40,8 @@ export const GET = conErrores("GET /api/reportes/gestion", async (request) => {
     return NextResponse.json(resumenReporte(await datosReporte(pool)));
   }
   if (searchParams.get("tipo") === "respuestas") {
-    const buffer = await excelPorCodigos(pool, {});
+    // ?estado=efectiva → solo encuestas completas (las que suma «Encuestas efectivas»).
+    const buffer = await excelPorCodigos(pool, leerFiltros(searchParams));
     if (!buffer) return NextResponse.json({ error: "No hay cuestionario activo" }, { status: 404 });
     return new Response(buffer, {
       headers: {
