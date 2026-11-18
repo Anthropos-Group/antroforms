@@ -42,6 +42,7 @@ module.exports = {
     estadosCierre: {
       parcial: "PARCIAL",
       cita: "CITA",
+      no_contesta: "NO_CONTESTA",
       no_contacto: "NO_CONTACTO",
       no_interesado: "NO_INTERESADO",
       numero_incorrecto: "NUMERO_INCORRECTO",
@@ -83,6 +84,8 @@ module.exports = {
         ["PARCIAL", "Parcial", "yellow"],
         ["CITA", "Cita", "blue"],
         ["NO_CONTACTO", "No contacto", "orange"],
+        // Timbra y nadie atiende (No contacto = apagado, fuera de servicio, buzón).
+        ["NO_CONTESTA", "No contesta", "yellow"],
         ["RECHAZO", "Rechazo", "red"],
         // Dice explícitamente que no le interesa: no se vuelve a llamar.
         ["NO_INTERESADO", "No interesado", "red"],

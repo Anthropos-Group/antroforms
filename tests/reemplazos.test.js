@@ -18,3 +18,20 @@ test("la 3.ª llamada sin contestar agota al socio; antes, o con otro resultado,
 test("sin configuración de reemplazos nunca agota", () => {
   assert.equal(agotaAlSocio("no_contacto", 9, null), false);
 });
+
+test("«No contesta» y «No contacto» suman juntos para agotar al socio", () => {
+  const prev = process.env.TENANT;
+  process.env.TENANT = "coop23dejulio";
+  try {
+    assert.equal(agotaAlSocio("no_contesta", 2), false);
+    assert.equal(agotaAlSocio("no_contesta", 3), true);
+    assert.equal(agotaAlSocio("no_interesado", 3), false, "No interesado no activa el reemplazo");
+    const { tenant } = require("../lib/tenant");
+    const c = tenant();
+    assert.equal(c.twenty.estadosCierre.no_contesta, "NO_CONTESTA");
+    assert.ok(!c.twenty.estadosExcluidos.includes("NO_CONTESTA"), "se le vuelve a llamar");
+  } finally {
+    if (prev === undefined) delete process.env.TENANT;
+    else process.env.TENANT = prev;
+  }
+});

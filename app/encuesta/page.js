@@ -21,7 +21,8 @@ import { useTenant } from "../../components/TenantProvider";
 const ETIQUETAS_CIERRE = {
   parcial: "Parcial (se cortó o retiró el consentimiento)",
   cita: "Cita / volver a llamar",
-  no_contacto: "No contesta / no contacto",
+  no_contesta: "No contesta (timbra y nadie atiende)",
+  no_contacto: "No contacto (apagado, fuera de servicio, buzón)",
   no_interesado: "No interesado (lo dice explícitamente)",
   numero_incorrecto: "Número incorrecto",
   informante_no_autorizado: "Informante no autorizado",
