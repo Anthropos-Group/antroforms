@@ -394,7 +394,7 @@ const cuestionario = {
     },
     {
       codigo: "SM1", bloque: "Salud de marca", tipo: "opcion_multiple",
-      texto: "De las que conoce, ¿con cuáles trabaja o ha trabajado, además de la Cooperativa 23 de Julio?",
+      texto: "De las que conoce, ¿de cuáles ha recibido servicios, además de la Cooperativa 23 de Julio?",
       ayuda: "Solo aparecen las cooperativas que conoce (SM0). Si menciona un banco u otra institución, márquela en «Otra institución» y anótela.",
       config: {
         // Cada cooperativa aparece solo si la conoce (marcada en SM0).
@@ -407,7 +407,7 @@ const cuestionario = {
             solo_si: { pregunta: "SM0", op: "contiene", valor: "OTRA" },
           }),
           op("OTRA_INST", "Otra institución (banco u otra), especifique:", { con_texto: true }),
-          op("SOLO_23", "Ninguna otra: solo con la Cooperativa 23 de Julio", { excluyente: true }),
+          op("SOLO_23", "Ninguna otra: solo ha recibido servicios de la Cooperativa 23 de Julio", { excluyente: true }),
         ],
         especiales: NS_NR,
       },
