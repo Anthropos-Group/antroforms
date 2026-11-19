@@ -543,7 +543,18 @@ const cuestionario = {
       ayuda: "SOLO SI FALTA o cambió la actividad. Registre antigüedad operativa; no la sustituya por la fecha de constitución.",
       config: {
         variantes: [
-          { si: ruta("A"), texto: "¿Hace cuánto tiempo realiza esta actividad?" },
+          // Nombra la actividad principal: la del listado si la confirmó en A1, la
+          // ocupación de A1A si cambió, o la de L2 si no constaba en el listado.
+          { si: conActividad("A"), texto: "¿Hace cuánto tiempo realiza su actividad principal ({{actividad}})?" },
+          {
+            si: { todas: [ruta("A"), { pregunta: "A1A", op: "respondida" }, { no: { pregunta: "A1A", op: "especial" } }] },
+            texto: "¿Hace cuánto tiempo realiza su actividad principal ({{r:A1A}})?",
+          },
+          {
+            si: { todas: [ruta("A"), { pregunta: "L2", op: "respondida" }, { no: { pregunta: "L2", op: "especial" } }] },
+            texto: "¿Hace cuánto tiempo realiza su actividad principal ({{r:L2}})?",
+          },
+          { si: ruta("A"), texto: "¿Hace cuánto tiempo realiza su actividad principal?" },
           { si: ruta("C"), texto: "¿Hace cuánto tiempo opera su empresa?" },
         ],
         opciones: [op("MENOS_1", "Menos de 1 año"), op("1_3", "De 1 a menos de 3 años"), op("3_5", "De 3 a menos de 5 años"), op("5_MAS", "5 años o más")],
