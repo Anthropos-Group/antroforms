@@ -50,7 +50,8 @@ module.exports = {
       fuera_universo: "FUERA_UNIVERSO",
     },
     // RESERVA: reemplazo todavía no activado (el encuestador no lo ve).
-    estadosExcluidos: ["RECHAZO", "NO_INTERESADO", "NUMERO_INCORRECTO", "FUERA_UNIVERSO", "COMPLETA", "RESERVA", "AGOTADO"],
+    // MENOR_EDAD: socio menor de 18 años, bloqueado (no se encuesta).
+    estadosExcluidos: ["RECHAZO", "NO_INTERESADO", "NUMERO_INCORRECTO", "FUERA_UNIVERSO", "COMPLETA", "RESERVA", "AGOTADO", "MENOR_EDAD"],
     limpieza: {
       texto: ["nombreOficina", "actividadEconomica", "profesion", "cantonDomicilio"],
       telefono: ["celular"],
@@ -97,6 +98,8 @@ module.exports = {
         ["RESERVA", "Reserva (reemplazo)", "turquoise"],
         // 3 llamadas sin contestar: sale de la lista (y se activa su reemplazo).
         ["AGOTADO", "Agotado (3 sin contestar)", "gray"],
+        // Socio menor de 18 años: no se encuesta (se activa su reemplazo).
+        ["MENOR_EDAD", "Menor de 18 (no encuestar)", "red"],
       ],
     },
     {
@@ -122,6 +125,8 @@ module.exports = {
   reemplazos: {
     intentosSinContacto: 3,
     estadoAgotado: "AGOTADO",
+    // Otros estados del principal que también activan su reemplazo.
+    estadosQueActivan: ["MENOR_EDAD"],
     estadoReserva: "RESERVA",
     estadoActivo: "PENDIENTE",
   },

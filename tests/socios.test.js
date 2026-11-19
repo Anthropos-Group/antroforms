@@ -76,3 +76,12 @@ test("base del sorteo: principal pendiente, reemplazo en reserva y datos limpios
   assert.equal(t.codigoMuestra, "QUI-P-0001".replace("P", "P"));
   assert.ok(!("edad" in t));
 });
+
+test("base del sorteo: los menores de 18 quedan bloqueados (MENOR_EDAD), principal o reemplazo", () => {
+  const { socioDesdeSorteo } = require("../lib/socios");
+  const fila = { "ID ORIGINAL (CLIENTE)": "1", "ID SELECCIÓN": "QUI-P-0052", "NOMBRE": "X", "CONDICIÓN": "Principal", "EDAD": "4" };
+  assert.equal(socioDesdeSorteo(fila).estadoGestion, "MENOR_EDAD");
+  assert.equal(socioDesdeSorteo({ ...fila, "CONDICIÓN": "Reemplazo" }).estadoGestion, "MENOR_EDAD");
+  assert.equal(socioDesdeSorteo({ ...fila, EDAD: "18" }).estadoGestion, "PENDIENTE");
+  assert.equal(socioDesdeSorteo({ ...fila, EDAD: "NULL" }).estadoGestion, "PENDIENTE");
+});
