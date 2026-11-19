@@ -116,3 +116,10 @@ test("ruta A con actividad confirmada en A1: el texto nombra la actividad del li
   const cambio = conRespuestas(NATURAL, { A1: "NO", T2: "SI" });
   assert.doesNotMatch(vista("A2", cambio).texto, /\{\{actividad\}\}/);
 });
+
+test("SM1 muestra las cooperativas de SM0 también cuando en SM0 se anotó «Otra» con texto", () => {
+  // Con una opción de texto, la selección múltiple se guarda como { valores, texto }.
+  const e = conRespuestas(NATURAL, { SM0: { valores: ["MUSHUC_RUNA", "SAN_FRANCISCO", "C23_JULIO", "OTRA"], texto: "Coop. Pichincha" } });
+  assert.deepEqual(valores(vista("SM1", e)), ["SAN_FRANCISCO", "MUSHUC_RUNA", "OTRA", "OTRA_INST", "SOLO_23"]);
+  assert.match(vista("SM1", e).texto, /recibido servicios/);
+});
