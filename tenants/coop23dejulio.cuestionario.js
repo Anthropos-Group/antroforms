@@ -567,6 +567,19 @@ const cuestionario = {
       texto: "¿En qué cantón realiza principalmente su actividad?",
       ayuda: "SOLO SI FALTA o cambió la actividad. «Varios cantones» debe registrar el principal si lo identifica.",
       config: {
+        // Igual que L3: nombra la actividad principal del socio.
+        variantes: [
+          { si: conActividad("A"), texto: "¿En qué cantón realiza su actividad principal ({{actividad}})?" },
+          {
+            si: { todas: [ruta("A"), { pregunta: "A1A", op: "respondida" }, { no: { pregunta: "A1A", op: "especial" } }] },
+            texto: "¿En qué cantón realiza su actividad principal ({{r:A1A}})?",
+          },
+          {
+            si: { todas: [ruta("A"), { pregunta: "L2", op: "respondida" }, { no: { pregunta: "L2", op: "especial" } }] },
+            texto: "¿En qué cantón realiza su actividad principal ({{r:L2}})?",
+          },
+          { si: ruta("C"), texto: "¿En qué cantón opera principalmente su empresa?" },
+        ],
         opciones: [
           op("MISMO_CANTON", "En el mismo cantón donde vive"),
           op("OTRO_CANTON", "En otro cantón (anote cuál)", { con_texto: true, catalogo: "cantones" }),

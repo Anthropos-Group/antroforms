@@ -134,3 +134,11 @@ test("L3 nombra la actividad principal: la del listado, la nueva de A1A o la de 
   const sinDato = conRespuestas({ datos: { tipo_persona: "NATURAL" } }, { L2: "COMERCIO", T2: "SI" });
   assert.match(vista("L3", sinDato).texto, /\(Comercio \(tienda, local, mercado\)\)/);
 });
+
+test("L4 también nombra la actividad principal", () => {
+  const conf = conRespuestas(NATURAL, { A1: "SI", T2: "SI" });
+  assert.equal(vista("L4", conf).texto, "¿En qué cantón realiza su actividad principal ({{actividad}})?");
+  const cambio = conRespuestas(NATURAL, { A1: "NO", A1A: "CUENTA_PROPIA", T2: "SI" });
+  assert.match(vista("L4", cambio).texto, /\(Cuenta propia \/ negocio propio pequeño\)/);
+  assert.match(vista("L4", conRespuestas(JURIDICA)).texto, /opera principalmente su empresa/);
+});
