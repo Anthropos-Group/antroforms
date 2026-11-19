@@ -51,7 +51,7 @@ const RANGOS_USD = (cero) => [
 const cuestionario = {
   nombre: "Cooperativa 23 de Julio — Caracterización LA/FT 2026",
   guion_apertura:
-    "Buenos días/tardes, ¿hablo con {{NOMBRE}}? Soy {{ENCUESTADOR}} y le llamo en nombre de la Cooperativa de Ahorro y Crédito 23 de Julio, con el apoyo de la empresa Strattos. La cooperativa está haciendo un estudio para conocer mejor cómo trabajan y usan sus servicios sus socios. Dura unos 10 minutos y es voluntaria: puede no responder cualquier pregunta o terminar cuando quiera. No le pediremos cédula ni números de cuenta. Sus respuestas son confidenciales: se identifican con un código y la cooperativa recibe solo resultados agrupados. Si desea verificar esta llamada, puede comunicarse con la cooperativa al [PENDIENTE: teléfono de verificación].",
+    "Buenos días/tardes, ¿hablo con {{NOMBRE}}? Soy {{ENCUESTADOR}} y le llamo en nombre de la Cooperativa de Ahorro y Crédito 23 de Julio, con el apoyo de la empresa Strattos. La cooperativa está haciendo un estudio para conocer mejor cómo trabajan y usan sus servicios sus socios. Dura unos 10 minutos y es voluntaria: puede no responder cualquier pregunta o terminar cuando quiera. No le pediremos cédula ni números de cuenta. Sus respuestas son confidenciales: se identifican con un código y la cooperativa recibe solo resultados agrupados.",
   guion_cierre: "¡Muchas gracias por su tiempo y su colaboración!",
 
   preguntas: [
@@ -380,7 +380,7 @@ const cuestionario = {
     {
       codigo: "SM0", bloque: "Salud de marca", tipo: "opcion_multiple",
       texto: "Le voy a leer algunos nombres de cooperativas de ahorro y crédito. Dígame cuáles conoce, aunque sea de nombre.",
-      ayuda: "CONOCIMIENTO ASISTIDO. Lea los nombres en el orden en que aparecen: el sistema los rota en cada encuesta. Lista PENDIENTE de validar con la cooperativa por ciudad.",
+      ayuda: "CONOCIMIENTO ASISTIDO. Lea los nombres en el orden en que aparecen: el sistema los rota en cada encuesta.",
       config: {
         // Orden distinto por encuesta; «Otra» y «Ninguna» quedan al final.
         rotar: true,
@@ -458,7 +458,7 @@ const cuestionario = {
     {
       codigo: "SM5", bloque: "Salud de marca", tipo: "opcion_multiple",
       texto: "En los próximos 6 meses, ¿tiene previsto abrir o contratar con la Cooperativa 23 de Julio alguno de estos productos o servicios?",
-      ayuda: "Catálogo PENDIENTE de validar con la oferta real de la cooperativa.",
+      ayuda: "Lea los productos y marque los que mencione.",
       config: {
         opciones: [
           op("AHORROS", "Cuenta de ahorros"),
