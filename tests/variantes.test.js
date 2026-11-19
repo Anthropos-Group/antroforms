@@ -123,3 +123,14 @@ test("SM1 muestra las cooperativas de SM0 también cuando en SM0 se anotó «Otr
   assert.deepEqual(valores(vista("SM1", e)), ["SAN_FRANCISCO", "MUSHUC_RUNA", "OTRA", "OTRA_INST", "SOLO_23"]);
   assert.match(vista("SM1", e).texto, /recibido servicios/);
 });
+
+test("L3 nombra la actividad principal: la del listado, la nueva de A1A o la de L2", () => {
+  const conf = conRespuestas(NATURAL, { A1: "SI", T2: "SI" });
+  assert.equal(vista("L3", conf).texto, "¿Hace cuánto tiempo realiza su actividad principal ({{actividad}})?");
+  const cambio = conRespuestas(NATURAL, { A1: "NO", A1A: "AGRICULTOR", T2: "SI" });
+  assert.equal(vista("L3", cambio).texto, "¿Hace cuánto tiempo realiza su actividad principal (Agricultor/a o trabajador/a agropecuario/a)?");
+  const otra = conRespuestas(NATURAL, { A1: "NO", A1A: { valor: "OTRA", texto: "Venta de comida" }, T2: "SI" });
+  assert.match(vista("L3", otra).texto, /\(Venta de comida\)/);
+  const sinDato = conRespuestas({ datos: { tipo_persona: "NATURAL" } }, { L2: "COMERCIO", T2: "SI" });
+  assert.match(vista("L3", sinDato).texto, /\(Comercio \(tienda, local, mercado\)\)/);
+});
