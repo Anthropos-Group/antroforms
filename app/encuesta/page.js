@@ -272,8 +272,15 @@ export default function EncuestaPage() {
   }, []);
 
   useEffect(() => {
+    // Una respuesta de error (p. ej. la base de datos no responde) no es una lista
+    // vacía: se avisa al encuestador en vez de decir que no hay encuestadores.
+    const comoJson = async (r) => {
+      const d = await r.json().catch(() => ({}));
+      if (!r.ok) throw new Error(d.error || `HTTP ${r.status}`);
+      return d;
+    };
     fetchSesion("/api/encuestadores", undefined, sesionExpirada, { reintentos: 2 })
-      .then((r) => r.json())
+      .then(comoJson)
       .then((d) => {
         const activos = (d.encuestadores || []).filter((e) => e.activo);
         setEncuestadores(activos);
@@ -285,14 +292,17 @@ export default function EncuestaPage() {
         }
       })
       .catch((err) => {
-        if (err.message !== "Sesión expirada") setErrorCarga("No se pudo cargar la lista de encuestadores.");
+        if (err.message !== "Sesión expirada") {
+          setErrorCarga("No se pudo cargar la lista de encuestadores: el sistema no logra conectarse con la base de datos. Avisa al administrador y vuelve a intentar en unos minutos.");
+        }
       });
     fetchSesion("/api/clientes/meses", undefined, sesionExpirada, { reintentos: 2 })
       .then((r) => r.json())
       .then((d) => d.mesActivo && setMesesPermitidos([d.mesActivo]))
       .catch(() => {});
     fetchSesion("/api/cuestionarios/activo", undefined, sesionExpirada, { reintentos: 2 })
-      .then((r) => r.json())
+      // 404 = no hay cuestionario activo (se muestra como tal, no como error de conexión).
+      .then((r) => (r.status === 404 ? {} : comoJson(r)))
       .then((d) => setCuestionario(d.preguntas ? d : null))
       .catch((err) => {
         if (err.message !== "Sesión expirada") setErrorCarga("No se pudo cargar el cuestionario. Revisa tu conexión y recarga.");
@@ -693,7 +703,7 @@ export default function EncuestaPage() {
         <div className="card pad">
           <label className="field-label">¿Quién está levantando esta encuesta?</label>
           <div className="option-list">
-            {encuestadores.length === 0 && (
+            {encuestadores.length === 0 && !errorCarga && (
               <div className="empty-state">No hay encuestadores activos registrados.</div>
             )}
             {encuestadores.map((e) => (
