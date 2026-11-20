@@ -904,6 +904,8 @@ export default function EncuestaPage() {
       {step === "cuestionario" && cuestionario && cliente && (
         <div className="card">
           <div className="client-summary">
+            {/* A la vista durante toda la llamada: la encuesta queda a nombre de esta persona. */}
+            <div><span>Encuestador</span><strong style={{ color: "#4338ca" }}>{nombreEncuestador || "—"}</strong></div>
             <div><span>Cliente</span>{cliente.nombre}</div>
             <div><span>Código</span>{cliente.codigo_cliente}</div>
             {cliente.telefono1 && <div><span>Teléfono</span>📞 {cliente.telefono1}</div>}

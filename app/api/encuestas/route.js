@@ -171,6 +171,21 @@ export const POST = conErrores("POST /api/encuestas", async (request) => {
       cliente.codigo_cliente ? `codigo:${cliente.codigo_cliente}` : cliente_twenty_id,
     ]);
 
+    // Idempotencia otra vez, ya con el candado: un reintento que llegó mientras el
+    // primer envío seguía guardándose (base lenta, el navegador cortó a los 30 s)
+    // pasó el chequeo del paso 1 y esperó aquí. Es el mismo envío: se devuelve la
+    // encuesta ya guardada en vez de "ya tiene una encuesta efectiva".
+    if (idempotencyKey) {
+      const { rows: mismo } = await client.query(
+        `select id, completada from encuestas where idempotency_key = $1`,
+        [idempotencyKey]
+      );
+      if (mismo[0]) {
+        await client.query("rollback");
+        return NextResponse.json({ id: mismo[0].id, completada: mismo[0].completada, duplicada: true });
+      }
+    }
+
     const { rows: previas } = await client.query(
       // Mismo registro, o mismo código en el mismo mes de gestión (una encuesta de
       // un mes anterior no impide encuestar la nueva compra del mes en curso).
