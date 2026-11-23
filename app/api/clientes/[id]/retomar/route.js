@@ -2,10 +2,11 @@ import { NextResponse } from "next/server";
 import { getPool } from "../../../../../lib/db";
 import { esUUID, errorJson, conErrores } from "../../../../../lib/http";
 import { tenant } from "../../../../../lib/tenant";
+import { RESULTADOS_CIERRE } from "../../../../../lib/encuesta-logica";
 
 export const dynamic = "force-dynamic";
 
-// Última encuesta a medias de un cliente (cerrada como «parcial» o «cita»), para
+// Última gestión sin terminar de un cliente (parcial, cita, correo enviado…), para
 // retomarla donde quedó: otro día, con otra persona de la empresa o desde otro
 // dispositivo. Solo para clientes con `retomarParciales` en su configuración.
 // Cada cierre guarda todo lo respondido hasta ese momento, así que basta la última.
@@ -26,7 +27,7 @@ export const GET = conErrores("GET /api/clientes/[id]/retomar", async (_request,
     [id]
   );
   const ultima = rows[0];
-  if (!ultima || !["parcial", "cita"].includes(ultima.resultado)) return NextResponse.json({ encuesta: null });
+  if (!ultima || !RESULTADOS_CIERRE.includes(ultima.resultado)) return NextResponse.json({ encuesta: null });
 
   const { rows: resp } = await pool.query(`select pregunta_id, valor from respuestas where encuesta_id = $1`, [ultima.id]);
   return NextResponse.json({

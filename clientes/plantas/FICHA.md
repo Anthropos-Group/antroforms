@@ -28,8 +28,8 @@ Cuatro segmentos de **una sola encuesta**, en el orden **6 → 5 → 4 → 2**:
 | IV Innovación | `4_Innovation.docx` | IN01–IN15 (tablas 1–7), IN13 función, IN16–18 abiertas, IN19 participación | 75 + 1 + 3 + 9 |
 | II Cadena de suministro | `2_Supply_Chain.docx` | SC01–SC12 (tablas 1–7), SC13 departamento, SC14 %, SC15 participación, SC16–22 abiertas | 55 + 1 + 1 + 9 + 7 |
 
-Digitalizado en `tenants/plantas.cuestionario.js`: 261 preguntas (233 de escala en 37 tablas,
-18 abiertas, 4 de opción única, 1 numérica, 5 indicaciones). Duración estimada: 50–70 min.
+Digitalizado en `tenants/plantas.cuestionario.js`: 258 preguntas (233 de escala en 37 tablas,
+15 abiertas, 4 de opción única, 1 numérica, 5 indicaciones). Duración estimada: 50–70 min.
 
 ## Campos de la muestra → Twenty (`person`)
 
@@ -53,7 +53,8 @@ _La transformación de la muestra se escribe cuando llegue la muestra de prueba 
 
 ## Estados de gestión
 
-PENDIENTE · COMPLETA · PARCIAL · CITA · NO_CONTACTO · NO_CONTESTA · RECHAZO ·
+PENDIENTE · PRIMERA_LLAMADA · CORREO_ENVIADO · ESPERANDO_CORREO · WHATSAPP_ENVIADO ·
+CITA (cita agendada) · COMPLETA · PARCIAL · NO_CONTACTO · NO_CONTESTA · RECHAZO ·
 NO_INTERESADO · NUMERO_INCORRECTO (incluye correo incorrecto) · INFORMANTE_NO_AUTORIZADO ·
 FUERA_UNIVERSO. Salen del buscador: RECHAZO, NO_INTERESADO, NUMERO_INCORRECTO,
 FUERA_UNIVERSO y COMPLETA.
@@ -63,24 +64,30 @@ FUERA_UNIVERSO y COMPLETA.
 - **CANAL** (primera pregunta): llamada, WhatsApp o correo. Solo se registra; no hay
   envíos automáticos ni integración con WhatsApp/correo (no es parte del alcance).
 - **CI1** consentimiento: «No acepta» termina la encuesta como RECHAZO.
-- **NS/NR en todas las preguntas** (exigencia legal), excepto canal y consentimiento.
-  Se registran aparte, nunca como número.
-- **Todas obligatorias** (`avanceObligatorio`): no se avanza sin responder; NS/NR cuentan.
+- **Cerradas: obligatorias con NS/NR** (exigencia legal), excepto canal y consentimiento.
+  NS/NR se registran aparte, nunca como número; no se avanza sin responder.
+- **Abiertas: opcionales** (PMO): se pueden dejar en blanco y no llevan NS/NR.
+- **Una sola persona** de la empresa responde toda la encuesta (PMO): nombre y cargo al inicio (INF).
+- **Gestión por canal**: el encuestador cierra sin empezar o a medias con Primera llamada,
+  Correo enviado, Esperando respuesta de correo, WhatsApp enviado, Cita agendada, Parcial,
+  No contesta, No contacto, No interesado, Número incorrecto, Informante no autorizado o
+  Fuera del universo. Cada gestión cuenta como un intento.
 - **Tablas 1–7**: cada enunciado (LM01, FC01…) se muestra en una pantalla con todas sus
   afirmaciones; cada afirmación es una columna en la exportación (`LM01_01`…).
 - **Participación de departamentos** (FC10, IN19, SC15): 1–5 de menor a mayor aporte;
   **0 = sin información** (el «en blanco» del papel). «Otros» con 1–5 pide especificar.
 - **IN02 «Otros motivos»**: si la frecuencia es mayor que 1 (Nunca), pide especificar.
-- **Retoma**: cerrar como «Parcial» o «Cita» guarda lo respondido; al abrir de nuevo la
+- **Retoma**: cualquier cierre sin terminar guarda lo respondido; al abrir de nuevo la
   empresa (cualquier encuestador, cualquier dispositivo) se carga y sigue donde quedó.
 
 ## Decisiones tomadas
 
 1. Las dos últimas afirmaciones de LM01 («Organizar sus oficinas…», «Utilizar métodos
    electrónicos…») venían sin escala en el Word (formato dañado): van con 1–7 (OK del usuario).
-2. Cada sección empieza con «Nombre y cargo de quien responde esta sección» (INF_6, INF_5,
-   INF_4, INF_2). Así sirve tanto si contesta una sola persona como si cada sección la
-   contesta alguien distinto (punto aún sin confirmar por el cliente).
+2. Una sola persona responde toda la encuesta (PMO); se registra una vez al inicio (INF).
+6. Abiertas opcionales; cerradas obligatorias con NS/NR (PMO).
+7. «Primera llamada» se interpretó como resultado de gestión: se presentó el estudio y queda
+   pendiente responder (junto con los estados de llamada existentes).
 3. FC09 (forma de pago) y SC12 (invierno/verano) se preguntan tal cual el documento.
 4. Erratas corregidas: «Always» → «Siempre» (IN10), «Alredor» → «Alrededor» (IN12),
    «Nivel moderada» → «Nivel moderado» (FC05).
@@ -89,7 +96,6 @@ FUERA_UNIVERSO y COMPLETA.
 
 ## Preguntas abiertas
 
-- ¿Un solo informante por empresa o uno por sección? (no bloquea: ver decisión 2).
 - Nombre comercial del cliente → slug definitivo.
 - Correo del administrador, URL del Twenty, muestra de prueba.
 - ¿Cuotas por ciudad o sector? (por ahora la cuota del reporte = tamaño de la muestra).

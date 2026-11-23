@@ -9,12 +9,13 @@
 // - Cada afirmación es una pregunta propia (una columna en la exportación); las de un
 //   mismo enunciado (LM01, FC01…) comparten `config.grupo` y se muestran juntas en
 //   una tabla con la escala 1–7.
-// - Todas las preguntas admiten «No sabe» y «Prefiere no responder» (NS/NR).
+// - Las preguntas cerradas admiten «No sabe» y «Prefiere no responder» (NS/NR) y son
+//   obligatorias; las abiertas se pueden dejar en blanco (PMO).
 // - Las dos últimas afirmaciones de LM01 venían sin escala en el Word: van con 1–7.
 // - Participación de departamentos (FC10, IN19, SC15): 1–5 de menor a mayor aporte;
 //   0 = sin información de ese departamento (el «en blanco» del papel).
-// - Cada sección empieza registrando quién la responde (nombre y cargo), porque
-//   puede contestarla una persona distinta de la empresa.
+// - Una sola persona de la empresa responde toda la encuesta (PMO): se registra su
+//   nombre y cargo al inicio.
 
 const NS_NR = ["NS", "NR"];
 const op = (valor, etiqueta, extra = {}) => ({ valor, etiqueta, ...extra });
@@ -40,20 +41,10 @@ function escalaSola(codigo, bloque, texto, etiquetas) {
   return { codigo, bloque, tipo: "escala", texto: `${codigo}. ${texto}`, config: { min: 1, max: 7, etiquetas, especiales: NS_NR } };
 }
 
+// Abiertas: se pueden dejar en blanco (no llevan NS/NR).
+const ABIERTA = { opcional: true };
 function abierta(codigo, bloque, texto) {
-  return { codigo, bloque, tipo: "texto_abierto", texto: `${codigo}. ${texto}`, config: { especiales: NS_NR } };
-}
-
-// Quién contesta la sección (puede ser una persona distinta en cada una).
-function informante(seccion, bloque) {
-  return {
-    codigo: `INF_${seccion}`,
-    bloque,
-    tipo: "texto_abierto",
-    texto: "Nombre y cargo de la persona que responde esta sección",
-    ayuda: "Si es la misma persona de la sección anterior, anótelo igual (nombre y cargo).",
-    config: { especiales: NS_NR },
-  };
+  return { codigo, bloque, tipo: "texto_abierto", texto: `${codigo}. ${texto}`, config: ABIERTA };
 }
 
 function indicacion(codigo, bloque, texto, ayuda) {
@@ -87,7 +78,7 @@ function participacion(codigo, bloque, departamentos) {
       bloque,
       tipo: "texto_abierto",
       texto: `${codigo}. «Otros»: especifique qué otro departamento participó`,
-      config: { especiales: NS_NR },
+      config: ABIERTA,
       mostrar_si: { pregunta: otros, op: ">", valor: 0 },
     },
   ];
@@ -126,7 +117,6 @@ const ENTIDADES_EXTERNAS = [
 const B6 = "VI Liderazgo";
 const seccion6 = [
   indicacion("S6", B6, "Sección VI: Liderazgo", "Lea: «El equipo directivo de la planta es el pequeño grupo de altos ejecutivos de la misma.»"),
-  informante("6", B6),
   ...tabla("LM01", B6, "Indique en qué medida los siguientes comportamientos se observan comúnmente entre todos los miembros del equipo directivo de la planta:", NIVEL, [
     "Asignar tareas y explicar las responsabilidades del trabajo.",
     "Explicar los objetivos de la tarea y las expectativas de desempeño.",
@@ -165,7 +155,6 @@ const seccion5 = [
     "S5", B5, "Sección V: Cultura de planta",
     "Lea: «La cultura de planta es un sistema de normas compartidas que definen las actitudes y comportamientos adecuados para guiar al personal de la planta. Responda a las siguientes preguntas en relación con la mayoría del personal de la planta (operadores, gerentes, ingenieros, etc.).»"
   ),
-  informante("5", B5),
   ...tabla("FC01", B5, "Las siguientes afirmaciones se enfocan en el uso compartido de la racionalidad frente a la intuición en la planta.", NIVEL, [
     "Los cálculos financieros/numéricos justifican la mayoría de actividades e inversiones.",
     "Se utilizan sobre todo medidas cuantitativas para emitir dictámenes.",
@@ -244,7 +233,6 @@ const seccion4 = [
     "S4", B4, "Sección IV: Innovación",
     "Lea: «En esta sección se pregunta por el conjunto de innovaciones de proceso que se han producido en su planta en los últimos 2 años. Las innovaciones de proceso son nuevos métodos de manufactura en su planta.»"
   ),
-  informante("4", B4),
   ...tabla("IN01", B4, "En los últimos 2 años, indique con qué frecuencia se aplicaron las siguientes afirmaciones al conjunto de innovaciones de proceso en su planta:", FRECUENCIA, [
     "Nueva en nuestra planta, pero utilizada por otros (otras plantas o empresas).",
     "Aprovechamiento de la tecnología existente.",
@@ -268,7 +256,7 @@ const seccion4 = [
   {
     codigo: "IN02_OTRO", bloque: B4, tipo: "texto_abierto",
     texto: "IN02. «Otros motivos»: por favor, indique cuáles",
-    config: { especiales: NS_NR },
+    config: ABIERTA,
     mostrar_si: { pregunta: "IN02_08", op: ">", valor: 1 },
   },
   ...tabla("IN03", B4, "Indique el desempeño de su planta en comparación con una planta de referencia:", COMPARACION, [
@@ -345,7 +333,6 @@ const seccion2 = [
     "S2", B2, "Sección II: Gestión de la cadena de suministro",
     "Lea: «Estas preguntas están relacionadas con el uso de nuevas tecnologías digitales en los procesos de gestión de la cadena de suministro. En este contexto, se consideran como tecnologías digitales novedosas las tecnologías informáticas que son nuevas en la planta (en los últimos tres años) para el almacenamiento, el procesamiento y el intercambio de información en forma digital.»"
   ),
-  informante("2", B2),
   ...tabla("SC01", B2, `${DIGITAL} de PLAN (es decir, en la planificación de la demanda/oferta para cumplir los objetivos empresariales) con el fin de:`, NIVEL, [
     "Colaborar entre ventas, mercadeo, fabricación, logística y otras funciones en la planificación de nuestra estrategia de operaciones.",
     "Desarrollar nuestro proceso de planificación de la demanda.",
@@ -470,7 +457,7 @@ const seccion2 = [
 const cuestionario = {
   nombre: "Encuesta a plantas de manufactura — Liderazgo, cultura, innovación y cadena de suministro",
   guion_apertura:
-    "Buenos días/tardes, ¿hablo con {{NOMBRE}}? Soy {{ENCUESTADOR}} y le contacto en nombre de Strattos para un estudio sobre las prácticas de gestión de plantas de manufactura. La encuesta tiene cuatro secciones (liderazgo, cultura de planta, innovación y cadena de suministro) y puede responderse en varios momentos o con distintas personas de la planta. Es voluntaria: puede no responder cualquier pregunta. Sus respuestas son confidenciales y se reportan solo de forma agrupada.",
+    "Buenos días/tardes, ¿hablo con {{NOMBRE}}? Soy {{ENCUESTADOR}} y le contacto en nombre de Strattos para un estudio sobre las prácticas de gestión de plantas de manufactura. La encuesta tiene cuatro secciones (liderazgo, cultura de planta, innovación y cadena de suministro) y la responde una sola persona de la planta; si lo necesita, podemos continuarla en otro momento. Es voluntaria: puede no responder cualquier pregunta. Sus respuestas son confidenciales y se reportan solo de forma agrupada.",
   guion_cierre: "¡Muchas gracias por su tiempo y su colaboración!",
 
   preguntas: [
@@ -484,13 +471,19 @@ const cuestionario = {
     {
       codigo: "CI1", bloque: "Contacto", tipo: "opcion_unica",
       texto: "¿La empresa acepta participar en el estudio?",
-      ayuda: "Si no acepta, la encuesta termina y queda como RECHAZO. Si pide responder en otro momento, cierre como «Cita».",
+      ayuda: "Si no acepta, la encuesta termina y queda como RECHAZO. Si pide responder en otro momento, cierre como «Cita agendada».",
       config: { opciones: [op("SI", "Sí, acepta"), op("NO", "No acepta → agradecer y terminar")], resultado: "rechazo" },
       termina_si: { pregunta: "CI1", op: "=", valor: "NO" },
     },
+    {
+      codigo: "INF", bloque: "Contacto", tipo: "texto_abierto",
+      texto: "Nombre y cargo de la persona que responde la encuesta",
+      ayuda: "Una sola persona de la empresa responde toda la encuesta.",
+      config: ABIERTA,
+    },
     indicacion(
       "IND_GENERAL", "Contacto", "Indicación general",
-      "Escala 1 a 7 en todas las tablas (lea los extremos y el punto medio). «No sabe» (NS) y «Prefiere no responder» (NR) se registran aparte, nunca como un número. Puede cerrar como «Parcial» o «Cita» en cualquier momento: al volver a abrir la empresa, la encuesta se retoma donde quedó."
+      "Escala 1 a 7 en todas las tablas (lea los extremos y el punto medio). «No sabe» (NS) y «Prefiere no responder» (NR) se registran aparte, nunca como un número. Las preguntas abiertas se pueden dejar en blanco. Puede cerrar la gestión en cualquier momento (parcial, cita agendada, correo o WhatsApp enviado…): al volver a abrir la empresa, la encuesta se retoma donde quedó."
     ),
     ...seccion6,
     ...seccion5,

@@ -29,6 +29,10 @@ const ETIQUETAS_CIERRE = {
   numero_incorrecto: "Número incorrecto",
   informante_no_autorizado: "Informante no autorizado",
   fuera_universo: "Fuera del universo",
+  primera_llamada: "Primera llamada (presentación del estudio)",
+  correo_enviado: "Correo enviado",
+  esperando_correo: "Esperando respuesta de correo",
+  whatsapp_enviado: "WhatsApp enviado",
 };
 
 function armarGuion(texto, valores) {
@@ -484,7 +488,7 @@ export default function EncuestaPage() {
     });
   }
 
-  // Si el cliente tiene una encuesta cerrada como «parcial» o «cita», se cargan sus
+  // Si la última gestión del cliente quedó sin terminar (parcial, cita, correo…), se cargan sus
   // respuestas para seguir donde quedó (otro día, otra persona, otro dispositivo).
   async function retomarParcial(c) {
     const id = c.id_twenty;
@@ -1020,7 +1024,7 @@ export default function EncuestaPage() {
             {retomada && (
               <div className="script-box" style={{ marginBottom: 12, background: "#eff6ff", borderColor: "#bfdbfe" }}>
                 <span className="script-label">Encuesta retomada</span>
-                Se cargaron {retomada.total} respuestas de la gestión anterior ({retomada.resultado === "cita" ? "cita" : "parcial"}
+                Se cargaron {retomada.total} respuestas de la gestión anterior ({ETIQUETAS_CIERRE[retomada.resultado] || retomada.resultado}
                 {retomada.encuestador ? `, ${retomada.encuestador}` : ""}, {new Date(retomada.fecha).toLocaleString("es-EC")}
                 {retomada.ultimo_bloque ? `; quedó en ${retomada.ultimo_bloque}` : ""}). Continúe desde la primera pregunta pendiente.
               </div>
@@ -1324,7 +1328,7 @@ export default function EncuestaPage() {
                           <textarea
                             value={typeof respuestas[preguntaActual.id] === "string" ? respuestas[preguntaActual.id] : ""}
                             onChange={(e) => actualizarRespuesta(preguntaActual.id, e.target.value)}
-                            placeholder="Escribe la respuesta…"
+                            placeholder={preguntaActual.config?.opcional ? "Escribe la respuesta (opcional: puede quedar en blanco)…" : "Escribe la respuesta…"}
                           />
                           <BotonesEspeciales
                             pregunta={preguntaActual}

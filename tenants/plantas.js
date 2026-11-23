@@ -37,9 +37,15 @@ module.exports = {
     // Solo se encuestan empresas cargadas desde la muestra (con código).
     requiereCodigo: true,
     estados: { completada: "COMPLETA", rechazo: "RECHAZO" },
+    // Resultados con los que se cierra una gestión sin terminar la encuesta (en este
+    // orden se le ofrecen al encuestador).
     estadosCierre: {
-      parcial: "PARCIAL",
+      primera_llamada: "PRIMERA_LLAMADA",
+      correo_enviado: "CORREO_ENVIADO",
+      esperando_correo: "ESPERANDO_CORREO",
+      whatsapp_enviado: "WHATSAPP_ENVIADO",
       cita: "CITA",
+      parcial: "PARCIAL",
       no_contesta: "NO_CONTESTA",
       no_contacto: "NO_CONTACTO",
       no_interesado: "NO_INTERESADO",
@@ -73,8 +79,12 @@ module.exports = {
       opciones: [
         ["PENDIENTE", "Pendiente", "gray"],
         ["COMPLETA", "Completa", "green"],
+        ["PRIMERA_LLAMADA", "Primera llamada", "sky"],
+        ["CORREO_ENVIADO", "Correo enviado", "turquoise"],
+        ["ESPERANDO_CORREO", "Esperando respuesta de correo", "turquoise"],
+        ["WHATSAPP_ENVIADO", "WhatsApp enviado", "green"],
+        ["CITA", "Cita agendada", "blue"],
         ["PARCIAL", "Parcial", "yellow"],
-        ["CITA", "Cita", "blue"],
         ["NO_CONTACTO", "No contacto", "orange"],
         ["NO_CONTESTA", "No contesta", "yellow"],
         ["RECHAZO", "Rechazo", "red"],
@@ -101,8 +111,8 @@ module.exports = {
   gestionMensual: false,
   // Todas las preguntas son obligatorias (NS/NR cuentan como respuesta).
   avanceObligatorio: true,
-  // Una encuesta cerrada como «parcial» o «cita» se retoma donde quedó al volver a
-  // abrir la empresa (otro día, otra persona de la planta u otro dispositivo).
+  // Una gestión cerrada sin terminar (parcial, cita, correo enviado…) se retoma donde
+  // quedó al volver a abrir la empresa (otro día u otro dispositivo).
   retomarParciales: true,
   metaPorGrupo: false,
 

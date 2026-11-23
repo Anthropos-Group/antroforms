@@ -15,6 +15,10 @@ const ETIQUETA_RESULTADO = {
   numero_incorrecto: "Número incorrecto",
   informante_no_autorizado: "Informante no autorizado",
   fuera_universo: "Fuera del universo",
+  primera_llamada: "Primera llamada",
+  correo_enviado: "Correo enviado",
+  esperando_correo: "Esperando correo",
+  whatsapp_enviado: "WhatsApp enviado",
   cortada: "Cortada",
 };
 
