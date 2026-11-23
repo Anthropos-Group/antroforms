@@ -54,8 +54,8 @@ Carga: `TENANT=puce node scripts/cargar-empresas.js --base=<archivo>` (simula; `
 
 | En la encuesta | Campo en Twenty |
 |---|---|
-| GD1 «¿Piden enviar la información a otra persona?» → CD_NOMBRE, CD_TELEFONO, CD_CORREO | `contactoDerivadoNombre/Telefono/Correo` |
-| GC1 «¿Piden hacerla otro día o presencial?» → CITA_FECHA, CITA_HORA, CITA_MODALIDAD | `fechaCita`, `horaCita`, `modalidadCita` |
+| GESTION «¿qué pasó en este contacto?» = DERIVA → CD_NOMBRE, CD_TELEFONO, CD_CORREO | `contactoDerivadoNombre/Telefono/Correo` |
+| GESTION = AGENDA → CITA_FECHA, CITA_HORA, CITA_MODALIDAD | `fechaCita`, `horaCita`, `modalidadCita` |
 | ENC_NOMBRE, ENC_CARGO (obligatorios), ENC_TELEFONO (opcional) | `encuestadoNombre/Cargo/Telefono` |
 
 Las respuestas de la encuesta **no** van a Twenty.
@@ -77,6 +77,15 @@ quedan para la guía de encuestadores. Del documento salen: universo = manufactu
 y grandes de Pichincha; informante = gerente de producción/operaciones u otro informante
 clave; carta del Decanato y consentimiento antes de iniciar (CI1); hasta 3 recordatorios cada
 7–10 días; no recontactar a quien rechaza. Canal «Presencial» agregado.
+
+## Pantallas para el encuestador
+
+- Recuadro amarillo «Léalo al encuestado» = speech; recuadro gris «Nota (no se lee)» = solo para el encuestador.
+- GESTION (registro, no se lee): responde ahora · deriva a otra persona · pide agendar.
+- IND_GENERAL es el speech de cómo responder la escala 1–7; S6/S5/S4/S2 son frases de transición
+  con la definición que el encuestado necesita (equipo directivo, cultura de planta, innovación de
+  proceso, tecnologías digitales).
+- Duración estimada por teléfono: 50–60 min (233 afirmaciones de escala + abiertas opcionales).
 
 ## Reglas
 

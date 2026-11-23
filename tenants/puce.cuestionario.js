@@ -16,9 +16,12 @@
 //   0 = sin información de ese departamento (el «en blanco» del papel).
 // - Una sola persona de la empresa responde toda la encuesta (PMO): al iniciar se
 //   registran su nombre y cargo (obligatorios) y su teléfono (opcional).
-// - Proceso de la PMO (Proceso_de_encuesta.docx): antes de iniciar, si la empresa
-//   deriva a otra persona o pide agendar, se registran ese contacto y la cita
-//   (bloque «Gestión», opcional). Estos datos se copian también a Twenty.
+// - Proceso de la PMO (Proceso_de_encuesta.docx): antes de iniciar, el encuestador
+//   registra qué pasó en el contacto (GESTION): responde ahora, deriva a otra
+//   persona (se anotan sus datos) o pide agendar (se anota la cita). Esos datos se
+//   copian también a Twenty.
+// - Las pantallas sin respuesta separan lo que se lee en voz alta (speech) de las
+//   notas para el encuestador.
 
 const NS_NR = ["NS", "NR"];
 const op = (valor, etiqueta, extra = {}) => ({ valor, etiqueta, ...extra });
@@ -50,8 +53,10 @@ function abierta(codigo, bloque, texto) {
   return { codigo, bloque, tipo: "texto_abierto", texto: `${codigo}. ${texto}`, config: ABIERTA };
 }
 
-function indicacion(codigo, bloque, texto, ayuda) {
-  return { codigo, bloque, tipo: "informativa", texto, ayuda };
+// Pantalla sin respuesta: `speech` es lo que el encuestador lee en voz alta
+// (recuadro «Léalo al encuestado»); `nota` es solo para el encuestador (no se lee).
+function pantalla(codigo, bloque, titulo, { speech, nota } = {}) {
+  return { codigo, bloque, tipo: "informativa", texto: titulo, ayuda: nota, config: { speech, nota: true } };
 }
 
 // Participación de cada departamento al responder el módulo: 0 = sin información
@@ -119,7 +124,9 @@ const ENTIDADES_EXTERNAS = [
 // --- Sección VI: Liderazgo ----------------------------------------------------
 const B6 = "VI Liderazgo";
 const seccion6 = [
-  indicacion("S6", B6, "Sección VI: Liderazgo", "Lea: «El equipo directivo de la planta es el pequeño grupo de altos ejecutivos de la misma.»"),
+  pantalla("S6", B6, "Sección VI · Liderazgo", {
+    speech: "Empezamos con preguntas sobre el liderazgo en la planta. Cuando le mencione al «equipo directivo de la planta», me refiero al pequeño grupo de altos ejecutivos que la dirigen.",
+  }),
   ...tabla("LM01", B6, "Indique en qué medida los siguientes comportamientos se observan comúnmente entre todos los miembros del equipo directivo de la planta:", NIVEL, [
     "Asignar tareas y explicar las responsabilidades del trabajo.",
     "Explicar los objetivos de la tarea y las expectativas de desempeño.",
@@ -154,10 +161,9 @@ const seccion6 = [
 // --- Sección V: Cultura de planta -----------------------------------------------
 const B5 = "V Cultura de planta";
 const seccion5 = [
-  indicacion(
-    "S5", B5, "Sección V: Cultura de planta",
-    "Lea: «La cultura de planta es un sistema de normas compartidas que definen las actitudes y comportamientos adecuados para guiar al personal de la planta. Responda a las siguientes preguntas en relación con la mayoría del personal de la planta (operadores, gerentes, ingenieros, etc.).»"
-  ),
+  pantalla("S5", B5, "Sección V · Cultura de planta", {
+    speech: "Ahora vamos con la cultura de la planta, es decir, las normas compartidas que orientan las actitudes y el comportamiento del personal. Responda pensando en la mayoría del personal de la planta: operadores, gerentes, ingenieros, etc.",
+  }),
   ...tabla("FC01", B5, "Las siguientes afirmaciones se enfocan en el uso compartido de la racionalidad frente a la intuición en la planta.", NIVEL, [
     "Los cálculos financieros/numéricos justifican la mayoría de actividades e inversiones.",
     "Se utilizan sobre todo medidas cuantitativas para emitir dictámenes.",
@@ -232,10 +238,10 @@ const seccion5 = [
 // --- Sección IV: Innovación -----------------------------------------------------
 const B4 = "IV Innovación";
 const seccion4 = [
-  indicacion(
-    "S4", B4, "Sección IV: Innovación",
-    "Lea: «En esta sección se pregunta por el conjunto de innovaciones de proceso que se han producido en su planta en los últimos 2 años. Las innovaciones de proceso son nuevos métodos de manufactura en su planta.»"
-  ),
+  pantalla("S4", B4, "Sección IV · Innovación", {
+    speech: "Ahora le preguntaré por las innovaciones de proceso de su planta en los últimos 2 años, es decir, los nuevos métodos de manufactura que se han incorporado.",
+    nota: "«Innovación de proceso» = nuevo método de manufactura en la planta (no un producto nuevo). Si el encuestado duda, repítale esta definición.",
+  }),
   ...tabla("IN01", B4, "En los últimos 2 años, indique con qué frecuencia se aplicaron las siguientes afirmaciones al conjunto de innovaciones de proceso en su planta:", FRECUENCIA, [
     "Nueva en nuestra planta, pero utilizada por otros (otras plantas o empresas).",
     "Aprovechamiento de la tecnología existente.",
@@ -332,10 +338,9 @@ const seccion4 = [
 const B2 = "II Cadena de suministro";
 const DIGITAL = "¿En qué medida se utilizan las tecnologías digitales en el proceso";
 const seccion2 = [
-  indicacion(
-    "S2", B2, "Sección II: Gestión de la cadena de suministro",
-    "Lea: «Estas preguntas están relacionadas con el uso de nuevas tecnologías digitales en los procesos de gestión de la cadena de suministro. En este contexto, se consideran como tecnologías digitales novedosas las tecnologías informáticas que son nuevas en la planta (en los últimos tres años) para el almacenamiento, el procesamiento y el intercambio de información en forma digital.»"
-  ),
+  pantalla("S2", B2, "Sección II · Cadena de suministro", {
+    speech: "Por último, le preguntaré por el uso de tecnologías digitales en la cadena de suministro. Me refiero a las herramientas informáticas que la planta incorporó en los últimos 3 años para guardar, procesar o compartir información.",
+  }),
   ...tabla("SC01", B2, `${DIGITAL} de PLAN (es decir, en la planificación de la demanda/oferta para cumplir los objetivos empresariales) con el fin de:`, NIVEL, [
     "Colaborar entre ventas, mercadeo, fabricación, logística y otras funciones en la planificación de nuestra estrategia de operaciones.",
     "Desarrollar nuestro proceso de planificación de la demanda.",
@@ -473,54 +478,57 @@ const cuestionario = {
       config: { opciones: [op("LLAMADA", "Llamada"), op("WHATSAPP", "WhatsApp"), op("CORREO", "Correo"), op("PRESENCIAL", "Presencial")] },
     },
 
-    // --- Gestión del contacto (proceso de la PMO): opcional, antes de iniciar -------
-    // Se llena si la empresa deriva a otra persona o pide agendar. Luego se cierra la
-    // gestión con «Correo enviado», «Cita»… y estos datos quedan también en Twenty.
+    // --- Gestión del contacto (proceso de la PMO), antes de iniciar ---------------
+    // Si la empresa deriva a otra persona o pide agendar, se anotan sus datos y se
+    // cierra la gestión con «Correo enviado», «Cita»…; estos datos van también a Twenty.
     {
-      codigo: "GD1", bloque: "Gestión", tipo: "opcion_unica",
-      texto: "REGISTRO DEL ENCUESTADOR (no se lee): ¿la empresa pidió enviar la información o coordinar con otra persona?",
-      ayuda: "Opcional. Si la empresa derivó a otra persona, marque «Sí» y anote sus datos; si no, continúe.",
-      config: { opciones: [op("SI", "Sí"), op("NO", "No")], opcional: true },
+      codigo: "GESTION", bloque: "Gestión", tipo: "opcion_unica",
+      texto: "REGISTRO DEL ENCUESTADOR (no se lee): ¿qué pasó en este contacto?",
+      ayuda:
+        "Marque lo que ocurrió y continúe. Si no contestan, el número está errado o no quieren participar, use «Cerrar la llamada sin terminar» al final de la pantalla.",
+      config: {
+        opciones: [
+          op("RESPONDE", "La persona indicada atiende y puede responder ahora → continuar con la encuesta"),
+          op("DERIVA", "Me piden enviar la información o hablar con otra persona → anotar sus datos"),
+          op("AGENDA", "Piden hacer la encuesta otro día u hora, o de forma presencial → anotar la cita"),
+        ],
+      },
     },
     {
       codigo: "CD_NOMBRE", bloque: "Gestión", tipo: "texto_abierto",
-      texto: "Otro contacto: nombre de la persona a contactar",
-      config: ABIERTA, mostrar_si: { pregunta: "GD1", op: "=", valor: "SI" },
+      texto: "Otro contacto: nombre (y cargo, si lo sabe) de la persona a la que derivan",
+      config: ABIERTA, mostrar_si: { pregunta: "GESTION", op: "=", valor: "DERIVA" },
     },
     {
       codigo: "CD_TELEFONO", bloque: "Gestión", tipo: "texto_abierto",
       texto: "Otro contacto: números de teléfono",
-      config: ABIERTA, mostrar_si: { pregunta: "GD1", op: "=", valor: "SI" },
+      config: ABIERTA, mostrar_si: { pregunta: "GESTION", op: "=", valor: "DERIVA" },
     },
     {
       codigo: "CD_CORREO", bloque: "Gestión", tipo: "texto_abierto",
       texto: "Otro contacto: correo electrónico",
-      config: ABIERTA, mostrar_si: { pregunta: "GD1", op: "=", valor: "SI" },
-    },
-    {
-      codigo: "GC1", bloque: "Gestión", tipo: "opcion_unica",
-      texto: "REGISTRO DEL ENCUESTADOR (no se lee): ¿la empresa pidió hacer la encuesta otro día o de forma presencial?",
-      ayuda: "Opcional. Si pidió agendar, marque «Sí», anote la cita y cierre la gestión como «Cita»; si no, continúe.",
-      config: { opciones: [op("SI", "Sí"), op("NO", "No")], opcional: true },
+      ayuda: "Luego envíe la información y cierre la gestión como «Correo enviado» o «WhatsApp enviado».",
+      config: ABIERTA, mostrar_si: { pregunta: "GESTION", op: "=", valor: "DERIVA" },
     },
     {
       codigo: "CITA_FECHA", bloque: "Gestión", tipo: "texto_abierto",
-      texto: "Fecha de la cita (ej.: 28/11/2026)",
-      config: ABIERTA, mostrar_si: { pregunta: "GC1", op: "=", valor: "SI" },
+      texto: "Cita: fecha acordada (ej.: 28/11/2026)",
+      config: ABIERTA, mostrar_si: { pregunta: "GESTION", op: "=", valor: "AGENDA" },
     },
     {
       codigo: "CITA_HORA", bloque: "Gestión", tipo: "texto_abierto",
-      texto: "Hora de la cita (ej.: 10:30)",
-      config: ABIERTA, mostrar_si: { pregunta: "GC1", op: "=", valor: "SI" },
+      texto: "Cita: hora acordada (ej.: 10:30)",
+      config: ABIERTA, mostrar_si: { pregunta: "GESTION", op: "=", valor: "AGENDA" },
     },
     {
       codigo: "CITA_MODALIDAD", bloque: "Gestión", tipo: "opcion_unica",
-      texto: "REGISTRO DEL ENCUESTADOR: ¿cómo se hará la encuesta en la cita?",
+      texto: "Cita: ¿cómo se hará la encuesta?",
+      ayuda: "Luego cierre la gestión como «Cita». Cuando llegue la cita, abra la empresa, cambie la respuesta de arriba a «puede responder ahora» y continúe.",
       config: {
         opciones: [op("PRESENCIAL", "Presencial"), op("LLAMADA", "Llamada"), op("WHATSAPP", "WhatsApp"), op("CORREO", "Correo")],
         opcional: true,
       },
-      mostrar_si: { pregunta: "GC1", op: "=", valor: "SI" },
+      mostrar_si: { pregunta: "GESTION", op: "=", valor: "AGENDA" },
     },
     {
       codigo: "CI1", bloque: "Contacto", tipo: "opcion_unica",
@@ -544,10 +552,10 @@ const cuestionario = {
       texto: "Número de contacto del encuestado",
       config: ABIERTA,
     },
-    indicacion(
-      "IND_GENERAL", "Contacto", "Indicación general",
-      "Escala 1 a 7 en todas las tablas (lea los extremos y el punto medio). «No sabe» (NS) y «Prefiere no responder» (NR) se registran aparte, nunca como un número. Las preguntas abiertas se pueden dejar en blanco. Puede cerrar la gestión en cualquier momento (parcial, cita agendada, correo o WhatsApp enviado…): al volver a abrir la empresa, la encuesta se retoma donde quedó."
-    ),
+    pantalla("IND_GENERAL", "Encuestado", "Cómo responder", {
+      speech: "A continuación le leeré una serie de afirmaciones. Para cada una, indíqueme un número del 1 al 7, donde 1 es el valor más bajo y 7 el más alto; en cada grupo le diré qué significan los extremos. Si alguna no la sabe o prefiere no responderla, solo dígamelo. Le pedimos responder con total sinceridad: no hay respuestas correctas ni incorrectas.",
+      nota: "En cada tabla lea el enunciado y los extremos de la escala (están arriba de las afirmaciones). «No sabe» y «Prefiere no responder» se marcan con NS y NR. Las preguntas abiertas se pueden dejar en blanco. Puede cerrar la gestión en cualquier momento: al volver a abrir la empresa, la encuesta sigue donde quedó.",
+    }),
     ...seccion6,
     ...seccion5,
     ...seccion4,
