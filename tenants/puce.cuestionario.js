@@ -478,8 +478,8 @@ const cuestionario = {
     // gestión con «Correo enviado», «Cita»… y estos datos quedan también en Twenty.
     {
       codigo: "GD1", bloque: "Gestión", tipo: "opcion_unica",
-      texto: "¿Piden enviar la información o coordinar con otra persona?",
-      ayuda: "Opcional. Si responde «Sí», registre los datos de esa persona.",
+      texto: "REGISTRO DEL ENCUESTADOR (no se lee): ¿la empresa pidió enviar la información o coordinar con otra persona?",
+      ayuda: "Opcional. Si la empresa derivó a otra persona, marque «Sí» y anote sus datos; si no, continúe.",
       config: { opciones: [op("SI", "Sí"), op("NO", "No")], opcional: true },
     },
     {
@@ -499,8 +499,8 @@ const cuestionario = {
     },
     {
       codigo: "GC1", bloque: "Gestión", tipo: "opcion_unica",
-      texto: "¿Piden hacer la encuesta otro día o de manera presencial?",
-      ayuda: "Opcional. Si responde «Sí», registre la cita y cierre la gestión como «Cita».",
+      texto: "REGISTRO DEL ENCUESTADOR (no se lee): ¿la empresa pidió hacer la encuesta otro día o de forma presencial?",
+      ayuda: "Opcional. Si pidió agendar, marque «Sí», anote la cita y cierre la gestión como «Cita»; si no, continúe.",
       config: { opciones: [op("SI", "Sí"), op("NO", "No")], opcional: true },
     },
     {
@@ -515,7 +515,7 @@ const cuestionario = {
     },
     {
       codigo: "CITA_MODALIDAD", bloque: "Gestión", tipo: "opcion_unica",
-      texto: "¿Cómo se hará la encuesta en la cita?",
+      texto: "REGISTRO DEL ENCUESTADOR: ¿cómo se hará la encuesta en la cita?",
       config: {
         opciones: [op("PRESENCIAL", "Presencial"), op("LLAMADA", "Llamada"), op("WHATSAPP", "WhatsApp"), op("CORREO", "Correo")],
         opcional: true,
