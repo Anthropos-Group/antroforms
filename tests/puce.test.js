@@ -121,10 +121,9 @@ test("cerrar como parcial guarda solo lo respondido (para retomarlo después)", 
   assert.equal(envio.ultimoBloque, "VI Liderazgo");
 });
 
-test("guion de contacto de Strattos: recepción, informante clave, cierre y preguntas frecuentes", () => {
+test("guion breve: un párrafo con Strattos y la PUCE", () => {
   const g = def.guion_apertura;
-  for (const t of ["1. RECEPCIÓN", "2. INFORMANTE CLAVE", "3. CIERRE", "PREGUNTAS FRECUENTES", "Pontificia Universidad Católica del Ecuador", "{{ENCUESTADOR}}", "{{NOMBRE}}"]) {
-    assert.ok(g.includes(t), t);
-  }
-  assert.ok(!/\[nombre/i.test(g), "no quedan marcadores [nombre] sin reemplazar");
+  for (const t of ["STRATTOS", "Pontificia Universidad Católica del Ecuador", "{{ENCUESTADOR}}", "{{NOMBRE}}"]) assert.ok(g.includes(t), t);
+  assert.ok(!g.includes("\n"), "un solo párrafo");
+  assert.ok(g.length <= 500, `máximo unos 5 renglones (${g.length} caracteres)`);
 });
