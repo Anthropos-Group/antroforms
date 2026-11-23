@@ -456,9 +456,30 @@ const seccion2 = [
 
 const cuestionario = {
   nombre: "Encuesta a plantas de manufactura — Liderazgo, cultura, innovación y cadena de suministro",
-  guion_apertura:
-    "Buenos días/tardes, ¿hablo con {{NOMBRE}}? Soy {{ENCUESTADOR}} y le contacto en nombre de Strattos para un estudio sobre las prácticas de gestión de plantas de manufactura. La encuesta tiene cuatro secciones (liderazgo, cultura de planta, innovación y cadena de suministro) y la responde una sola persona de la planta; si lo necesita, podemos continuarla en otro momento. Es voluntaria: puede no responder cualquier pregunta. Sus respuestas son confidenciales y se reportan solo de forma agrupada.",
-  guion_cierre: "¡Muchas gracias por su tiempo y su colaboración!",
+  // Guion de contacto de Strattos (documentos/Guion_de_contacto.docx). Se muestra al
+  // encuestador en bloques; {{NOMBRE}} es el contacto cargado y {{ENCUESTADOR}} quien llama.
+  guion_apertura: [
+    "1. RECEPCIÓN O ASISTENTE",
+    "Buenos días/tardes. Mi nombre es {{ENCUESTADOR}} y soy parte de STRATTOS, empresa contratada por la Pontificia Universidad Católica del Ecuador para apoyar en el levantamiento de información del proyecto de investigación sobre la industria manufacturera de Pichincha. ¿Podría comunicarme con el Gerente de operaciones o producción o dirección de la empresa, por favor? Contamos con una carta de presentación del Decanato de la PUCE que podemos remitirle para su verificación.",
+    "",
+    "2. INFORMANTE CLAVE",
+    "Buenos días/tardes, {{NOMBRE}}. Le saluda {{ENCUESTADOR}}, de STRATTOS. Le contacto en el marco de un proyecto de investigación de la PUCE, denominado «Capacidades organizacionales para la transformación competitiva de la industria manufacturera», que cuenta con la aprobación del Comité de Ética de la Investigación en Seres Humanos de la universidad.",
+    "Estamos invitando a empresas manufactureras grandes y medianas de Pichincha a colaborar en un estudio académico sobre la gestión de la cadena de suministro, la digitalización, la innovación de procesos, la cultura de planta y el liderazgo. Su experiencia es importante para conocer las prácticas actuales del sector y generar información que pueda contribuir a futuras iniciativas de fortalecimiento de la industria.",
+    "Buscamos la colaboración del gerente de producción o informante clave por empresa. La encuesta toma aproximadamente entre 30 y 45 minutos y puede responderse en línea o de manera presencial, según su disponibilidad.",
+    "La participación es completamente voluntaria. No se trata de una auditoría ni de una evaluación de su empresa. La información se manejará de forma confidencial, mediante códigos, y los resultados se presentarán de manera agregada, sin identificar a las personas ni a las empresas. Antes de responder, recibirá el consentimiento informado con todos los detalles del estudio.",
+    "¿Estaría interesado/a en colaborar? Si le parece, podemos enviarle la carta oficial de la PUCE y coordinar el momento o medio que le resulte más conveniente para responder la encuesta.",
+    "",
+    "3. CIERRE Y COORDINACIÓN (si no responde ahora)",
+    "Muchas gracias por su tiempo. ¿Podría indicarme un correo institucional o medio de contacto al que podamos remitirle la información del proyecto? Si usted no es la persona más adecuada para responder, agradeceríamos que nos orientara sobre el área o cargo con el que deberíamos comunicarnos. Le agradecemos mucho su colaboración.",
+    "",
+    "PREGUNTAS FRECUENTES",
+    "• ¿Qué gana la empresa? Contribuye a generar conocimiento sobre el sector; puede solicitar un resumen general de resultados. No hay compensación ni diagnóstico individual.",
+    "• ¿Quién conocerá mis respuestas? Se tratan confidencialmente con codificación, con acceso restringido al personal autorizado. Los informes no identifican a participantes ni empresas.",
+    "• ¿No dispongo de tiempo ahora? Podemos coordinar otra fecha o remitirle la información por el canal que prefiera.",
+    "• ¿Es obligatorio? No. Puede rechazar, interrumpir la encuesta o retirar su consentimiento sin consecuencias. No se insistirá.",
+    "• Verificación del estudio: investigador principal de la PUCE, iarueda@puce.edu.ec · 593998373257.",
+  ].join("\n"),
+  guion_cierre: "Muchas gracias por su tiempo y su colaboración. Si lo desea, puede solicitar un resumen general de los resultados del estudio.",
 
   preguntas: [
     // --- Contacto ----------------------------------------------------------------
@@ -466,13 +487,13 @@ const cuestionario = {
       codigo: "CANAL", bloque: "Contacto", tipo: "opcion_unica",
       texto: "¿Por qué canal se está contactando a la empresa?",
       ayuda: "Lo registra el encuestador antes de empezar. Si en otra gestión se cambia de canal, actualícelo.",
-      config: { opciones: [op("LLAMADA", "Llamada"), op("WHATSAPP", "WhatsApp"), op("CORREO", "Correo")] },
+      config: { opciones: [op("LLAMADA", "Llamada"), op("WHATSAPP", "WhatsApp"), op("CORREO", "Correo"), op("PRESENCIAL", "Presencial")] },
     },
     {
       codigo: "CI1", bloque: "Contacto", tipo: "opcion_unica",
-      texto: "¿La empresa acepta participar en el estudio?",
-      ayuda: "Si no acepta, la encuesta termina y queda como RECHAZO. Si pide responder en otro momento, cierre como «Cita agendada».",
-      config: { opciones: [op("SI", "Sí, acepta"), op("NO", "No acepta → agradecer y terminar")], resultado: "rechazo" },
+      texto: "¿El informante recibió la carta de la PUCE y el consentimiento informado, y acepta participar?",
+      ayuda: "Antes de iniciar: verifique que la empresa es manufacturera (mediana o grande, Pichincha) y que habla con el gerente de producción u otro informante clave; envíe la carta del Decanato y presente el consentimiento informado. No sugiera respuestas ni ofrezca beneficios. Si no acepta, la encuesta termina como RECHAZO y no se vuelve a contactar. Si pide responder en otro momento, cierre como «Cita».",
+      config: { opciones: [op("SI", "Sí, recibió el consentimiento y acepta"), op("NO", "No acepta → agradecer y terminar")], resultado: "rechazo" },
       termina_si: { pregunta: "CI1", op: "=", valor: "NO" },
     },
     {

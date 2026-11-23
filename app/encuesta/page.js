@@ -1124,7 +1124,7 @@ export default function EncuestaPage() {
                   </button>
                 </div>
                 {mostrarGuion && (
-                  <div className="script-box" style={{ margin: 0 }}>
+                  <div className="script-box" style={{ margin: 0, whiteSpace: "pre-line" }}>
                     <span className="script-label">Guion de apertura (léelo al cliente)</span>
                     {guionApertura}
                   </div>

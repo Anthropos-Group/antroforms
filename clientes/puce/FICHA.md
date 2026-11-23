@@ -62,6 +62,16 @@ NO_INTERESADO · NUMERO_INCORRECTO (incluye correo incorrecto) · INFORMANTE_NO_
 FUERA_UNIVERSO. Salen del buscador: RECHAZO, NO_INTERESADO, NUMERO_INCORRECTO,
 FUERA_UNIVERSO y COMPLETA.
 
+## Guion de contacto
+
+`documentos/Guion_de_contacto.docx` (Strattos). En la app se muestra completo como guion de
+apertura: recepción, informante clave, cierre y preguntas frecuentes. El mensaje de
+seguimiento por correo/WhatsApp queda para la guía de encuestadores. Del guion salen:
+universo = manufactureras medianas y grandes de Pichincha; informante = gerente de
+producción/operaciones u otro informante clave; carta del Decanato y consentimiento
+informado antes de iniciar (CI1); hasta 3 recordatorios cada 7–10 días; no recontactar
+a quien rechaza. Canal «Presencial» agregado (el guion ofrece responder presencialmente).
+
 ## Reglas
 
 - **CANAL** (primera pregunta): llamada, WhatsApp o correo. Solo se registra; no hay
@@ -98,6 +108,10 @@ FUERA_UNIVERSO y COMPLETA.
    reutiliza toda la integración existente.
 
 ## Preguntas abiertas
+
+- El guion dice 30–45 min; con 258 preguntas la estimación es 50–70 min. Revisar con la PMO.
+- El guion ofrece responder «en línea» y «remitirle el enlace»: hoy la encuesta la registra
+  siempre el encuestador (no hay enlace para que la empresa la llene sola).
 
 - Base de empresas (la PMO la arma con la plantilla).
 - Borrar los registros de ejemplo de fábrica del Twenty.
