@@ -45,7 +45,7 @@ test("el registro de Twenty usa solo campos del esquema del cliente", () => {
   const p = personaTwenty(empresaDesdeFila({ CODIGO: "E1", RAZON_SOCIAL: "Ejemplo", RUC: "1790000000001", CIUDAD: "Quito", SECTOR: "Alimentos", CONTACTO: "Ana", CARGO: "Gerente", TELEFONO: "0990000000", CORREO: "a@b.ec" }, mapa));
   assert.deepEqual(p.name, { firstName: "Ana", lastName: "" });
   assert.equal(p.estadoGestion, "PENDIENTE");
-  const campos = new Set(tenant("plantas").esquemaTwenty.map((c) => c.name));
+  const campos = new Set(tenant("puce").esquemaTwenty.map((c) => c.name));
   for (const k of Object.keys(p)) if (k !== "name") assert.ok(campos.has(k), `${k} no está en esquemaTwenty`);
   // Sin contacto, el nombre es la razón social.
   assert.equal(personaTwenty(empresaDesdeFila({ CODIGO: "E2", RAZON_SOCIAL: "Otra S.A." }, mapa)).name.firstName, "Otra S.A.");

@@ -46,7 +46,7 @@ Cada pregunta puede tener (ver `lib/encuesta-logica.js`):
 - `config.grupo` (+ `config.grupo_texto`) — **tabla de afirmaciones**: las preguntas
   consecutivas de escala con el mismo grupo se muestran juntas en una pantalla (una
   fila por afirmación, con NS/NR). Cada afirmación sigue siendo su propia pregunta y
-  su propia columna en la exportación. Ej.: LM01 del estudio de plantas.
+  su propia columna en la exportación. Ej.: LM01 del estudio de plantas (PUCE).
 
 Reglas: `{ "pregunta": "RUTA", "op": "en", "valor": ["A","C"] }`,
 `{ "cliente": "edad", "op": "vacio" }`, combinadas con `todas` / `alguna` / `no`.
@@ -135,13 +135,13 @@ teléfono: el socio se identifica por su código.
 El monitoreo de 23 de Julio muestra el avance por oficina y por resultado de la
 llamada (`lib/avance.js`), en lugar del tablero por mes de EDIMCA.
 
-## Base de empresas (estudio de plantas)
+## Base de empresas (PUCE, estudio de plantas)
 
 ```bash
-TENANT=plantas node scripts/cargar-empresas.js --base=base_empresas.xlsx [--aplicar]
+TENANT=puce node scripts/cargar-empresas.js --base=base_empresas.xlsx [--aplicar]
 ```
 
-Una fila por empresa (plantilla en `clientes/plantas/documentos/`): código (o RUC),
+Una fila por empresa (plantilla en `clientes/puce/documentos/`): código (o RUC),
 razón social, RUC, ciudad, sector, contacto, cargo, teléfono y correo. Cada empresa
 es un registro `person` en Twenty (el contacto), con la razón social en `razonSocial`.
 

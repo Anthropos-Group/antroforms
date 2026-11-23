@@ -8,9 +8,9 @@
 // busca por ella).
 
 module.exports = {
-  id: "plantas",
-  nombre: "Estudio de plantas de manufactura",
-  marca: { inicial: "P", subtitulo: "Plantas de manufactura · Strattos" },
+  id: "puce",
+  nombre: "PUCE · Estudio de plantas de manufactura",
+  marca: { inicial: "P", subtitulo: "PUCE · Plantas de manufactura · Strattos" },
 
   twenty: {
     campos: {

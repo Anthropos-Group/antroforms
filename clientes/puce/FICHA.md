@@ -1,18 +1,18 @@
-# Ficha — Estudio de plantas de manufactura (Strattos)
+# Ficha — PUCE · Estudio de plantas de manufactura (Strattos)
 
-> Slug **provisional**: `plantas`. Se confirma con el nombre comercial del cliente
-> antes de crear la base (`af_<slug>`) y el stack; hasta entonces solo existe en el código.
+> Slug: **`puce`** · base `af_puce` · stack `antroforms-puce` ·
+> `encuestas-puce.aiagentrevenue.online`
 
 ## Cliente
 
 | Dato | Valor |
 |---|---|
-| Nombre comercial | _pendiente_ |
+| Nombre comercial | PUCE |
 | Contratante | Strattos (administradora de proyectos) |
 | Tipo de estudio | Encuesta a empresas (plantas de manufactura) |
 | Modalidad | Híbrida: el encuestador contacta por **llamada, WhatsApp o correo** y registra la encuesta en Antroforms, igual que en 23 de Julio |
-| Administrador de la plataforma | _pendiente (correo)_ |
-| Twenty | _pendiente (URL; la credencial se pide por formulario seguro)_ |
+| Administrador de la plataforma | info@strattos.io |
+| Twenty | `https://puce.aiagentrevenue.online` (campos creados el 23/11/2026) |
 | URL de encuestas | `encuestas-<slug>.aiagentrevenue.online` |
 | Inicio de campo | Entre el 23 y el 24 de noviembre de 2026 (urgente) |
 | Reporte | Sí, el más simple posible al inicio (avance, efectivas, estados por encuestador y ciudad); se mejora después |
@@ -28,7 +28,7 @@ Cuatro segmentos de **una sola encuesta**, en el orden **6 → 5 → 4 → 2**:
 | IV Innovación | `4_Innovation.docx` | IN01–IN15 (tablas 1–7), IN13 función, IN16–18 abiertas, IN19 participación | 75 + 1 + 3 + 9 |
 | II Cadena de suministro | `2_Supply_Chain.docx` | SC01–SC12 (tablas 1–7), SC13 departamento, SC14 %, SC15 participación, SC16–22 abiertas | 55 + 1 + 1 + 9 + 7 |
 
-Digitalizado en `tenants/plantas.cuestionario.js`: 258 preguntas (233 de escala en 37 tablas,
+Digitalizado en `tenants/puce.cuestionario.js`: 258 preguntas (233 de escala en 37 tablas,
 15 abiertas, 4 de opción única, 1 numérica, 5 indicaciones). Duración estimada: 50–70 min.
 
 ## Campos de la muestra → Twenty (`person`)
@@ -99,7 +99,7 @@ FUERA_UNIVERSO y COMPLETA.
 
 ## Preguntas abiertas
 
-- Nombre comercial del cliente → slug definitivo.
-- Correo del administrador, URL del Twenty, muestra de prueba.
+- Base de empresas (la PMO la arma con la plantilla).
+- Borrar los registros de ejemplo de fábrica del Twenty.
 - ¿Cuotas por ciudad o sector? (por ahora la cuota del reporte = tamaño de la muestra).
 - Destinatarios y hora del reporte, si se envía por correo.

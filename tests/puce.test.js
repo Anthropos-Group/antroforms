@@ -1,7 +1,7 @@
 // Cuestionario de plantas de manufactura: orden de secciones, tablas 1–7, NS/NR y rutas.
 const test = require("node:test");
 const assert = require("node:assert/strict");
-const def = require("../tenants/plantas.cuestionario");
+const def = require("../tenants/puce.cuestionario");
 const { prepararEnvio, rangoGrupo, siguientePantalla } = require("../lib/encuesta-logica");
 
 // Las preguntas llevan id en la base; aquí el código hace de id.
@@ -78,7 +78,7 @@ test("las abiertas se pueden dejar en blanco y no se guardan vacías", () => {
 
 test("gestión por canal: primera llamada, correo y WhatsApp enviados, esperando correo y cita", () => {
   const { tenant } = require("../lib/tenant");
-  const cierres = tenant("plantas").twenty.estadosCierre;
+  const cierres = tenant("puce").twenty.estadosCierre;
   for (const c of ["primera_llamada", "correo_enviado", "esperando_correo", "whatsapp_enviado", "cita", "parcial", "no_contesta", "no_contacto", "numero_incorrecto"]) {
     assert.ok(cierres[c], c);
     const envio = prepararEnvio(preguntas, { CANAL: "CORREO" }, {}, { cierre: c });
