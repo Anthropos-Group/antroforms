@@ -142,8 +142,13 @@ TENANT=puce node scripts/cargar-empresas.js --base=base_empresas.xlsx [--aplicar
 ```
 
 Una fila por empresa (plantilla en `clientes/puce/documentos/`): código (o RUC),
-razón social, RUC, ciudad, sector, contacto, cargo, teléfono y correo. Cada empresa
-es un registro `person` en Twenty (el contacto), con la razón social en `razonSocial`.
+nombre de la empresa, razón social, RUC, tipo de empresa, teléfonos y correo. Cada
+empresa es un registro `person` en Twenty (nombre = nombre de la empresa).
+
+`twenty.respuestasACampos` (`{ CODIGO_PREGUNTA: "campoTwenty" }`) copia respuestas
+de la última gestión a campos de Twenty en el mismo PATCH del estado (otro contacto,
+cita, encuestado). Solo escribe valores con contenido; los campos deben existir en
+Twenty antes de desplegar (`scripts/twenty-esquema.js`).
 
 ## Pendiente para 23 de Julio
 

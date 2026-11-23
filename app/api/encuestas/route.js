@@ -9,6 +9,7 @@ import { verifySessionToken, SESSION_COOKIE } from "../../../lib/auth";
 import { mesGestionActivo, esMesActivo } from "../../../lib/gestion";
 import { metaMensual, completadasDelPdv, invalidarMeta } from "../../../lib/meta";
 import { tenant } from "../../../lib/tenant";
+import { camposTwentyDelCliente } from "../../../lib/respuestas-twenty";
 
 export const dynamic = "force-dynamic";
 
@@ -339,7 +340,9 @@ export const POST = conErrores("POST /api/encuestas", async (request) => {
     after(async () => {
       if (!twentyEnVivoDisponible()) return;
       try {
-        await patchEstado(cliente_twenty_id, targetStatus, { timeoutMs: 8000, reintentos: 0, intentos });
+        // Datos de la gestión que también van al CRM (otro contacto, cita…), si el cliente los usa.
+        const extra = await camposTwentyDelCliente(pool, cliente_twenty_id).catch(() => ({}));
+        await patchEstado(cliente_twenty_id, targetStatus, { timeoutMs: 8000, reintentos: 0, intentos, extra });
         await pool.query(`delete from pending_twenty_sync where id = $1`, [pendienteId]);
         if (agotado) await activarReemplazos(pool, { principalId: cliente_twenty_id });
       } catch (err) {

@@ -15,7 +15,7 @@ try {
 const path = require("path");
 const ExcelJS = require("exceljs");
 const { tenant } = require("../lib/tenant");
-const { mapearColumnas, empresaDesdeFila, deduplicar, avisos, personaTwenty, ALIAS } = require("../lib/empresas");
+const { mapearColumnas, empresaDesdeFila, deduplicar, avisos, personaTwenty, OBLIGATORIAS } = require("../lib/empresas");
 
 const args = Object.fromEntries(
   process.argv.slice(2).map((a) => {
@@ -85,11 +85,11 @@ async function main() {
 
   const { encabezados, filas } = await leerHoja(path.resolve(args.base), args.hoja ? Number(args.hoja) - 1 : 0);
   const mapa = mapearColumnas(encabezados);
-  const faltan = Object.keys(ALIAS).filter((c) => !mapa[c]);
+  const faltan = OBLIGATORIAS.filter((c) => !mapa[c]);
   const sobran = encabezados.filter((h) => h && !Object.values(mapa).includes(h));
   console.log(`Cliente: ${config.nombre}`);
   console.log("Columnas reconocidas:", mapa);
-  if (faltan.length) console.log("Columnas que no vienen:", faltan.join(", "));
+  if (faltan.length) console.log("⚠ Faltan columnas del proceso de la PMO:", faltan.join(", "));
   if (sobran.length) console.log("Columnas que no se cargan:", sobran.join(", "));
   if (!mapa.codigo && !mapa.ruc) throw new Error("La base necesita una columna CODIGO o RUC para identificar a cada empresa.");
 
@@ -99,14 +99,15 @@ async function main() {
   console.log(`Filas leídas: ${resumen.filas} · empresas únicas: ${resumen.unicas} · sin código: ${resumen.sinCodigo} · códigos repetidos: ${resumen.duplicadas.length}`);
   if (resumen.duplicadas.length) console.log("  Repetidos (se carga la primera fila):", resumen.duplicadas.slice(0, 20).join(", "));
   console.log("Avisos:", avisos(aCargar));
-  const porCiudad = aCargar.reduce((acc, e) => ({ ...acc, [e.ciudad || "SIN_CIUDAD"]: (acc[e.ciudad || "SIN_CIUDAD"] || 0) + 1 }), {});
-  console.log("Por ciudad:", porCiudad);
+  const porTipo = aCargar.reduce((acc, e) => ({ ...acc, [e.tipoEmpresa || "SIN_TIPO"]: (acc[e.tipoEmpresa || "SIN_TIPO"] || 0) + 1 }), {});
+  console.log("Por tipo de empresa:", porTipo);
   if (aCargar[0]) {
     const ejemplo = personaTwenty(aCargar[0]);
     console.log("Ejemplo de registro (datos personales ocultos):", {
       ...ejemplo,
       name: { firstName: "***" },
       celular: ejemplo.celular ? "09********" : undefined,
+      telefono2: ejemplo.telefono2 ? "09********" : undefined,
       correoContacto: ejemplo.correoContacto ? "***@***" : undefined,
     });
   }

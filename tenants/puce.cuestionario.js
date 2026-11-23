@@ -14,8 +14,11 @@
 // - Las dos últimas afirmaciones de LM01 venían sin escala en el Word: van con 1–7.
 // - Participación de departamentos (FC10, IN19, SC15): 1–5 de menor a mayor aporte;
 //   0 = sin información de ese departamento (el «en blanco» del papel).
-// - Una sola persona de la empresa responde toda la encuesta (PMO): se registra su
-//   nombre y cargo al inicio.
+// - Una sola persona de la empresa responde toda la encuesta (PMO): al iniciar se
+//   registran su nombre y cargo (obligatorios) y su teléfono (opcional).
+// - Proceso de la PMO (Proceso_de_encuesta.docx): antes de iniciar, si la empresa
+//   deriva a otra persona o pide agendar, se registran ese contacto y la cita
+//   (bloque «Gestión», opcional). Estos datos se copian también a Twenty.
 
 const NS_NR = ["NS", "NR"];
 const op = (valor, etiqueta, extra = {}) => ({ valor, etiqueta, ...extra });
@@ -469,6 +472,56 @@ const cuestionario = {
       ayuda: "Lo registra el encuestador antes de empezar. Si en otra gestión se cambia de canal, actualícelo.",
       config: { opciones: [op("LLAMADA", "Llamada"), op("WHATSAPP", "WhatsApp"), op("CORREO", "Correo"), op("PRESENCIAL", "Presencial")] },
     },
+
+    // --- Gestión del contacto (proceso de la PMO): opcional, antes de iniciar -------
+    // Se llena si la empresa deriva a otra persona o pide agendar. Luego se cierra la
+    // gestión con «Correo enviado», «Cita»… y estos datos quedan también en Twenty.
+    {
+      codigo: "GD1", bloque: "Gestión", tipo: "opcion_unica",
+      texto: "¿Piden enviar la información o coordinar con otra persona?",
+      ayuda: "Opcional. Si responde «Sí», registre los datos de esa persona.",
+      config: { opciones: [op("SI", "Sí"), op("NO", "No")], opcional: true },
+    },
+    {
+      codigo: "CD_NOMBRE", bloque: "Gestión", tipo: "texto_abierto",
+      texto: "Otro contacto: nombre de la persona a contactar",
+      config: ABIERTA, mostrar_si: { pregunta: "GD1", op: "=", valor: "SI" },
+    },
+    {
+      codigo: "CD_TELEFONO", bloque: "Gestión", tipo: "texto_abierto",
+      texto: "Otro contacto: números de teléfono",
+      config: ABIERTA, mostrar_si: { pregunta: "GD1", op: "=", valor: "SI" },
+    },
+    {
+      codigo: "CD_CORREO", bloque: "Gestión", tipo: "texto_abierto",
+      texto: "Otro contacto: correo electrónico",
+      config: ABIERTA, mostrar_si: { pregunta: "GD1", op: "=", valor: "SI" },
+    },
+    {
+      codigo: "GC1", bloque: "Gestión", tipo: "opcion_unica",
+      texto: "¿Piden hacer la encuesta otro día o de manera presencial?",
+      ayuda: "Opcional. Si responde «Sí», registre la cita y cierre la gestión como «Cita».",
+      config: { opciones: [op("SI", "Sí"), op("NO", "No")], opcional: true },
+    },
+    {
+      codigo: "CITA_FECHA", bloque: "Gestión", tipo: "texto_abierto",
+      texto: "Fecha de la cita (ej.: 28/11/2026)",
+      config: ABIERTA, mostrar_si: { pregunta: "GC1", op: "=", valor: "SI" },
+    },
+    {
+      codigo: "CITA_HORA", bloque: "Gestión", tipo: "texto_abierto",
+      texto: "Hora de la cita (ej.: 10:30)",
+      config: ABIERTA, mostrar_si: { pregunta: "GC1", op: "=", valor: "SI" },
+    },
+    {
+      codigo: "CITA_MODALIDAD", bloque: "Gestión", tipo: "opcion_unica",
+      texto: "¿Cómo se hará la encuesta en la cita?",
+      config: {
+        opciones: [op("PRESENCIAL", "Presencial"), op("LLAMADA", "Llamada"), op("WHATSAPP", "WhatsApp"), op("CORREO", "Correo")],
+        opcional: true,
+      },
+      mostrar_si: { pregunta: "GC1", op: "=", valor: "SI" },
+    },
     {
       codigo: "CI1", bloque: "Contacto", tipo: "opcion_unica",
       texto: "¿El informante recibió la carta de la PUCE y el consentimiento informado, y acepta participar?",
@@ -476,10 +529,19 @@ const cuestionario = {
       config: { opciones: [op("SI", "Sí, recibió el consentimiento y acepta"), op("NO", "No acepta → agradecer y terminar")], resultado: "rechazo" },
       termina_si: { pregunta: "CI1", op: "=", valor: "NO" },
     },
+    // --- Datos del encuestado (una sola persona responde toda la encuesta) --------
     {
-      codigo: "INF", bloque: "Contacto", tipo: "texto_abierto",
-      texto: "Nombre y cargo de la persona que responde la encuesta",
+      codigo: "ENC_NOMBRE", bloque: "Encuestado", tipo: "texto_abierto",
+      texto: "Nombre del encuestado",
       ayuda: "Una sola persona de la empresa responde toda la encuesta.",
+    },
+    {
+      codigo: "ENC_CARGO", bloque: "Encuestado", tipo: "texto_abierto",
+      texto: "Cargo del encuestado",
+    },
+    {
+      codigo: "ENC_TELEFONO", bloque: "Encuestado", tipo: "texto_abierto",
+      texto: "Número de contacto del encuestado",
       config: ABIERTA,
     },
     indicacion(
