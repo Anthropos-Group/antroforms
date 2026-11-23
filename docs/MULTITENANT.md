@@ -43,6 +43,10 @@ Cada pregunta puede tener (ver `lib/encuesta-logica.js`):
   `config.resultado` (p. ej. CI1 = No → `rechazo`).
 - `config.calculo` — pregunta calculada (tipo de persona confirmado, ruta A/B/C/U).
 - `{{dato}}` en el texto se reemplaza por el dato precargado del socio (A1).
+- `config.grupo` (+ `config.grupo_texto`) — **tabla de afirmaciones**: las preguntas
+  consecutivas de escala con el mismo grupo se muestran juntas en una pantalla (una
+  fila por afirmación, con NS/NR). Cada afirmación sigue siendo su propia pregunta y
+  su propia columna en la exportación. Ej.: LM01 del estudio de plantas (PUCE).
 
 Reglas: `{ "pregunta": "RUTA", "op": "en", "valor": ["A","C"] }`,
 `{ "cliente": "edad", "op": "vacio" }`, combinadas con `todas` / `alguna` / `no`.
@@ -51,6 +55,14 @@ El encuestador además puede **cerrar la llamada sin terminar** (parcial, cita, 
 contacto, número incorrecto, informante no autorizado, fuera del universo) si el
 cliente lo tiene configurado (`twenty.estadosCierre`). Se guarda lo respondido,
 `encuestas.resultado` y `encuestas.ultimo_bloque`, y el estado va a Twenty.
+Con `retomarParciales: true` en la configuración del cliente, al volver a abrir a
+alguien cerrado como «parcial» o «cita» se cargan sus respuestas y se sigue donde
+quedó, desde cualquier dispositivo (`GET /api/clientes/<id>/retomar`).
+
+`exportacion` en la configuración del cliente elige el nombre de la columna de código
+y los datos del listado que acompañan a cada encuesta en el Excel
+(`{ codigo: "CODIGO_EMPRESA", datos: [{ header: "RUC", dato: "ruc" }] }`); sin ella
+quedan las columnas de 23 de Julio.
 
 ## Levantar un cliente nuevo (ej. Cooperativa 23 de Julio)
 
@@ -122,6 +134,16 @@ teléfono: el socio se identifica por su código.
 
 El monitoreo de 23 de Julio muestra el avance por oficina y por resultado de la
 llamada (`lib/avance.js`), en lugar del tablero por mes de EDIMCA.
+
+## Base de empresas (PUCE, estudio de plantas)
+
+```bash
+TENANT=puce node scripts/cargar-empresas.js --base=base_empresas.xlsx [--aplicar]
+```
+
+Una fila por empresa (plantilla en `clientes/puce/documentos/`): código (o RUC),
+razón social, RUC, ciudad, sector, contacto, cargo, teléfono y correo. Cada empresa
+es un registro `person` en Twenty (el contacto), con la razón social en `razonSocial`.
 
 ## Pendiente para 23 de Julio
 
