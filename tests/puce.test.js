@@ -29,7 +29,7 @@ function todas(extra = {}) {
 
 test("secciones en el orden 6 → 5 → 4 → 2, con canal y consentimiento al inicio", () => {
   assert.equal(preguntas[0].codigo, "CANAL");
-  assert.deepEqual(porCodigo("CANAL").config.opciones.map((o) => o.valor), ["LLAMADA", "WHATSAPP", "CORREO"]);
+  assert.deepEqual(porCodigo("CANAL").config.opciones.map((o) => o.valor), ["LLAMADA", "WHATSAPP", "CORREO", "PRESENCIAL"]);
   assert.equal(preguntas[1].codigo, "CI1");
   const inicio = (prefijo) => preguntas.findIndex((p) => p.codigo.startsWith(prefijo));
   assert.ok(inicio("LM01") < inicio("FC01"));
@@ -119,4 +119,12 @@ test("cerrar como parcial guarda solo lo respondido (para retomarlo después)", 
   assert.equal(envio.valido, true);
   assert.deepEqual(envio.respuestas.map((r) => r.pregunta_id), ["CANAL", "CI1", "INF", "LM01_01"]);
   assert.equal(envio.ultimoBloque, "VI Liderazgo");
+});
+
+test("guion de contacto de Strattos: recepción, informante clave, cierre y preguntas frecuentes", () => {
+  const g = def.guion_apertura;
+  for (const t of ["1. RECEPCIÓN", "2. INFORMANTE CLAVE", "3. CIERRE", "PREGUNTAS FRECUENTES", "Pontificia Universidad Católica del Ecuador", "{{ENCUESTADOR}}", "{{NOMBRE}}"]) {
+    assert.ok(g.includes(t), t);
+  }
+  assert.ok(!/\[nombre/i.test(g), "no quedan marcadores [nombre] sin reemplazar");
 });
