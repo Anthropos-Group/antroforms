@@ -27,10 +27,11 @@ function todas(extra = {}) {
   return { ...r, ...extra };
 }
 
-test("secciones en el orden 6 → 5 → 4 → 2, con canal y consentimiento al inicio", () => {
+test("secciones en el orden 6 → 5 → 4 → 2, con canal, gestión y consentimiento al inicio", () => {
   assert.equal(preguntas[0].codigo, "CANAL");
   assert.deepEqual(porCodigo("CANAL").config.opciones.map((o) => o.valor), ["LLAMADA", "WHATSAPP", "CORREO", "PRESENCIAL"]);
-  assert.equal(preguntas[1].codigo, "CI1");
+  const pos = (c) => preguntas.findIndex((p) => p.codigo === c);
+  assert.ok(pos("GD1") < pos("GC1") && pos("GC1") < pos("CI1") && pos("CI1") < pos("ENC_NOMBRE"));
   const inicio = (prefijo) => preguntas.findIndex((p) => p.codigo.startsWith(prefijo));
   assert.ok(inicio("LM01") < inicio("FC01"));
   assert.ok(inicio("FC01") < inicio("IN01"));
@@ -50,21 +51,36 @@ test("LM01 es una sola tabla de 26 afirmaciones con escala 1–7 (incluye las do
   assert.equal(preguntas[siguientePantalla(preguntas, i, 1)].codigo, "S5");
 });
 
-test("las cerradas admiten NS y NR (salvo canal y consentimiento); las abiertas son opcionales", () => {
+test("las cerradas admiten NS y NR (salvo canal, gestión y consentimiento); las abiertas son opcionales", () => {
+  const SIN_NSNR = ["CANAL", "CI1", "GD1", "GC1", "CITA_MODALIDAD", "ENC_NOMBRE", "ENC_CARGO"];
   for (const p of preguntas) {
-    if (p.tipo === "informativa" || ["CANAL", "CI1"].includes(p.codigo)) continue;
+    if (p.tipo === "informativa" || SIN_NSNR.includes(p.codigo)) continue;
     if (p.tipo === "texto_abierto") assert.equal(p.config?.opcional, true, p.codigo);
     else assert.deepEqual(p.config?.especiales, ["NS", "NR"], p.codigo);
   }
 });
 
-test("una sola persona responde: se registra una vez, al inicio", () => {
-  assert.equal(preguntas[2].codigo, "INF");
-  assert.equal(preguntas.filter((p) => p.codigo.startsWith("INF")).length, 1);
+test("una sola persona responde: nombre y cargo obligatorios, teléfono opcional", () => {
+  assert.equal(porCodigo("ENC_NOMBRE").config, undefined);
+  assert.equal(porCodigo("ENC_CARGO").config, undefined);
+  assert.equal(porCodigo("ENC_TELEFONO").config.opcional, true);
+  const sinCargo = prepararEnvio(preguntas, todas({ ENC_CARGO: undefined }), {});
+  assert.deepEqual(sinCargo.errores.map((e) => e.preguntaId), ["ENC_CARGO"]);
+});
+
+test("gestión: otro contacto y cita solo se piden si la empresa lo solicita, y son opcionales", () => {
+  const { preguntasFueraDeRuta } = require("../lib/encuesta-logica");
+  const fuera = preguntasFueraDeRuta(preguntas, { CANAL: "LLAMADA" }, {});
+  for (const c of ["CD_NOMBRE", "CD_TELEFONO", "CD_CORREO", "CITA_FECHA", "CITA_HORA", "CITA_MODALIDAD"]) assert.ok(fuera.has(c), c);
+  const dentro = preguntasFueraDeRuta(preguntas, { CANAL: "LLAMADA", GD1: "SI", GC1: "SI" }, {});
+  for (const c of ["CD_NOMBRE", "CITA_FECHA", "CITA_MODALIDAD"]) assert.ok(!dentro.has(c), c);
+  // Correo enviado al otro contacto, sin empezar la encuesta.
+  const envio = prepararEnvio(preguntas, { CANAL: "CORREO", GD1: "SI", CD_NOMBRE: "Luis", CD_CORREO: "luis@planta.ec" }, {}, { cierre: "correo_enviado" });
+  assert.deepEqual(envio.respuestas.map((r) => r.pregunta_id), ["CANAL", "GD1", "CD_NOMBRE", "CD_CORREO"]);
 });
 
 test("las abiertas se pueden dejar en blanco y no se guardan vacías", () => {
-  const abiertas = preguntas.filter((p) => p.tipo === "texto_abierto").map((p) => p.id);
+  const abiertas = preguntas.filter((p) => p.tipo === "texto_abierto" && p.config?.opcional).map((p) => p.id);
   const sinAbiertas = todas(Object.fromEntries(abiertas.map((id) => [id, undefined])));
   const envio = prepararEnvio(preguntas, sinAbiertas, {});
   assert.equal(envio.valido, true, JSON.stringify(envio.errores?.slice(0, 3)));
@@ -115,9 +131,9 @@ test("si la empresa no acepta, termina como rechazo", () => {
 });
 
 test("cerrar como parcial guarda solo lo respondido (para retomarlo después)", () => {
-  const envio = prepararEnvio(preguntas, { CANAL: "CORREO", CI1: "SI", INF: "Ana, gerente", LM01_01: { calificacion: 6 } }, {}, { cierre: "parcial" });
+  const envio = prepararEnvio(preguntas, { CANAL: "CORREO", CI1: "SI", ENC_NOMBRE: "Ana", ENC_CARGO: "Gerente", LM01_01: { calificacion: 6 } }, {}, { cierre: "parcial" });
   assert.equal(envio.valido, true);
-  assert.deepEqual(envio.respuestas.map((r) => r.pregunta_id), ["CANAL", "CI1", "INF", "LM01_01"]);
+  assert.deepEqual(envio.respuestas.map((r) => r.pregunta_id), ["CANAL", "CI1", "ENC_NOMBRE", "ENC_CARGO", "LM01_01"]);
   assert.equal(envio.ultimoBloque, "VI Liderazgo");
 });
 

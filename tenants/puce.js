@@ -1,11 +1,13 @@
 // Estudio a plantas de manufactura (Strattos) — encuesta a empresas en modalidad
-// híbrida: el encuestador contacta por llamada, WhatsApp o correo y registra la
-// encuesta aquí (el canal es la primera pregunta). Sin mes de gestión: levantamiento
-// único sobre la muestra de empresas cargada en Twenty, agrupada por ciudad.
+// híbrida: el encuestador contacta por llamada, WhatsApp, correo o en persona y
+// registra la encuesta aquí (el canal es la primera pregunta). Sin mes de gestión:
+// levantamiento único sobre la base de empresas cargada en Twenty, agrupada por tipo
+// de empresa. Proceso de la PMO: documentos/Proceso_de_encuesta.docx.
 //
-// Cada registro `person` de Twenty es el contacto de una empresa: su nombre es el
-// de la persona de contacto y la razón social va en `razonSocial` (también se
-// busca por ella).
+// Cada registro `person` de Twenty es una empresa: su nombre es el nombre de la
+// empresa y la razón social va en `razonSocial` (también se busca por ella). Los
+// datos de la gestión (otro contacto, cita, encuestado) se copian a Twenty desde la
+// encuesta (`respuestasACampos`).
 
 module.exports = {
   id: "puce",
@@ -15,7 +17,7 @@ module.exports = {
   twenty: {
     campos: {
       codigo_cliente: "codigoEmpresa",
-      grupo: "ciudad",
+      grupo: "tipoEmpresa",
       mes_gestion: null,
       // Se muestra y se busca como «Empresa».
       id_externo: "razonSocial",
@@ -29,10 +31,23 @@ module.exports = {
     datos: {
       razon_social: "razonSocial",
       ruc: "ruc",
+      tipo_empresa: "tipoEmpresa",
+      telefono2: "telefono2",
+      correo: "correoContacto",
       ciudad: "ciudad",
       sector: "sector",
-      cargo: "cargoContacto",
-      correo: "correoContacto",
+    },
+    // Respuestas que también se escriben en Twenty al cerrar cada gestión.
+    respuestasACampos: {
+      CD_NOMBRE: "contactoDerivadoNombre",
+      CD_TELEFONO: "contactoDerivadoTelefono",
+      CD_CORREO: "contactoDerivadoCorreo",
+      CITA_FECHA: "fechaCita",
+      CITA_HORA: "horaCita",
+      CITA_MODALIDAD: "modalidadCita",
+      ENC_NOMBRE: "encuestadoNombre",
+      ENC_CARGO: "encuestadoCargo",
+      ENC_TELEFONO: "encuestadoTelefono",
     },
     // Solo se encuestan empresas cargadas desde la muestra (con código).
     requiereCodigo: true,
@@ -55,8 +70,8 @@ module.exports = {
     },
     estadosExcluidos: ["RECHAZO", "NO_INTERESADO", "NUMERO_INCORRECTO", "FUERA_UNIVERSO", "COMPLETA"],
     limpieza: {
-      texto: ["razonSocial", "ciudad", "sector"],
-      telefono: ["celular"],
+      texto: ["razonSocial", "tipoEmpresa", "ciudad", "sector"],
+      telefono: ["celular", "telefono2"],
       numerico: [],
     },
   },
@@ -67,11 +82,23 @@ module.exports = {
     { name: "codigoEmpresa", label: "Código de empresa", type: "TEXT", icon: "IconHash" },
     { name: "razonSocial", label: "Razón social", type: "TEXT", icon: "IconBuildingFactory2" },
     { name: "ruc", label: "RUC", type: "TEXT", icon: "IconReceipt" },
+    { name: "tipoEmpresa", label: "Tipo de empresa", type: "TEXT", icon: "IconCategory" },
+    { name: "celular", label: "Teléfono 1", type: "TEXT", icon: "IconPhone" },
+    { name: "telefono2", label: "Teléfono 2", type: "TEXT", icon: "IconPhone" },
+    { name: "correoContacto", label: "Correo de la empresa", type: "TEXT", icon: "IconMail" },
     { name: "ciudad", label: "Ciudad", type: "TEXT", icon: "IconMapPin" },
     { name: "sector", label: "Sector", type: "TEXT", icon: "IconBriefcase" },
     { name: "cargoContacto", label: "Cargo del contacto", type: "TEXT", icon: "IconId" },
-    { name: "correoContacto", label: "Correo del contacto", type: "TEXT", icon: "IconMail" },
-    { name: "celular", label: "Teléfono / celular", type: "TEXT", icon: "IconPhone" },
+    // Gestión (se llenan desde la encuesta).
+    { name: "contactoDerivadoNombre", label: "Otro contacto: nombre", type: "TEXT", icon: "IconUserShare" },
+    { name: "contactoDerivadoTelefono", label: "Otro contacto: teléfono", type: "TEXT", icon: "IconPhone" },
+    { name: "contactoDerivadoCorreo", label: "Otro contacto: correo", type: "TEXT", icon: "IconMail" },
+    { name: "fechaCita", label: "Fecha de cita", type: "TEXT", icon: "IconCalendarEvent" },
+    { name: "horaCita", label: "Hora de cita", type: "TEXT", icon: "IconClock" },
+    { name: "modalidadCita", label: "Modalidad de la cita", type: "TEXT", icon: "IconMapPin" },
+    { name: "encuestadoNombre", label: "Encuestado: nombre", type: "TEXT", icon: "IconUserCheck" },
+    { name: "encuestadoCargo", label: "Encuestado: cargo", type: "TEXT", icon: "IconId" },
+    { name: "encuestadoTelefono", label: "Encuestado: teléfono", type: "TEXT", icon: "IconPhone" },
     { name: "intentosContacto", label: "Intentos de contacto", type: "NUMBER", icon: "IconPhoneCall" },
     {
       name: "estadoGestion", label: "Estado de gestión", type: "SELECT", icon: "IconProgressCheck",
@@ -96,17 +123,16 @@ module.exports = {
     },
   ],
 
-  // Columnas del listado en la exportación a Excel (después del grupo: Ciudad).
+  // Columnas del listado en la exportación a Excel (después del grupo: tipo de empresa).
   exportacion: {
     codigo: "CODIGO_EMPRESA",
     datos: [
-      { header: "EMPRESA", dato: "razon_social" },
+      { header: "RAZON_SOCIAL", dato: "razon_social" },
       { header: "RUC", dato: "ruc" },
-      { header: "SECTOR", dato: "sector" },
     ],
   },
 
-  etiquetas: { grupo: "Ciudad", grupoPlural: "Ciudades", idExterno: "Empresa" },
+  etiquetas: { grupo: "Tipo de empresa", grupoPlural: "Tipos de empresa", idExterno: "Razón social" },
 
   gestionMensual: false,
   // Todas las preguntas son obligatorias (NS/NR cuentan como respuesta).

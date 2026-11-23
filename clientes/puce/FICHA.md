@@ -31,28 +31,34 @@ Cuatro segmentos de **una sola encuesta**, en el orden **6 → 5 → 4 → 2**:
 Digitalizado en `tenants/puce.cuestionario.js`: 258 preguntas (233 de escala en 37 tablas,
 15 abiertas, 4 de opción única, 1 numérica, 5 indicaciones). Duración estimada: 50–70 min.
 
-## Campos de la muestra → Twenty (`person`)
+## Base de empresas → Twenty (`person`)
 
-Cada registro de Twenty es **el contacto de una empresa**.
+Proceso de la PMO: `documentos/Proceso_de_encuesta.docx`. Cada registro de Twenty es **una empresa**.
 
-| Columna de la muestra | Campo en Twenty | Uso en la app |
+| Columna de la base | Campo en Twenty | Uso en la app |
 |---|---|---|
-| Código de empresa | `codigoEmpresa` | código (obligatorio para encuestar) |
-| Razón social | `razonSocial` | «Empresa»: se muestra y se busca |
-| RUC | `ruc` | dato del listado (exportación) |
-| Ciudad | `ciudad` | grupo de reportes y monitoreo |
-| Sector | `sector` | dato del listado (exportación) |
-| Nombre del contacto | `name` | nombre en el buscador y el guion |
-| Cargo del contacto | `cargoContacto` | dato del listado |
-| Teléfono | `celular` | teléfono |
-| Correo | `correoContacto` | dato del listado |
-| — | `estadoGestion` | estado (Pendiente, Completa, Parcial, Cita…) |
-| — | `intentosContacto` | número de gestiones registradas |
+| Código (o RUC si no hay) | `codigoEmpresa` | código (obligatorio para encuestar) |
+| Nombre de la empresa | `name` | nombre en el buscador y en el guion |
+| Razón social | `razonSocial` | se muestra y se busca |
+| RUC | `ruc` | exportación |
+| Tipo de empresa | `tipoEmpresa` | grupo de reportes (Mediana/Grande) |
+| Números de contacto | `celular` (Teléfono 1), `telefono2` | varios números en una celda se separan |
+| Correo de la empresa | `correoContacto` | |
+| — | `estadoGestion`, `intentosContacto` | estado e intentos |
 
-Plantilla para la PMO: `documentos/plantilla_base_empresas.xlsx` (hoja «Empresas» + instrucciones).
-Carga: `TENANT=<slug> node scripts/cargar-empresas.js --base=<archivo>` (simula; `--aplicar` carga).
-Acepta variantes de nombres de columna (`lib/empresas.js`); sin CODIGO usa el RUC.
-Las respuestas de la encuesta **no** van a Twenty: quedan en la base de Antroforms.
+Ciudad, sector, contacto y cargo son opcionales. Plantilla: `documentos/plantilla_base_empresas.xlsx`.
+Carga: `TENANT=puce node scripts/cargar-empresas.js --base=<archivo>` (simula; `--aplicar` carga).
+
+**Datos de la gestión** (se registran en la encuesta y se copian a Twenty al cerrar cada gestión,
+`twenty.respuestasACampos`):
+
+| En la encuesta | Campo en Twenty |
+|---|---|
+| GD1 «¿Piden enviar la información a otra persona?» → CD_NOMBRE, CD_TELEFONO, CD_CORREO | `contactoDerivadoNombre/Telefono/Correo` |
+| GC1 «¿Piden hacerla otro día o presencial?» → CITA_FECHA, CITA_HORA, CITA_MODALIDAD | `fechaCita`, `horaCita`, `modalidadCita` |
+| ENC_NOMBRE, ENC_CARGO (obligatorios), ENC_TELEFONO (opcional) | `encuestadoNombre/Cargo/Telefono` |
+
+Las respuestas de la encuesta **no** van a Twenty.
 
 ## Estados de gestión
 
@@ -113,7 +119,7 @@ clave; carta del Decanato y consentimiento antes de iniciar (CI1); hasta 3 recor
 - El guion ofrece responder «en línea» y «remitirle el enlace»: hoy la encuesta la registra
   siempre el encuestador (no hay enlace para que la empresa la llene sola).
 
-- Base de empresas (la PMO la arma con la plantilla).
+- Base de empresas (la PMO la arma con la plantilla del proceso).
 - Borrar los registros de ejemplo de fábrica del Twenty.
 - ¿Cuotas por ciudad o sector? (por ahora la cuota del reporte = tamaño de la muestra).
 - Destinatarios y hora del reporte, si se envía por correo.
