@@ -96,6 +96,10 @@ services:
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
       POSTGRES_DB: postgres
       POSTGRES_CLUSTER: "TRUE"
+      # El valor por defecto de la imagen (-Z1 --schema=public --blobs) es de pg_dump y
+      # pg_dumpall lo rechaza («invalid option -- 'Z'»). Vacío no sirve: la imagen
+      # vuelve a poner el valor por defecto, así que va una opción inocua.
+      POSTGRES_EXTRA_OPTS: "--no-password"
       SCHEDULE: "0 3 * * *"
       TZ: America/Guayaquil
       BACKUP_KEEP_DAYS: "7"
