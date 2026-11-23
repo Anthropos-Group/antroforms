@@ -286,6 +286,27 @@ export const TIPOS_CON_CAMPOS = ["opcion_unica", "opcion_multiple", "numero", "e
 
 export default function PreguntaCampos({ pregunta, valor, onChange }) {
   if (pregunta.tipo === "informativa") {
+    // config.speech: lo que se lee en voz alta; con config.nota la ayuda es una nota
+    // para el encuestador que no se lee (estudio de plantas, PUCE).
+    const { speech, nota } = pregunta.config || {};
+    if (speech || nota) {
+      return (
+        <div style={{ display: "grid", gap: 12 }}>
+          {speech && (
+            <div className="script-box" style={{ margin: 0 }}>
+              <span className="script-label">Léalo al encuestado</span>
+              {speech}
+            </div>
+          )}
+          {pregunta.ayuda && (
+            <div className="nota-box">
+              <span className="nota-label">Nota para el encuestador (no se lee)</span>
+              {pregunta.ayuda}
+            </div>
+          )}
+        </div>
+      );
+    }
     return (
       <div className="script-box" style={{ margin: 0 }}>
         <span className="script-label">Indicación para el encuestador</span>
