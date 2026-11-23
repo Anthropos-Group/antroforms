@@ -64,13 +64,13 @@ FUERA_UNIVERSO y COMPLETA.
 
 ## Guion de contacto
 
-`documentos/Guion_de_contacto.docx` (Strattos). En la app se muestra completo como guion de
-apertura: recepción, informante clave, cierre y preguntas frecuentes. El mensaje de
-seguimiento por correo/WhatsApp queda para la guía de encuestadores. Del guion salen:
-universo = manufactureras medianas y grandes de Pichincha; informante = gerente de
-producción/operaciones u otro informante clave; carta del Decanato y consentimiento
-informado antes de iniciar (CI1); hasta 3 recordatorios cada 7–10 días; no recontactar
-a quien rechaza. Canal «Presencial» agregado (el guion ofrece responder presencialmente).
+`documentos/Guion_de_contacto.docx` (Strattos) es la referencia del equipo. En la app el guion
+de apertura es **un solo párrafo breve** (pedido del usuario): presentación de Strattos, proyecto
+de la PUCE, voluntario y confidencial. Preguntas frecuentes, cierre y mensaje de seguimiento
+quedan para la guía de encuestadores. Del documento salen: universo = manufactureras medianas
+y grandes de Pichincha; informante = gerente de producción/operaciones u otro informante
+clave; carta del Decanato y consentimiento antes de iniciar (CI1); hasta 3 recordatorios cada
+7–10 días; no recontactar a quien rechaza. Canal «Presencial» agregado.
 
 ## Reglas
 
