@@ -1,0 +1,74 @@
+# Stack «antroforms-postgres» (Portainer → Stacks → Add stack → Repository,
+# compose path: infra/postgres/docker-compose.yml). Un solo Postgres para los
+# clientes nuevos, una base por cliente; ver docs/POSTGRES.md.
+services:
+  postgres:
+    build: .
+    pull_policy: build
+    container_name: antroforms-postgres
+    restart: always
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Falta POSTGRES_PASSWORD}
+      APROVISIONADOR_DB_PASSWORD: ${APROVISIONADOR_DB_PASSWORD:?Falta APROVISIONADOR_DB_PASSWORD}
+    command: ["postgres", "-c", "max_connections=200", "-c", "shared_buffers=256MB", "-c", "log_min_duration_statement=2000"]
+    volumes:
+      - antroforms-pgdata:/var/lib/postgresql/data
+    # Sin puertos publicados: solo lo alcanzan los contenedores de strattos-net.
+    expose:
+      - "5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks: [strattos-net]
+
+  aprovisionador:
+    build: ../../aprovisionador
+    pull_policy: build
+    container_name: antroforms-aprovisionador
+    restart: always
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      APROVISIONADOR_TOKEN: ${APROVISIONADOR_TOKEN:?Falta APROVISIONADOR_TOKEN}
+      APROVISIONADOR_DB_PASSWORD: ${APROVISIONADOR_DB_PASSWORD}
+      PGHOST: antroforms-postgres
+      HOST_POSTGRES_APPS: antroforms-postgres
+    expose:
+      - "8080"
+    networks: [strattos-net]
+
+  # Respaldo diario de todo el servidor (pg_dumpall) con retención 7 días,
+  # 4 semanas y 6 meses. Copiar la carpeta de respaldos fuera del servidor.
+  respaldos:
+    image: prodrigestivill/postgres-backup-local:17
+    container_name: antroforms-respaldos
+    restart: always
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      POSTGRES_HOST: antroforms-postgres
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_DB: postgres
+      POSTGRES_CLUSTER: "TRUE"
+      SCHEDULE: "0 3 * * *"
+      TZ: America/Guayaquil
+      BACKUP_KEEP_DAYS: "7"
+      BACKUP_KEEP_WEEKS: "4"
+      BACKUP_KEEP_MONTHS: "6"
+    volumes:
+      - antroforms-respaldos:/backups
+    networks: [strattos-net]
+
+volumes:
+  antroforms-pgdata:
+  antroforms-respaldos:
+
+networks:
+  strattos-net:
+    external: true

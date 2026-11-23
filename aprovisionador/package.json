@@ -1,0 +1,8 @@
+{
+  "name": "antroforms-aprovisionador",
+  "private": true,
+  "description": "Crea y revisa las bases de los clientes de Antroforms en el Postgres propio",
+  "main": "server.js",
+  "scripts": { "start": "node server.js" },
+  "dependencies": { "pg": "8.23.0" }
+}
