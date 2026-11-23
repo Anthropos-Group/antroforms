@@ -2,7 +2,9 @@
 # compose path: infra/postgres/docker-compose.yml). Un solo Postgres para los
 # clientes nuevos, una base por cliente; ver docs/POSTGRES.md.
 services:
-  postgres:
+  # Nombres de servicio únicos: en strattos-net el nombre del servicio también es un
+  # nombre de host, y «postgres» a secas choca con la base de otra app del servidor.
+  antroforms-postgres:
     build: .
     pull_policy: build
     container_name: antroforms-postgres
@@ -54,13 +56,13 @@ services:
       retries: 5
     networks: [strattos-net]
 
-  aprovisionador:
+  antroforms-aprovisionador:
     build: ../../aprovisionador
     pull_policy: build
     container_name: antroforms-aprovisionador
     restart: always
     depends_on:
-      postgres:
+      antroforms-postgres:
         condition: service_healthy
     environment:
       APROVISIONADOR_TOKEN: ${APROVISIONADOR_TOKEN:?Falta APROVISIONADOR_TOKEN}
@@ -81,12 +83,12 @@ services:
 
   # Respaldo diario de todo el servidor (pg_dumpall) con retención 7 días,
   # 4 semanas y 6 meses. Copiar la carpeta de respaldos fuera del servidor.
-  respaldos:
+  antroforms-respaldos:
     image: prodrigestivill/postgres-backup-local:17
     container_name: antroforms-respaldos
     restart: always
     depends_on:
-      postgres:
+      antroforms-postgres:
         condition: service_healthy
     environment:
       POSTGRES_HOST: antroforms-postgres
