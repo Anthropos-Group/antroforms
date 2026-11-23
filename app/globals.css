@@ -1165,3 +1165,29 @@ textarea {
     margin: 0 6px;
   }
 }
+
+/* Tabla de afirmaciones (preguntas con config.grupo): una fila por afirmación. */
+.tabla-escala { display: grid; gap: 6px; }
+.tabla-escala-leyenda {
+  display: flex; flex-wrap: wrap; gap: 6px 16px; font-size: 12.5px; color: #475569;
+  background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 8px; padding: 8px 12px; margin-bottom: 4px;
+}
+.tabla-escala-fila {
+  display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 8px 12px; align-items: center;
+  padding: 8px 10px; border: 1px solid #e5e7eb; border-radius: 8px; background: #fff;
+}
+.tabla-escala-fila:nth-child(even) { background: #fafafa; }
+.tabla-escala-fila.falta { border-color: #fca5a5; background: #fef2f2; }
+.tabla-escala-texto { font-size: 14px; line-height: 1.35; }
+.tabla-escala-num { color: #6b7280; font-weight: 600; }
+.tabla-escala-botones { display: flex; gap: 4px; flex-wrap: wrap; }
+.tabla-escala-botones .scale-btn { width: 36px; height: 36px; padding: 0; font-size: 14px; }
+.tabla-escala-botones .scale-btn:hover, .tabla-escala-botones .scale-btn.selected { transform: none; }
+.tabla-escala-botones .scale-btn.especial { width: 40px; font-size: 12px; color: #64748b; }
+.tabla-escala-botones .scale-btn.especial.selected { color: #fff; }
+@media (max-width: 760px) {
+  .tabla-escala-fila { grid-template-columns: 1fr; padding: 8px; }
+  .tabla-escala-botones { gap: 3px; flex-wrap: nowrap; }
+  .tabla-escala-botones .scale-btn { width: 30px; height: 30px; font-size: 13px; border-width: 1px; }
+  .tabla-escala-botones .scale-btn.especial { width: 32px; font-size: 11px; }
+}

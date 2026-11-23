@@ -12,9 +12,11 @@ import {
   prepararEnvio,
   textoConDatos,
   preguntaParaMostrar,
+  rangoGrupo,
+  siguientePantalla,
   preguntasFueraDeRuta,
 } from "../../lib/encuesta-logica";
-import PreguntaCampos, { TIPOS_CON_CAMPOS } from "../../components/PreguntaCampos";
+import PreguntaCampos, { TIPOS_CON_CAMPOS, TablaEscala, BotonesEspeciales } from "../../components/PreguntaCampos";
 import { useTenant } from "../../components/TenantProvider";
 
 // Resultados con los que se puede cerrar una llamada sin terminar la encuesta.
@@ -253,6 +255,8 @@ export default function EncuestaPage() {
   const [mostrarGuion, setMostrarGuion] = useState(true);
   const [sinConexion, setSinConexion] = useState(false);
   const [cierreElegido, setCierreElegido] = useState("");
+  // Encuesta a medias del cliente que se retomó desde el servidor (parcial o cita).
+  const [retomada, setRetomada] = useState(null);
 
   function sesionExpirada() {
     router.replace("/login?next=/encuesta");
@@ -408,16 +412,19 @@ export default function EncuestaPage() {
   const primeraPendiente = useMemo(() => {
     if (!tenant.avanceObligatorio || !cuestionario) return Infinity;
     const i = cuestionario.preguntas.findIndex((p) => faltaResponder(p));
-    return i === -1 ? Infinity : i;
+    return i === -1 ? Infinity : rangoGrupo(cuestionario.preguntas, i).inicio;
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [tenant.avanceObligatorio, cuestionario, respuestas, cliente, fueraDeRuta, autoRespuestas]);
   const MENSAJE_OBLIGATORIA = "Responda esta pregunta para continuar. Si el socio no sabe o no quiere responder, use «No sabe» o «Prefiere no responder».";
+  // Una pantalla es una pregunta, o una tabla de afirmaciones (config.grupo).
   function siguienteIndice(desde, paso) {
-    const lista = cuestionario?.preguntas || [];
-    let i = desde + paso;
-    while (i >= 0 && i < lista.length && esSaltoDeRuta(lista[i])) i += paso;
-    return i < 0 || i >= lista.length ? desde : i;
+    return siguientePantalla(cuestionario?.preguntas, desde, paso, esSaltoDeRuta);
   }
+  const inicioPantalla = (i) => rangoGrupo(cuestionario?.preguntas, i).inicio;
+  const rangoActual = rangoGrupo(cuestionario?.preguntas, indice);
+  const preguntasPantalla = (cuestionario?.preguntas || []).slice(rangoActual.inicio, rangoActual.fin + 1);
+  const esTabla = Boolean(preguntaOriginal?.config?.grupo);
+  const faltaPantalla = () => preguntasPantalla.some((p) => faltaResponder(p));
 
   function elegirEncuestador(id) {
     setEncuestadorId(id);
@@ -463,7 +470,9 @@ export default function EncuestaPage() {
     setActiveDraftId(newDraftId);
     setErroresValidacion([]);
     setErrorEnvio(null);
+    setRetomada(null);
     setStep("cuestionario");
+    if (tenant.retomarParciales) retomarParcial(c);
 
     saveBorradorToStorage({
       id: newDraftId,
@@ -475,13 +484,43 @@ export default function EncuestaPage() {
     });
   }
 
+  // Si el cliente tiene una encuesta cerrada como «parcial» o «cita», se cargan sus
+  // respuestas para seguir donde quedó (otro día, otra persona, otro dispositivo).
+  async function retomarParcial(c) {
+    const id = c.id_twenty;
+    try {
+      const res = await fetchSesion(`/api/clientes/${id}/retomar`, {}, sesionExpirada);
+      if (!res.ok) return;
+      const { encuesta } = await res.json();
+      if (!encuesta || clienteAbiertoRef.current !== id) return;
+      const previas = encuesta.respuestas || {};
+      const preguntas = cuestionario?.preguntas || [];
+      // Lo que el encuestador ya marcó en esta sesión tiene prioridad (no los N/A
+      // automáticos, que se recalculan con las respuestas retomadas).
+      setRespuestas((prev) => {
+        const propias = Object.fromEntries(Object.entries(prev).filter(([, v]) => v !== NA));
+        return reconciliarAutoRespuestas(preguntas, c, { ...previas, ...propias });
+      });
+      const primera = preguntas.findIndex(
+        (p) => !(p.id in previas) && !p.mostrar_si && p.tipo !== "informativa" && !Array.isArray(p.config?.calculo)
+      );
+      // Si la sección empieza con una indicación (S5, S4…), se retoma desde ella.
+      let desde = primera;
+      while (desde > 0 && preguntas[desde - 1].tipo === "informativa" && preguntas[desde - 1].bloque === preguntas[primera].bloque) desde--;
+      if (primera > 0) setIndice(rangoGrupo(preguntas, desde).inicio);
+      setRetomada({ ...encuesta, total: Object.keys(previas).length });
+    } catch {
+      // Sin conexión: se empieza desde cero, como antes.
+    }
+  }
+
   function continuarBorrador(b) {
     setCliente(b.cliente);
     // El borrador guarda la foto del cliente de cuando se abrió: se reajusta ya
     // con esa foto y luego con los datos vigentes.
     setRespuestas(reconciliarAutoRespuestas(cuestionario?.preguntas, b.cliente, b.respuestas || {}));
     if (b.cliente?.id_twenty) refrescarCliente(b.cliente.id_twenty);
-    setIndice(Math.min(b.indice || 0, Math.max(0, (cuestionario?.preguntas?.length || 1) - 1)));
+    setIndice(inicioPantalla(Math.min(b.indice || 0, Math.max(0, (cuestionario?.preguntas?.length || 1) - 1))));
     setActiveDraftId(b.id);
     setErroresValidacion([]);
     setErrorEnvio(null);
@@ -625,6 +664,7 @@ export default function EncuestaPage() {
     setResultados([]);
     setRespuestas({});
     setCierreElegido("");
+    setRetomada(null);
     setIndice(0);
     setActiveDraftId(null);
     setErroresValidacion([]);
@@ -977,6 +1017,14 @@ export default function EncuestaPage() {
                 antes de continuar con la encuesta.
               </div>
             )}
+            {retomada && (
+              <div className="script-box" style={{ marginBottom: 12, background: "#eff6ff", borderColor: "#bfdbfe" }}>
+                <span className="script-label">Encuesta retomada</span>
+                Se cargaron {retomada.total} respuestas de la gestión anterior ({retomada.resultado === "cita" ? "cita" : "parcial"}
+                {retomada.encuestador ? `, ${retomada.encuestador}` : ""}, {new Date(retomada.fecha).toLocaleString("es-EC")}
+                {retomada.ultimo_bloque ? `; quedó en ${retomada.ultimo_bloque}` : ""}). Continúe desde la primera pregunta pendiente.
+              </div>
+            )}
             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8 }}>
               <div style={{ fontSize: 12, color: "#6b7280", fontWeight: 600 }}>
                 Progreso general ({progreso}%)
@@ -995,6 +1043,32 @@ export default function EncuestaPage() {
             {/* Selector directo de preguntas */}
             <div className="question-nav-bar">
               {cuestionario.preguntas.map((p, i) => {
+                // Una tabla de afirmaciones tiene un solo botón (el de su primera fila).
+                const rango = rangoGrupo(cuestionario.preguntas, i);
+                if (rango.inicio !== i) return null;
+                if (p.config?.grupo) {
+                  const miembros = cuestionario.preguntas.slice(rango.inicio, rango.fin + 1);
+                  const hecha = miembros.every((m) => esNoAplica(m) || respuestaCompleta(m, respuestas[m.id], cliente));
+                  return (
+                    <button
+                      key={p.id}
+                      className={`question-pill${i === indice ? " active" : ""}${hecha ? " done" : ""}`}
+                      title={`${p.config.grupo}${p.bloque ? ` · ${p.bloque}` : ""} (${miembros.length} afirmaciones)`}
+                      onClick={() => {
+                        if (i > primeraPendiente) {
+                          setIndice(primeraPendiente);
+                          setAvisoAvance(MENSAJE_OBLIGATORIA);
+                          return;
+                        }
+                        setIndice(i);
+                        setAvisoAvance("");
+                        setErroresValidacion([]);
+                      }}
+                    >
+                      {p.config.grupo}
+                    </button>
+                  );
+                }
                 const esNA = esNoAplica(p);
                 const numLabel = p.numero_reporte ?? (i + 1);
                 const etiquetaPill = p.codigo || `P${numLabel}`;
@@ -1079,7 +1153,7 @@ export default function EncuestaPage() {
                       key={err.preguntaId}
                       style={{ cursor: "pointer", textDecoration: "underline", marginBottom: 4 }}
                       onClick={() => {
-                        setIndice(err.indice);
+                        setIndice(inicioPantalla(err.indice));
                         setErroresValidacion([]);
                       }}
                     >
@@ -1099,8 +1173,10 @@ export default function EncuestaPage() {
                 <div style={{ marginTop: 16 }}>
                   <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 6, flexWrap: "wrap", gap: 8 }}>
                     <div style={{ fontSize: 12, textTransform: "uppercase", color: "#6b7280", fontWeight: 700 }}>
-                      {etiquetaPregunta}
-                      {preguntaActual.bloque ? ` · ${preguntaActual.bloque}` : ""} · Paso {indice + 1} de {cuestionario.preguntas.length}
+                      {esTabla ? preguntaActual.config.grupo : etiquetaPregunta}
+                      {preguntaActual.bloque ? ` · ${preguntaActual.bloque}` : ""} · {esTabla
+                        ? `Preguntas ${rangoActual.inicio + 1}–${rangoActual.fin + 1}`
+                        : `Paso ${indice + 1}`} de {cuestionario.preguntas.length}
                     </div>
                     {preguntaActual.condicion?.campo === "total" && (
                       <div>
@@ -1118,7 +1194,9 @@ export default function EncuestaPage() {
                   </div>
 
                   <p style={{ fontSize: 17, fontWeight: 500, marginBottom: 14 }}>
-                    {textoConDatos(preguntaActual.texto, cliente)}
+                    {esTabla
+                      ? preguntaActual.config.grupo_texto || ""
+                      : textoConDatos(preguntaActual.texto, cliente)}
                   </p>
                   {preguntaActual.ayuda && preguntaActual.tipo !== "informativa" && !esNA && (
                     <div
@@ -1128,7 +1206,14 @@ export default function EncuestaPage() {
                     </div>
                   )}
 
-                  {esNA ? (
+                  {esTabla ? (
+                    <TablaEscala
+                      preguntas={preguntasPantalla}
+                      respuestas={respuestas}
+                      onChange={actualizarRespuesta}
+                      faltantes={avisoAvance ? new Set(preguntasPantalla.filter(faltaResponder).map((p) => p.id)) : null}
+                    />
+                  ) : esNA ? (
                     <div
                       className="card pad"
                       style={{
@@ -1241,6 +1326,11 @@ export default function EncuestaPage() {
                             onChange={(e) => actualizarRespuesta(preguntaActual.id, e.target.value)}
                             placeholder="Escribe la respuesta…"
                           />
+                          <BotonesEspeciales
+                            pregunta={preguntaActual}
+                            valor={respuestas[preguntaActual.id]}
+                            onChange={(v) => actualizarRespuesta(preguntaActual.id, v)}
+                          />
                         </div>
                       )}
                     </>
@@ -1270,7 +1360,7 @@ export default function EncuestaPage() {
                       <button
                         className="btn btn-secondary"
                         onClick={() => {
-                          if (tenant.avanceObligatorio && faltaResponder(preguntaOriginal)) {
+                          if (tenant.avanceObligatorio && faltaPantalla()) {
                             setAvisoAvance(MENSAJE_OBLIGATORIA);
                             return;
                           }

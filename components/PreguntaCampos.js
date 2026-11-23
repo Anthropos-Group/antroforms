@@ -27,7 +27,7 @@ function esEspecial(val) {
   return val !== null && typeof val === "object" && (val.especial === "NS" || val.especial === "NR");
 }
 
-function BotonesEspeciales({ pregunta, valor, onChange }) {
+export function BotonesEspeciales({ pregunta, valor, onChange }) {
   const especiales = pregunta.config?.especiales || [];
   if (!especiales.length) return null;
   return (
@@ -213,6 +213,70 @@ function Escala({ pregunta, valor, onChange }) {
             placeholder="Escribe el motivo…"
           />
         </div>
+      )}
+    </div>
+  );
+}
+
+// Tabla de afirmaciones: varias preguntas de escala con la misma escala en una sola
+// pantalla (config.grupo). Cada fila es una pregunta: número, No sabe y Prefiere no
+// responder. En pantallas angostas el texto va arriba y los botones debajo.
+export function TablaEscala({ preguntas, respuestas, onChange, faltantes }) {
+  const primera = preguntas[0];
+  const min = Number.isInteger(primera?.config?.min) ? primera.config.min : 1;
+  const max = Number.isInteger(primera?.config?.max) ? primera.config.max : 7;
+  const valores = Array.from({ length: max - min + 1 }, (_, i) => min + i);
+  const etiquetas = primera?.config?.etiquetas || {};
+  return (
+    <div className="tabla-escala">
+      {(etiquetas.min || etiquetas.medio || etiquetas.max) && (
+        <div className="tabla-escala-leyenda">
+          <span><strong>{min}</strong> = {etiquetas.min || "—"}</span>
+          {etiquetas.medio && <span><strong>{Math.round((min + max) / 2)}</strong> = {etiquetas.medio}</span>}
+          <span><strong>{max}</strong> = {etiquetas.max || "—"}</span>
+        </div>
+      )}
+      {preguntas.map((p, i) => {
+        const valor = respuestas[p.id];
+        const cal = esEspecial(valor) ? null : typeof valor === "object" && valor !== null ? valor.calificacion : null;
+        const especiales = p.config?.especiales || [];
+        const falta = faltantes?.has(p.id);
+        return (
+          <div key={p.id} className={`tabla-escala-fila${falta ? " falta" : ""}`}>
+            <div className="tabla-escala-texto">
+              <span className="tabla-escala-num">{String.fromCharCode(97 + (i % 26))}{i >= 26 ? Math.floor(i / 26) : ""}.</span> {p.texto}
+            </div>
+            <div className="tabla-escala-botones">
+              {valores.map((n) => (
+                <button
+                  key={n}
+                  type="button"
+                  className={`scale-btn${cal === n ? " selected" : ""}`}
+                  onClick={() => onChange(p.id, cal === n ? undefined : { calificacion: n })}
+                >
+                  {n}
+                </button>
+              ))}
+              {especiales.map((e) => {
+                const activo = esEspecial(valor) && valor.especial === e;
+                return (
+                  <button
+                    key={e}
+                    type="button"
+                    title={ETIQUETA_ESPECIAL[e]}
+                    className={`scale-btn especial${activo ? " selected" : ""}`}
+                    onClick={() => onChange(p.id, activo ? undefined : { especial: e })}
+                  >
+                    {e}
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+        );
+      })}
+      {primera?.config?.especiales?.length > 0 && (
+        <p style={{ margin: "8px 0 0", fontSize: 12, color: "#6b7280" }}>NS = No sabe · NR = Prefiere no responder</p>
       )}
     </div>
   );
