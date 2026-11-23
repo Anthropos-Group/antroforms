@@ -49,7 +49,10 @@ Cada registro de Twenty es **el contacto de una empresa**.
 | — | `estadoGestion` | estado (Pendiente, Completa, Parcial, Cita…) |
 | — | `intentosContacto` | número de gestiones registradas |
 
-_La transformación de la muestra se escribe cuando llegue la muestra de prueba (5–10 empresas)._
+Plantilla para la PMO: `documentos/plantilla_base_empresas.xlsx` (hoja «Empresas» + instrucciones).
+Carga: `TENANT=<slug> node scripts/cargar-empresas.js --base=<archivo>` (simula; `--aplicar` carga).
+Acepta variantes de nombres de columna (`lib/empresas.js`); sin CODIGO usa el RUC.
+Las respuestas de la encuesta **no** van a Twenty: quedan en la base de Antroforms.
 
 ## Estados de gestión
 

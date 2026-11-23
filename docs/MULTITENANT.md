@@ -135,6 +135,16 @@ teléfono: el socio se identifica por su código.
 El monitoreo de 23 de Julio muestra el avance por oficina y por resultado de la
 llamada (`lib/avance.js`), en lugar del tablero por mes de EDIMCA.
 
+## Base de empresas (estudio de plantas)
+
+```bash
+TENANT=plantas node scripts/cargar-empresas.js --base=base_empresas.xlsx [--aplicar]
+```
+
+Una fila por empresa (plantilla en `clientes/plantas/documentos/`): código (o RUC),
+razón social, RUC, ciudad, sector, contacto, cargo, teléfono y correo. Cada empresa
+es un registro `person` en Twenty (el contacto), con la razón social en `razonSocial`.
+
 ## Pendiente para 23 de Julio
 
 - Datos que el instrumento deja en blanco: teléfono de verificación y correo del
