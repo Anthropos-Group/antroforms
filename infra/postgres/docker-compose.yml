@@ -11,9 +11,39 @@ services:
       POSTGRES_USER: postgres
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Falta POSTGRES_PASSWORD}
       APROVISIONADOR_DB_PASSWORD: ${APROVISIONADOR_DB_PASSWORD:?Falta APROVISIONADOR_DB_PASSWORD}
-    command: ["postgres", "-c", "max_connections=200", "-c", "shared_buffers=256MB", "-c", "log_min_duration_statement=2000"]
+    command:
+      - postgres
+      - -c
+      - max_connections=200
+      - -c
+      - shared_buffers=256MB
+      # Diagnóstico: consultas lentas por tipo (sin guardar el texto de comandos
+      # como ALTER ROLE … PASSWORD) y log en archivo legible por el aprovisionador.
+      - -c
+      - shared_preload_libraries=pg_stat_statements
+      - -c
+      - pg_stat_statements.track_utility=off
+      - -c
+      - logging_collector=on
+      - -c
+      - log_directory=/pglogs
+      - -c
+      - log_filename=postgresql-%a.log
+      - -c
+      - log_truncate_on_rotation=on
+      - -c
+      - log_rotation_age=1d
+      - -c
+      - log_file_mode=0644
+      - -c
+      - log_min_duration_statement=2000
+      - -c
+      - log_connections=off
+      - -c
+      - log_lock_waits=on
     volumes:
       - antroforms-pgdata:/var/lib/postgresql/data
+      - antroforms-pglogs:/pglogs
     # Sin puertos publicados: solo lo alcanzan los contenedores de strattos-net.
     expose:
       - "5432"
@@ -37,6 +67,14 @@ services:
       APROVISIONADOR_DB_PASSWORD: ${APROVISIONADOR_DB_PASSWORD}
       PGHOST: antroforms-postgres
       HOST_POSTGRES_APPS: antroforms-postgres
+      # Ventana de mantenimiento (opción B): para permitir escrituras, poner la hora
+      # de cierre (máx. 12 h desde ahora) y el cliente, y actualizar el stack. Vacío = cerrada.
+      #   ESCRITURA_HABILITADA_HASTA=2026-11-23T15:30-05:00   ESCRITURA_CLIENTE=<slug>
+      ESCRITURA_HABILITADA_HASTA: ${ESCRITURA_HABILITADA_HASTA:-}
+      ESCRITURA_CLIENTE: ${ESCRITURA_CLIENTE:-}
+    volumes:
+      - antroforms-pglogs:/pglogs:ro
+      - antroforms-respaldos:/respaldos:ro
     expose:
       - "8080"
     networks: [strattos-net]
@@ -67,6 +105,7 @@ services:
 
 volumes:
   antroforms-pgdata:
+  antroforms-pglogs:
   antroforms-respaldos:
 
 networks:

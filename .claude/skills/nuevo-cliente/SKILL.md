@@ -14,8 +14,11 @@ todo lo técnico lo haces tú y al final entregas **un solo resumen**. Responde 
    Cooperativa 23 de Julio siguen en Supabase: esta skill no los modifica.
 2. **Bases de datos solo a través del aprovisionador** (`https://aprovisionador.aiagentrevenue.online`,
    credencial inyectada por el proxy; nunca pidas ni muestres el token). Puede crear la base de un
-   cliente, cambiar su contraseña, ver su estado y hacer consultas de **solo lectura**. No borra
-   nada: si algo debe borrarse o corregirse con escritura, se lo pides al usuario con el SQL exacto.
+   cliente, cambiar su contraseña, ver su estado, consultar en **solo lectura** y diagnosticar el
+   servidor (`/diagnostico`, `/registros`, `/respaldos`). Para corregir datos: muestra al usuario el
+   SQL y su efecto (`"probar": true` si la ventana ya está abierta) y pídele que abra la **ventana de
+   mantenimiento** (docs/POSTGRES.md) para ese cliente; aplica solo dentro de ella, con `motivo`.
+   Si la ventana no se abre, el usuario corre el SQL. Nunca se borran bases ni usuarios.
 3. **Twenty real del cliente:** primero en modo prueba (`--dry-run` / sin `--aplicar`); cargar o
    cambiar registros reales solo con el OK explícito del usuario en ese momento.
 4. **Datos personales** (bases de socios/clientes, cédulas, teléfonos) **nunca** se suben al
@@ -115,6 +118,10 @@ Entrega un bloque listo para copiar:
 - Si pidió reporte diario: clonar en n8n Strattos el flujo «Antroforms · Reporte diario 23 de Julio»
   cambiando URL, CRON_SECRET (credencial nueva) y destinatarios; probar el envío al usuario antes
   que al cliente; publicar.
+
+Ante una falla o auditoría de un cliente en el Postgres propio, empieza por
+`GET $A/diagnostico` (conexiones, bloqueos, consultas lentas, disco, último respaldo) y
+`GET $A/registros?filtro=ERROR`, y cruza con los datos del cliente vía `/consulta`.
 
 ### 8. Resumen final (único mensaje largo)
 - Qué quedó funcionando (URLs, base, Twenty, reporte) y cómo se verificó.

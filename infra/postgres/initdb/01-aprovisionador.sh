@@ -8,6 +8,11 @@ create role aprovisionador with login createdb createrole password :'pw';
 -- Los usuarios que crea le quedan concedidos con SET e INHERIT: puede revisar
 -- sus bases (estado, consultas de solo lectura) sin ser superusuario.
 alter role aprovisionador set createrole_self_grant = 'set, inherit';
+-- Diagnóstico de solo lectura del servidor: conexiones, bloqueos, estadísticas.
+grant pg_monitor to aprovisionador;
 create database aprovisionador owner aprovisionador;
 revoke all on database postgres from public;
 SQL
+# Consultas lentas por tipo (requiere shared_preload_libraries, ver docker-compose.yml).
+psql -v ON_ERROR_STOP=1 --username "$POSTGRES_USER" --dbname aprovisionador -c "create extension if not exists pg_stat_statements;"
+
