@@ -29,7 +29,8 @@ function todas(extra = {}) {
 
 test("secciones en el orden 6 → 5 → 4 → 2, con canal, gestión y consentimiento al inicio", () => {
   assert.equal(preguntas[0].codigo, "CANAL");
-  assert.deepEqual(porCodigo("CANAL").config.opciones.map((o) => o.valor), ["LLAMADA", "WHATSAPP", "CORREO", "PRESENCIAL"]);
+  assert.deepEqual(porCodigo("CANAL").config.opciones.map((o) => o.valor), ["LLAMADA", "WHATSAPP", "CORREO"]);
+  assert.ok(!JSON.stringify(def).toLowerCase().includes("presencial"), "sin modalidad presencial (PMO)");
   const pos = (c) => preguntas.findIndex((p) => p.codigo === c);
   assert.ok(pos("GESTION") < pos("CI1") && pos("CI1") < pos("ENC_NOMBRE") && pos("ENC_NOMBRE") < pos("IND_GENERAL"));
   const inicio = (prefijo) => preguntas.findIndex((p) => p.codigo.startsWith(prefijo));

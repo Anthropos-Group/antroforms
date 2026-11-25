@@ -475,7 +475,7 @@ const cuestionario = {
       codigo: "CANAL", bloque: "Contacto", tipo: "opcion_unica",
       texto: "¿Por qué canal se está contactando a la empresa?",
       ayuda: "Lo registra el encuestador antes de empezar. Si en otra gestión se cambia de canal, actualícelo.",
-      config: { opciones: [op("LLAMADA", "Llamada"), op("WHATSAPP", "WhatsApp"), op("CORREO", "Correo"), op("PRESENCIAL", "Presencial")] },
+      config: { opciones: [op("LLAMADA", "Llamada"), op("WHATSAPP", "WhatsApp"), op("CORREO", "Correo")] },
     },
 
     // --- Gestión del contacto (proceso de la PMO), antes de iniciar ---------------
@@ -490,7 +490,7 @@ const cuestionario = {
         opciones: [
           op("RESPONDE", "La persona indicada atiende y puede responder ahora → continuar con la encuesta"),
           op("DERIVA", "Me piden enviar la información o hablar con otra persona → anotar sus datos"),
-          op("AGENDA", "Piden hacer la encuesta otro día u hora, o de forma presencial → anotar la cita"),
+          op("AGENDA", "Piden hacer la encuesta otro día u hora → anotar la cita"),
         ],
       },
     },
@@ -525,7 +525,7 @@ const cuestionario = {
       texto: "Cita: ¿cómo se hará la encuesta?",
       ayuda: "Luego cierre la gestión como «Cita». Cuando llegue la cita, abra la empresa, cambie la respuesta de arriba a «puede responder ahora» y continúe.",
       config: {
-        opciones: [op("PRESENCIAL", "Presencial"), op("LLAMADA", "Llamada"), op("WHATSAPP", "WhatsApp"), op("CORREO", "Correo")],
+        opciones: [op("LLAMADA", "Llamada"), op("WHATSAPP", "WhatsApp"), op("CORREO", "Correo")],
         opcional: true,
       },
       mostrar_si: { pregunta: "GESTION", op: "=", valor: "AGENDA" },
