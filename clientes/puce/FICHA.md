@@ -76,7 +76,7 @@ de la PUCE, voluntario y confidencial. Preguntas frecuentes, cierre y mensaje de
 quedan para la guía de encuestadores. Del documento salen: universo = manufactureras medianas
 y grandes de Pichincha; informante = gerente de producción/operaciones u otro informante
 clave; carta del Decanato y consentimiento antes de iniciar (CI1); hasta 3 recordatorios cada
-7–10 días; no recontactar a quien rechaza. Canal «Presencial» agregado.
+7–10 días; no recontactar a quien rechaza. Sin modalidad presencial (PMO, 25/11/2026): canales llamada, WhatsApp y correo.
 
 ## Pantallas para el encuestador
 

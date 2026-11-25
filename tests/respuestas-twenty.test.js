@@ -7,7 +7,7 @@ const def = require("../tenants/puce.cuestionario");
 
 test("convierte respuestas en texto para Twenty y omite vacíos, N/A y NS/NR", () => {
   const mod = def.preguntas.find((p) => p.codigo === "CITA_MODALIDAD");
-  assert.equal(valorParaTwenty(mod, "PRESENCIAL"), "Presencial");
+  assert.equal(valorParaTwenty(mod, "WHATSAPP"), "WhatsApp");
   assert.equal(valorParaTwenty({}, " Ana Pérez "), "Ana Pérez");
   assert.equal(valorParaTwenty({}, "N/A"), null);
   assert.equal(valorParaTwenty({}, { especial: "NR" }), null);
@@ -25,8 +25,8 @@ test("PUCE: los códigos mapeados existen en el cuestionario y los campos en el 
   const filas = [
     { codigo: "CD_NOMBRE", valor: "Luis Torres" },
     { codigo: "CITA_FECHA", valor: "28/11/2026" },
-    { codigo: "CITA_MODALIDAD", config: def.preguntas.find((p) => p.codigo === "CITA_MODALIDAD").config, valor: "PRESENCIAL" },
+    { codigo: "CITA_MODALIDAD", config: def.preguntas.find((p) => p.codigo === "CITA_MODALIDAD").config, valor: "LLAMADA" },
     { codigo: "LM01_01", valor: { calificacion: 5 } },
   ];
-  assert.deepEqual(camposDesdeFilas(filas, mapa), { contactoDerivadoNombre: "Luis Torres", fechaCita: "28/11/2026", modalidadCita: "Presencial" });
+  assert.deepEqual(camposDesdeFilas(filas, mapa), { contactoDerivadoNombre: "Luis Torres", fechaCita: "28/11/2026", modalidadCita: "Llamada" });
 });
