@@ -36,6 +36,8 @@ module.exports = {
       correo: "correoContacto",
       ciudad: "ciudad",
       sector: "sector",
+      prioridad: "prioridad",
+      elegibilidad: "elegibilidad",
     },
     // Respuestas que también se escriben en Twenty al cerrar cada gestión.
     respuestasACampos: {
@@ -71,7 +73,7 @@ module.exports = {
     estadosExcluidos: ["RECHAZO", "NO_INTERESADO", "NUMERO_INCORRECTO", "FUERA_UNIVERSO", "COMPLETA"],
     limpieza: {
       texto: ["razonSocial", "tipoEmpresa", "ciudad", "sector"],
-      telefono: ["celular", "telefono2"],
+      telefono: ["celular", "telefono2", "whatsapp"],
       numerico: [],
     },
   },
@@ -89,6 +91,16 @@ module.exports = {
     { name: "ciudad", label: "Ciudad", type: "TEXT", icon: "IconMapPin" },
     { name: "sector", label: "Sector", type: "TEXT", icon: "IconBriefcase" },
     { name: "cargoContacto", label: "Cargo del contacto", type: "TEXT", icon: "IconId" },
+    // Datos de la base de Strattos (base_contacto_AAAAMMDD.csv).
+    { name: "prioridad", label: "Prioridad", type: "NUMBER", icon: "IconFlag" },
+    { name: "elegibilidad", label: "Elegibilidad", type: "TEXT", icon: "IconChecklist" },
+    { name: "telefono3", label: "Otros teléfonos", type: "TEXT", icon: "IconPhone" },
+    { name: "whatsapp", label: "WhatsApp confirmado", type: "TEXT", icon: "IconBrandWhatsapp" },
+    { name: "correo2", label: "Correo 2", type: "TEXT", icon: "IconMail" },
+    { name: "direccion", label: "Dirección", type: "TEXT", icon: "IconMap" },
+    { name: "origenBase", label: "Origen de la base", type: "TEXT", icon: "IconDatabase" },
+    { name: "representanteLegal", label: "Representante legal", type: "TEXT", icon: "IconUserStar" },
+    { name: "sitioWeb", label: "Sitio web", type: "TEXT", icon: "IconWorld" },
     // Gestión (se llenan desde la encuesta).
     { name: "contactoDerivadoNombre", label: "Otro contacto: nombre", type: "TEXT", icon: "IconUserShare" },
     { name: "contactoDerivadoTelefono", label: "Otro contacto: teléfono", type: "TEXT", icon: "IconPhone" },
@@ -129,6 +141,10 @@ module.exports = {
     datos: [
       { header: "RAZON_SOCIAL", dato: "razon_social" },
       { header: "RUC", dato: "ruc" },
+      { header: "SEGMENTO", dato: "sector" },
+      { header: "CANTON", dato: "ciudad" },
+      { header: "PRIORIDAD", dato: "prioridad" },
+      { header: "ELEGIBILIDAD", dato: "elegibilidad" },
     ],
   },
 
