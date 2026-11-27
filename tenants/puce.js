@@ -38,6 +38,8 @@ module.exports = {
       sector: "sector",
       prioridad: "prioridad",
       elegibilidad: "elegibilidad",
+      // Se nombra en el guion de apertura: «¿hablo con <representante>, de <empresa>?».
+      representante_legal: "representanteLegal",
     },
     // Respuestas que también se escriben en Twenty al cerrar cada gestión.
     respuestasACampos: {

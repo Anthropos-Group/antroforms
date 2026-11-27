@@ -466,7 +466,7 @@ const cuestionario = {
   nombre: "Encuesta a plantas de manufactura — Liderazgo, cultura, innovación y cadena de suministro",
   // Guion breve (un párrafo): presentación de Strattos y del proyecto de la PUCE.
   guion_apertura:
-    "Buenos días/tardes, ¿hablo con {{NOMBRE}}? Mi nombre es {{ENCUESTADOR}}, de STRATTOS; le saludamos y le contactamos en el marco de un proyecto de investigación de la Pontificia Universidad Católica del Ecuador (PUCE) sobre la industria manufacturera de Pichincha. Su participación es voluntaria y confidencial, y los resultados se presentan de forma agregada. ¿Podría colaborarnos con unos minutos?",
+    "Buenos días/tardes, ¿hablo con {{representante_legal}}, de {{NOMBRE}}? Mi nombre es {{ENCUESTADOR}}, de STRATTOS; le saludamos y le contactamos en el marco de un proyecto de investigación de la Pontificia Universidad Católica del Ecuador (PUCE) sobre la industria manufacturera de Pichincha. Su participación es voluntaria y confidencial, y los resultados se presentan de forma agregada. ¿Podría colaborarnos con unos minutos?",
   guion_cierre: "Muchas gracias por su tiempo y su colaboración.",
 
   preguntas: [

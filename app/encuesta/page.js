@@ -712,13 +712,18 @@ export default function EncuestaPage() {
   }, [respuestas, cuestionario, autoRespuestas, corteInfoActual]);
 
   const nombreEncuestador = encuestadores.find((e) => e.id === encuestadorId)?.nombre || "";
+  // Además de {{NOMBRE}}, {{ENCUESTADOR}}…, el guion puede usar cualquier dato del
+  // listado del cliente ({{representante_legal}} en PUCE).
   const guionApertura = cuestionario
-    ? armarGuion(cuestionario.guion_apertura, {
-        encuestador: nombreEncuestador,
-        nombre: cliente?.nombre,
-        sucursal: cliente?.pdv,
-        fecha: formatFecha(cliente?.fecha_atencion),
-      })
+    ? textoConDatos(
+        armarGuion(cuestionario.guion_apertura, {
+          encuestador: nombreEncuestador,
+          nombre: cliente?.nombre,
+          sucursal: cliente?.pdv,
+          fecha: formatFecha(cliente?.fecha_atencion),
+        }),
+        cliente
+      )
     : "";
 
   return (

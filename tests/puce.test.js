@@ -157,3 +157,12 @@ test("guion breve: un párrafo con Strattos y la PUCE", () => {
   assert.ok(!g.includes("\n"), "un solo párrafo");
   assert.ok(g.length <= 500, `máximo unos 5 renglones (${g.length} caracteres)`);
 });
+
+test("el guion saluda al representante legal y nombra la empresa", () => {
+  const { textoConDatos } = require("../lib/encuesta-logica");
+  const g = def.guion_apertura.replace("{{NOMBRE}}", "CERVECERIA NACIONAL").replace("{{ENCUESTADOR}}", "Ana");
+  const texto = textoConDatos(g, { datos: { representante_legal: "ROA ECHEVERRÍA JUAN PABLO" } });
+  assert.ok(texto.startsWith("Buenos días/tardes, ¿hablo con ROA ECHEVERRÍA JUAN PABLO, de CERVECERIA NACIONAL?"), texto.slice(0, 90));
+  const { tenant } = require("../lib/tenant");
+  assert.equal(tenant("puce").twenty.datos.representante_legal, "representanteLegal");
+});
