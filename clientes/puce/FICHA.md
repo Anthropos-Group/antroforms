@@ -46,6 +46,14 @@ Proceso de la PMO: `documentos/Proceso_de_encuesta.docx`. Cada registro de Twent
 | Correo de la empresa | `correoContacto` | |
 | — | `estadoGestion`, `intentosContacto` | estado e intentos |
 
+**Base real de Strattos** (`base_contacto_20261126.csv`, 831 empresas, separada por «;»):
+CODIGO_EMPRESA → código · NOMBRE_COMERCIAL (o NOMBRE_EMPRESA) → nombre · NOMBRE_EMPRESA → razón
+social · TAMANO → tipo de empresa (GRANDE 372 / MEDIANA 459) · PRIORIDAD (1–3) · ELEGIBILIDAD
+(572 «Elegible», 259 «Por validar: CIIU…») · CANTON · DIRECCION · Segmento → sector ·
+ORIGEN_BASE · REPRESENTANTE_LEGAL · CORREO, CORREO2 · WHATSAPP_CONFIRMADO · SITIO_WEB ·
+TELEFONO1…6 (1 y 2 en sus campos; el resto en «Otros teléfonos»). No se cargan Fecha, ETIQUETA
+ni MES_GESTION. La base (datos personales) no se sube al repositorio. Kanban ordenado por prioridad.
+
 Ciudad, sector, contacto y cargo son opcionales. Plantilla: `documentos/plantilla_base_empresas.xlsx`.
 Carga: `TENANT=puce node scripts/cargar-empresas.js --base=<archivo>` (simula; `--aplicar` carga).
 
@@ -128,7 +136,8 @@ clave; carta del Decanato y consentimiento antes de iniciar (CI1); hasta 3 recor
 - El guion ofrece responder «en línea» y «remitirle el enlace»: hoy la encuesta la registra
   siempre el encuestador (no hay enlace para que la empresa la llene sola).
 
-- Base de empresas (la PMO la arma con la plantilla del proceso).
+- Carga de la base real en Twenty (simulada: 831 empresas sin errores; falta el OK).
+- 259 empresas «Por validar» (CIIU fuera de manufactura): el encuestador confirma; si no aplica → «Fuera del universo».
 - Borrar los registros de ejemplo de fábrica del Twenty.
 - ¿Cuotas por ciudad o sector? (por ahora la cuota del reporte = tamaño de la muestra).
 - Destinatarios y hora del reporte, si se envía por correo.

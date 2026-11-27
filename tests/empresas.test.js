@@ -27,13 +27,14 @@ test("limpia RUC, teléfonos y correo", () => {
   assert.deepEqual(separarTelefonos("+593 99 123 4567"), ["0991234567"]);
 });
 
-test("varios números en una celda: el primero a Teléfono 1 y el resto a Teléfono 2", () => {
+test("varios números en una celda: 1.º a Teléfono 1, 2.º a Teléfono 2 y el resto a Otros teléfonos", () => {
   const mapa = mapearColumnas(["CODIGO", "NOMBRE_EMPRESA", "Números de contacto", "CORREO"]);
   const e = empresaDesdeFila({ CODIGO: "emp001", NOMBRE_EMPRESA: " Planta  Uno ", "Números de contacto": "0991234567; 022345678; 0987654321", CORREO: "malo" }, mapa);
   assert.equal(e.codigoEmpresa, "EMP001");
   assert.equal(e.nombreEmpresa, "Planta Uno");
   assert.equal(e.celular, "0991234567");
-  assert.equal(e.telefono2, "022345678 / 0987654321");
+  assert.equal(e.telefono2, "022345678");
+  assert.equal(e.telefono3, "0987654321");
   assert.equal(e.correoContacto, null);
   assert.equal(e.correoInvalido, true);
 });
@@ -60,4 +61,29 @@ test("el registro de Twenty usa el nombre de la empresa y solo campos del esquem
   for (const k of Object.keys(p)) if (k !== "name") assert.ok(campos.has(k), `${k} no está en esquemaTwenty`);
   // Sin nombre de empresa, se usa la razón social.
   assert.equal(personaTwenty(empresaDesdeFila({ CODIGO: "E2", RAZON_SOCIAL: "Otra S.A." }, mapa)).name.firstName, "Otra S.A.");
+});
+
+test("formato de la base de Strattos (base_contacto_AAAAMMDD.csv)", () => {
+  const enc = ["CODIGO_EMPRESA", "RUC", "NOMBRE_EMPRESA", "NOMBRE_COMERCIAL", "CANTON", "DIRECCION", "Fecha", "Segmento", "TAMANO", "PRIORIDAD", "ELEGIBILIDAD", "ORIGEN_BASE", "REPRESENTANTE_LEGAL", "CORREO", "CORREO2", "WHATSAPP_CONFIRMADO", "SITIO_WEB", "TELEFONO1", "TELEFONO2", "TELEFONO3", "TELEFONO4", "TELEFONO5", "TELEFONO6", "ETIQUETA", "MES_GESTION"];
+  const mapa = mapearColumnas(enc);
+  const fila = Object.fromEntries(enc.map((h) => [h, ""]));
+  Object.assign(fila, {
+    CODIGO_EMPRESA: "EMP-1790000000001", RUC: "1790000000001", NOMBRE_EMPRESA: "PLANTA EJEMPLO S.A.", NOMBRE_COMERCIAL: "PLANTA EJEMPLO",
+    CANTON: "QUITO", Segmento: "C10,Alimentos", TAMANO: "GRANDE", PRIORIDAD: "1", ELEGIBILIDAD: "Por validar: CIIU SRI sección G",
+    WHATSAPP_CONFIRMADO: "098-000-0000", TELEFONO1: "098-000-0000", TELEFONO2: "02-200-0000", TELEFONO3: "02-300-0000", TELEFONO4: "02-200-0000",
+  });
+  const e = empresaDesdeFila(fila, mapa);
+  assert.equal(e.nombreEmpresa, "PLANTA EJEMPLO", "nombre comercial para mostrar");
+  assert.equal(e.razonSocial, "PLANTA EJEMPLO S.A.", "NOMBRE_EMPRESA es la razón social");
+  assert.equal(e.tipoEmpresa, "GRANDE");
+  assert.equal(e.prioridad, 1);
+  assert.equal(e.sector, "C10,Alimentos");
+  assert.equal(e.celular, "0980000000");
+  assert.equal(e.telefono2, "022000000");
+  assert.equal(e.telefono3, "023000000", "sin repetir números");
+  assert.equal(e.whatsapp, "0980000000");
+  assert.equal(avisos([e]).porValidarElegibilidad, 1);
+  const p = personaTwenty(e);
+  const campos = new Set(tenant("puce").esquemaTwenty.map((c) => c.name));
+  for (const k of Object.keys(p)) if (k !== "name") assert.ok(campos.has(k), `${k} no está en esquemaTwenty`);
 });

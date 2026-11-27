@@ -12,6 +12,7 @@ try {
 } catch {
   // sin dotenv instalado (imagen de producción)
 }
+const fs = require("fs");
 const path = require("path");
 const ExcelJS = require("exceljs");
 const { tenant } = require("../lib/tenant");
@@ -26,10 +27,36 @@ const args = Object.fromEntries(
 const APLICAR = Boolean(args.aplicar);
 const LOTE = 50;
 
+// CSV separado por «;» o «,» (se detecta en el encabezado), con comillas.
+function leerCsv(archivo) {
+  const texto = fs.readFileSync(archivo, "utf8").replace(/^\uFEFF/, "");
+  const sep = (texto.split(/\r?\n/)[0].match(/;/g) || []).length >= (texto.split(/\r?\n/)[0].match(/,/g) || []).length ? ";" : ",";
+  const filas = [];
+  let fila = [], campo = "", comillas = false;
+  for (let i = 0; i < texto.length; i++) {
+    const c = texto[i];
+    if (comillas) {
+      if (c === '"' && texto[i + 1] === '"') { campo += '"'; i++; }
+      else if (c === '"') comillas = false;
+      else campo += c;
+    } else if (c === '"') comillas = true;
+    else if (c === sep) { fila.push(campo); campo = ""; }
+    else if (c === "\n" || c === "\r") {
+      if (c === "\r" && texto[i + 1] === "\n") i++;
+      fila.push(campo); campo = "";
+      if (fila.some((x) => x.trim())) filas.push(fila);
+      fila = [];
+    } else campo += c;
+  }
+  if (campo || fila.length) { fila.push(campo); if (fila.some((x) => x.trim())) filas.push(fila); }
+  const encabezados = (filas[0] || []).map((h) => h.trim());
+  return { encabezados, filas: filas.slice(1).map((f) => Object.fromEntries(encabezados.map((h, i) => [h, f[i] ?? null]))) };
+}
+
 async function leerHoja(archivo, hoja = 0) {
+  if (/\.csv$/i.test(archivo)) return leerCsv(archivo);
   const wb = new ExcelJS.Workbook();
-  if (/\.csv$/i.test(archivo)) await wb.csv.readFile(archivo);
-  else await wb.xlsx.readFile(archivo);
+  await wb.xlsx.readFile(archivo);
   const ws = wb.worksheets[hoja];
   if (!ws) throw new Error(`El archivo no tiene la hoja ${hoja + 1}`);
   const filas = [];
@@ -101,13 +128,21 @@ async function main() {
   console.log("Avisos:", avisos(aCargar));
   const porTipo = aCargar.reduce((acc, e) => ({ ...acc, [e.tipoEmpresa || "SIN_TIPO"]: (acc[e.tipoEmpresa || "SIN_TIPO"] || 0) + 1 }), {});
   console.log("Por tipo de empresa:", porTipo);
+  const contar = (campo) => aCargar.reduce((acc, e) => ({ ...acc, [e[campo] ?? "SIN_DATO"]: (acc[e[campo] ?? "SIN_DATO"] || 0) + 1 }), {});
+  console.log("Por prioridad:", contar("prioridad"));
+  console.log("Por cantón:", contar("ciudad"));
+  console.log("Por origen:", contar("origenBase"));
   if (aCargar[0]) {
     const ejemplo = personaTwenty(aCargar[0]);
     console.log("Ejemplo de registro (datos personales ocultos):", {
       ...ejemplo,
       name: { firstName: "***" },
       celular: ejemplo.celular ? "09********" : undefined,
-      telefono2: ejemplo.telefono2 ? "09********" : undefined,
+      telefono2: ejemplo.telefono2 ? "0*********" : undefined,
+      telefono3: ejemplo.telefono3 ? "0*********" : undefined,
+      whatsapp: ejemplo.whatsapp ? "09********" : undefined,
+      correo2: ejemplo.correo2 ? "***@***" : undefined,
+      representanteLegal: ejemplo.representanteLegal ? "***" : undefined,
       correoContacto: ejemplo.correoContacto ? "***@***" : undefined,
     });
   }
