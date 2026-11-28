@@ -130,6 +130,35 @@ clave; carta del Decanato y consentimiento antes de iniciar (CI1); hasta 3 recor
 5. Muestra en el objeto `person` de Twenty (contacto de la empresa), no en `company`:
    reutiliza toda la integración existente.
 
+## Revisión del instrumento (GMRG) — 28/11/2026
+
+El revisor de la PUCE validó estructura, secuencia, contenido y escalas de los 4 módulos. Atendido:
+- Introducciones de cada módulo con el texto original (S6, S5, S4, S2), incluidas las definiciones de
+  tecnologías digitales novedosas e innovación de procesos.
+- NS y NR se guardan como `{ "especial": "NS" | "NR" }` y se exportan con los códigos `NS`/`NR`
+  (nunca como número). El 0 de FC10, IN19 y SC15 tiene su propia fila en el Diccionario:
+  ausencia de información, no un valor de la escala 1–5.
+- Consentimiento (CI1) obligatorio antes de cualquier pregunta del instrumento; queda guardado con
+  fecha, hora y encuestador. Si no acepta, la encuesta termina (RECHAZO) y no se recontacta.
+
+## Protección de datos (para el protocolo CEISH-PUCE)
+
+Hechos verificados:
+- Plataforma y base propias (no servicios de terceros para las respuestas): PostgreSQL 17 en un
+  servidor de Strattos (VM 104), base exclusiva `af_puce` con usuario propio. Acceso público solo
+  por HTTPS a través de Cloudflare Tunnel (sin puertos abiertos).
+- Respaldo diario a las 03:00 (7 diarios, 4 semanales, 6 mensuales) **en el mismo servidor**.
+- Administradores: cuenta individual (correo + contraseña con hash scrypt), sesión de 12 h.
+  Encuestadores: contraseña compartida + selección de su nombre (trazabilidad por encuestador,
+  sin cuenta individual).
+- CRM (Twenty, `puce.aiagentrevenue.online`): solo datos de contacto de las empresas y de la
+  gestión; las respuestas no van al CRM.
+- Excel de análisis: sin nombre ni teléfono del encuestado ni del otro contacto
+  (`config.exportar: false`). Sí incluye código de empresa (EMP-RUC), razón social y RUC.
+
+Por completar con Strattos: proveedor y país del servidor, cifrado del disco, quién tiene acceso al
+servidor, respaldo fuera del servidor y plazo de conservación/eliminación de los datos.
+
 ## Preguntas abiertas
 
 - El guion dice 30–45 min; con 258 preguntas la estimación es 50–70 min. Revisar con la PMO.
