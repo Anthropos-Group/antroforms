@@ -72,7 +72,9 @@ function participacion(codigo, bloque, departamentos) {
     config: {
       min: 0,
       max: 5,
-      etiquetas: { min: "Sin información (en blanco)", max: "Mayor aporte" },
+      etiquetas: { min: "Sin información (en blanco)", uno: "Menor aporte", max: "Mayor aporte" },
+      // En la exportación el 0 es un código aparte: ausencia de información, no un valor de la escala.
+      etiqueta_cero: "Ausencia de información del departamento (en blanco en el instrumento); no es un valor de la escala 1–5",
       especiales: NS_NR,
       grupo: codigo,
       grupo_texto: `${codigo}. ${enunciado}`,
@@ -125,7 +127,8 @@ const ENTIDADES_EXTERNAS = [
 const B6 = "VI Liderazgo";
 const seccion6 = [
   pantalla("S6", B6, "Sección VI · Liderazgo", {
-    speech: "Empezamos con preguntas sobre el liderazgo en la planta. Cuando le mencione al «equipo directivo de la planta», me refiero al pequeño grupo de altos ejecutivos que la dirigen.",
+    // Texto introductorio del instrumento original (GMRG), precedido de una transición.
+    speech: "Empezamos con la sección de liderazgo. El equipo directivo de la planta es el pequeño grupo de altos ejecutivos de la misma.",
   }),
   ...tabla("LM01", B6, "Indique en qué medida los siguientes comportamientos se observan comúnmente entre todos los miembros del equipo directivo de la planta:", NIVEL, [
     "Asignar tareas y explicar las responsabilidades del trabajo.",
@@ -162,7 +165,7 @@ const seccion6 = [
 const B5 = "V Cultura de planta";
 const seccion5 = [
   pantalla("S5", B5, "Sección V · Cultura de planta", {
-    speech: "Ahora vamos con la cultura de la planta, es decir, las normas compartidas que orientan las actitudes y el comportamiento del personal. Responda pensando en la mayoría del personal de la planta: operadores, gerentes, ingenieros, etc.",
+    speech: "Ahora vamos con la sección de cultura de planta. La cultura de planta es un sistema de normas compartidas que definen las actitudes y comportamientos adecuados para guiar al personal de la planta. Responda a las siguientes preguntas en relación con la mayoría del personal de la planta (operadores, gerentes, ingenieros, etc.).",
   }),
   ...tabla("FC01", B5, "Las siguientes afirmaciones se enfocan en el uso compartido de la racionalidad frente a la intuición en la planta.", NIVEL, [
     "Los cálculos financieros/numéricos justifican la mayoría de actividades e inversiones.",
@@ -239,8 +242,8 @@ const seccion5 = [
 const B4 = "IV Innovación";
 const seccion4 = [
   pantalla("S4", B4, "Sección IV · Innovación", {
-    speech: "Ahora le preguntaré por las innovaciones de proceso de su planta en los últimos 2 años, es decir, los nuevos métodos de manufactura que se han incorporado.",
-    nota: "«Innovación de proceso» = nuevo método de manufactura en la planta (no un producto nuevo). Si el encuestado duda, repítale esta definición.",
+    speech: "Ahora vamos con la sección de innovación. En esta sección se pregunta por el conjunto de innovaciones de proceso que se han producido en su planta en los últimos 2 años. Las innovaciones de proceso son nuevos métodos de manufactura en su planta.",
+    nota: "Si el encuestado duda, repita la definición: innovación de proceso = nuevo método de manufactura en la planta (no un producto nuevo).",
   }),
   ...tabla("IN01", B4, "En los últimos 2 años, indique con qué frecuencia se aplicaron las siguientes afirmaciones al conjunto de innovaciones de proceso en su planta:", FRECUENCIA, [
     "Nueva en nuestra planta, pero utilizada por otros (otras plantas o empresas).",
@@ -339,7 +342,7 @@ const B2 = "II Cadena de suministro";
 const DIGITAL = "¿En qué medida se utilizan las tecnologías digitales en el proceso";
 const seccion2 = [
   pantalla("S2", B2, "Sección II · Cadena de suministro", {
-    speech: "Por último, le preguntaré por el uso de tecnologías digitales en la cadena de suministro. Me refiero a las herramientas informáticas que la planta incorporó en los últimos 3 años para guardar, procesar o compartir información.",
+    speech: "Por último, la sección de gestión de la cadena de suministro. Estas preguntas están relacionadas con el uso de nuevas tecnologías digitales en los procesos de gestión de la cadena de suministro. En este contexto, se consideran como tecnologías digitales novedosas las tecnologías informáticas que son nuevas en la planta (en los últimos tres años) para el almacenamiento, el procesamiento y el intercambio de información en forma digital.",
   }),
   ...tabla("SC01", B2, `${DIGITAL} de PLAN (es decir, en la planificación de la demanda/oferta para cumplir los objetivos empresariales) con el fin de:`, NIVEL, [
     "Colaborar entre ventas, mercadeo, fabricación, logística y otras funciones en la planificación de nuestra estrategia de operaciones.",
@@ -497,18 +500,18 @@ const cuestionario = {
     {
       codigo: "CD_NOMBRE", bloque: "Gestión", tipo: "texto_abierto",
       texto: "Otro contacto: nombre (y cargo, si lo sabe) de la persona a la que derivan",
-      config: ABIERTA, mostrar_si: { pregunta: "GESTION", op: "=", valor: "DERIVA" },
+      config: { ...ABIERTA, exportar: false }, mostrar_si: { pregunta: "GESTION", op: "=", valor: "DERIVA" },
     },
     {
       codigo: "CD_TELEFONO", bloque: "Gestión", tipo: "texto_abierto",
       texto: "Otro contacto: números de teléfono",
-      config: ABIERTA, mostrar_si: { pregunta: "GESTION", op: "=", valor: "DERIVA" },
+      config: { ...ABIERTA, exportar: false }, mostrar_si: { pregunta: "GESTION", op: "=", valor: "DERIVA" },
     },
     {
       codigo: "CD_CORREO", bloque: "Gestión", tipo: "texto_abierto",
       texto: "Otro contacto: correo electrónico",
       ayuda: "Luego envíe la información y cierre la gestión como «Correo enviado» o «WhatsApp enviado».",
-      config: ABIERTA, mostrar_si: { pregunta: "GESTION", op: "=", valor: "DERIVA" },
+      config: { ...ABIERTA, exportar: false }, mostrar_si: { pregunta: "GESTION", op: "=", valor: "DERIVA" },
     },
     {
       codigo: "CITA_FECHA", bloque: "Gestión", tipo: "texto_abierto",
@@ -542,6 +545,7 @@ const cuestionario = {
       codigo: "ENC_NOMBRE", bloque: "Encuestado", tipo: "texto_abierto",
       texto: "Nombre del encuestado",
       ayuda: "Una sola persona de la empresa responde toda la encuesta.",
+      config: { exportar: false },
     },
     {
       codigo: "ENC_CARGO", bloque: "Encuestado", tipo: "texto_abierto",
@@ -550,7 +554,7 @@ const cuestionario = {
     {
       codigo: "ENC_TELEFONO", bloque: "Encuestado", tipo: "texto_abierto",
       texto: "Número de contacto del encuestado",
-      config: ABIERTA,
+      config: { ...ABIERTA, exportar: false },
     },
     pantalla("IND_GENERAL", "Encuestado", "Cómo responder", {
       speech: "A continuación le leeré una serie de afirmaciones. Para cada una, indíqueme un número del 1 al 7, donde 1 es el valor más bajo y 7 el más alto; en cada grupo le diré qué significan los extremos. Si alguna no la sabe o prefiere no responderla, solo dígamelo. Le pedimos responder con total sinceridad: no hay respuestas correctas ni incorrectas.",

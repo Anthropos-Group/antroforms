@@ -62,8 +62,8 @@ test("las cerradas admiten NS y NR (salvo canal, gestión y consentimiento); las
 });
 
 test("una sola persona responde: nombre y cargo obligatorios, teléfono opcional", () => {
-  assert.equal(porCodigo("ENC_NOMBRE").config, undefined);
-  assert.equal(porCodigo("ENC_CARGO").config, undefined);
+  assert.ok(!porCodigo("ENC_NOMBRE").config?.opcional);
+  assert.ok(!porCodigo("ENC_CARGO").config?.opcional);
   assert.equal(porCodigo("ENC_TELEFONO").config.opcional, true);
   const sinCargo = prepararEnvio(preguntas, todas({ ENC_CARGO: undefined }), {});
   assert.deepEqual(sinCargo.errores.map((e) => e.preguntaId), ["ENC_CARGO"]);
@@ -88,7 +88,7 @@ test("gestión: qué pasó en el contacto decide si se anota otro contacto o la 
 test("pantallas sin respuesta: speech para leer y notas aparte", () => {
   for (const c of ["IND_GENERAL", "S6", "S5", "S4", "S2"]) {
     const p = porCodigo(c);
-    assert.ok(p.config.speech && p.config.speech.length <= 420, `${c}: speech breve`);
+    assert.ok(p.config.speech && p.config.speech.length <= 600, `${c}: speech breve`);
     assert.ok(!/^Lea[:]/.test(p.config.speech), c);
   }
 });
@@ -165,4 +165,27 @@ test("el guion saluda al representante legal y nombra la empresa", () => {
   assert.ok(texto.startsWith("Buenos días/tardes, ¿hablo con ROA ECHEVERRÍA JUAN PABLO, de CERVECERIA NACIONAL?"), texto.slice(0, 90));
   const { tenant } = require("../lib/tenant");
   assert.equal(tenant("puce").twenty.datos.representante_legal, "representanteLegal");
+});
+
+test("revisión GMRG: introducciones originales de cada módulo", () => {
+  assert.ok(porCodigo("S2").config.speech.includes("se consideran como tecnologías digitales novedosas las tecnologías informáticas que son nuevas en la planta (en los últimos tres años)"));
+  assert.ok(porCodigo("S4").config.speech.includes("Las innovaciones de proceso son nuevos métodos de manufactura en su planta."));
+  assert.ok(porCodigo("S5").config.speech.includes("La cultura de planta es un sistema de normas compartidas"));
+  assert.ok(porCodigo("S6").config.speech.includes("El equipo directivo de la planta es el pequeño grupo de altos ejecutivos de la misma."));
+});
+
+test("revisión GMRG: NS/NR con código propio y el 0 de participación como ausencia de información", () => {
+  const { codificar, filasDiccionario, columnasRespuestas } = require("../lib/exportacion-rutas");
+  const lm = porCodigo("LM01_01");
+  assert.deepEqual(codificar(lm, { especial: "NS" }), { LM01_01: "NS" });
+  assert.deepEqual(codificar(lm, { especial: "NR" }), { LM01_01: "NR" });
+  assert.deepEqual(codificar(lm, { calificacion: 7 }), { LM01_01: 7 });
+  const dic = filasDiccionario(preguntas).filter((f) => f.columna === "FC10_01");
+  const cero = dic.find((f) => f.valor === "0");
+  assert.ok(cero && /ausencia de información/i.test(cero.etiqueta));
+  assert.ok(dic.some((f) => f.valor === "1–5"));
+  // Datos personales de la gestión no van al Excel de análisis.
+  const columnas = columnasRespuestas(preguntas).map((c) => c.header);
+  for (const c of ["ENC_NOMBRE", "ENC_TELEFONO", "CD_NOMBRE", "CD_TELEFONO", "CD_CORREO"]) assert.ok(!columnas.includes(c), c);
+  assert.ok(columnas.includes("ENC_CARGO"), "el cargo sí se exporta (perfil del informante)");
 });
